@@ -1,0 +1,569 @@
+"""Data access for cameras, visits and settings."""
+
+from __future__ import annotations
+
+import json
+import logging
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from app.domain.models import (
+    BirdSpeciesOut,
+    CameraCreate,
+    CameraOut,
+    CameraUpdate,
+    CameraZones,
+    SourceType,
+    VisitOut,
+    ZoneConfig,
+)
+from app.infra.database.connection import db_session
+
+logger = logging.getLogger(__name__)
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _media_url(relative: str | None) -> str | None:
+    if not relative:
+        return None
+    normalized = relative.replace("\\", "/").lstrip("/")
+    if normalized.startswith("captures/"):
+        return f"/{normalized}"
+    return f"/captures/{normalized}"
+
+
+class CameraRepository:
+    def __init__(self, db_path: Path) -> None:
+        self.db_path = db_path
+
+    def list_all(self) -> list[dict[str, Any]]:
+        with db_session(self.db_path) as conn:
+            rows = conn.execute(
+                "SELECT * FROM cameras ORDER BY created_at ASC"
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def get(self, camera_id: str) -> dict[str, Any] | None:
+        with db_session(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT * FROM cameras WHERE id = ?", (camera_id,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def create(
+        self,
+        payload: CameraCreate,
+        username_enc: str | None,
+        password_enc: str | None,
+    ) -> dict[str, Any]:
+        now = _utc_now()
+        camera_id = str(uuid.uuid4())
+        zones_json = CameraZones(zones=payload.zones).model_dump_json()
+        with db_session(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO cameras (
+                    id, name, source_type, source_uri, username_enc, password_enc,
+                    enabled, zones_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    camera_id,
+                    payload.name,
+                    payload.source_type.value,
+                    payload.source_uri,
+                    username_enc,
+                    password_enc,
+                    1 if payload.enabled else 0,
+                    zones_json,
+                    now,
+                    now,
+                ),
+            )
+        created = self.get(camera_id)
+        assert created is not None
+        return created
+
+    def update(
+        self,
+        camera_id: str,
+        payload: CameraUpdate,
+        username_enc: str | None = None,
+        password_enc: str | None = None,
+        update_credentials: bool = False,
+    ) -> dict[str, Any] | None:
+        existing = self.get(camera_id)
+        if existing is None:
+            return None
+
+        name = payload.name if payload.name is not None else existing["name"]
+        source_type = (
+            payload.source_type.value
+            if payload.source_type is not None
+            else existing["source_type"]
+        )
+        source_uri = (
+            payload.source_uri if payload.source_uri is not None else existing["source_uri"]
+        )
+        enabled = (
+            (1 if payload.enabled else 0)
+            if payload.enabled is not None
+            else existing["enabled"]
+        )
+        zones_json = (
+            CameraZones(zones=payload.zones).model_dump_json()
+            if payload.zones is not None
+            else existing["zones_json"]
+        )
+
+        if payload.clear_credentials:
+            username_enc, password_enc = None, None
+            update_credentials = True
+        elif not update_credentials:
+            username_enc = existing["username_enc"]
+            password_enc = existing["password_enc"]
+
+        with db_session(self.db_path) as conn:
+            conn.execute(
+                """
+                UPDATE cameras SET
+                    name = ?, source_type = ?, source_uri = ?,
+                    username_enc = ?, password_enc = ?, enabled = ?,
+                    zones_json = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    name,
+                    source_type,
+                    source_uri,
+                    username_enc,
+                    password_enc,
+                    enabled,
+                    zones_json,
+                    _utc_now(),
+                    camera_id,
+                ),
+            )
+        return self.get(camera_id)
+
+    def delete(self, camera_id: str) -> bool:
+        with db_session(self.db_path) as conn:
+            cursor = conn.execute("DELETE FROM cameras WHERE id = ?", (camera_id,))
+            return cursor.rowcount > 0
+
+    @staticmethod
+    def to_out(row: dict[str, Any], status: str = "idle") -> CameraOut:
+        try:
+            zones_data = json.loads(row.get("zones_json") or '{"zones":[]}')
+            zones = [ZoneConfig.model_validate(z) for z in zones_data.get("zones", [])]
+        except Exception:
+            logger.exception("Failed to parse zones for camera %s", row.get("id"))
+            zones = []
+        return CameraOut(
+            id=row["id"],
+            name=row["name"],
+            source_type=SourceType(row["source_type"]),
+            source_uri=row["source_uri"],
+            has_credentials=bool(row.get("username_enc") or row.get("password_enc")),
+            enabled=bool(row["enabled"]),
+            zones=zones,
+            status=status,
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+
+class VisitRepository:
+    def __init__(self, db_path: Path) -> None:
+        self.db_path = db_path
+
+    def create(
+        self,
+        *,
+        camera_id: str,
+        species: str,
+        confidence: float,
+        detected_at: str,
+        dwell_seconds: float,
+        clip_path: str | None,
+        thumbnail_path: str | None,
+        bbox: list[float] | None,
+        zone_id: str | None,
+        metadata: dict[str, Any] | None = None,
+        visit_id: str | None = None,
+    ) -> dict[str, Any]:
+        vid = visit_id or str(uuid.uuid4())
+        with db_session(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO visits (
+                    id, camera_id, species, confidence, detected_at, dwell_seconds,
+                    clip_path, thumbnail_path, bbox_json, zone_id, metadata_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    vid,
+                    camera_id,
+                    species,
+                    confidence,
+                    detected_at,
+                    dwell_seconds,
+                    clip_path,
+                    thumbnail_path,
+                    json.dumps(bbox) if bbox is not None else None,
+                    zone_id,
+                    json.dumps(metadata or {}),
+                ),
+            )
+        visit = self.get(vid)
+        assert visit is not None
+        return visit
+
+    def get(self, visit_id: str) -> dict[str, Any] | None:
+        with db_session(self.db_path) as conn:
+            row = conn.execute(
+                """
+                SELECT v.*, c.name AS camera_name,
+                    bs.common_name AS assigned_species_common_name,
+                    bs.scientific_name AS assigned_species_scientific_name
+                FROM visits v
+                LEFT JOIN cameras c ON c.id = v.camera_id
+                LEFT JOIN bird_species bs ON bs.id = v.species_id
+                WHERE v.id = ?
+                """,
+                (visit_id,),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def delete(self, visit_id: str) -> bool:
+        with db_session(self.db_path) as conn:
+            cursor = conn.execute("DELETE FROM visits WHERE id = ?", (visit_id,))
+            return cursor.rowcount > 0
+
+    def assign_species(
+        self, visit_id: str, species_id: str | None
+    ) -> dict[str, Any] | None:
+        with db_session(self.db_path) as conn:
+            species = None
+            if species_id is not None:
+                species = conn.execute(
+                    "SELECT common_name FROM bird_species WHERE id = ?",
+                    (species_id,),
+                ).fetchone()
+                if species is None:
+                    raise LookupError("Species not found")
+            cursor = conn.execute(
+                """
+                UPDATE visits
+                SET species_id = ?, species = COALESCE(?, species)
+                WHERE id = ?
+                """,
+                (species_id, species["common_name"] if species else None, visit_id),
+            )
+            if cursor.rowcount == 0:
+                return None
+        return self.get(visit_id)
+
+    def list_before(self, detected_before: str) -> list[dict[str, Any]]:
+        with db_session(self.db_path) as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM visits
+                WHERE detected_at < ?
+                ORDER BY detected_at ASC
+                """,
+                (detected_before,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def delete_all(self) -> int:
+        with db_session(self.db_path) as conn:
+            cursor = conn.execute("DELETE FROM visits")
+            return cursor.rowcount
+
+    def update_external_identification(
+        self,
+        visit_id: str,
+        *,
+        species: str,
+        scientific_name: str,
+        common_name: str,
+    ) -> dict[str, Any] | None:
+        with db_session(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT metadata_json FROM visits WHERE id = ?",
+                (visit_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            metadata = json.loads(row["metadata_json"] or "{}")
+            metadata["external_identification"] = {
+                "scientific_name": scientific_name,
+                "common_name": common_name,
+            }
+            metadata["identification_status"] = "Identificado por IA Externa"
+            conn.execute(
+                """
+                UPDATE visits
+                SET species = ?, metadata_json = ?
+                WHERE id = ?
+                """,
+                (species, json.dumps(metadata, ensure_ascii=False), visit_id),
+            )
+        return self.get(visit_id)
+
+    def list(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        camera_id: str | None = None,
+        species: str | None = None,
+    ) -> list[dict[str, Any]]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if camera_id:
+            clauses.append("v.camera_id = ?")
+            params.append(camera_id)
+        if species:
+            clauses.append("v.species = ?")
+            params.append(species)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.extend([limit, offset])
+        with db_session(self.db_path) as conn:
+            rows = conn.execute(
+                f"""
+                SELECT v.*, c.name AS camera_name,
+                    bs.common_name AS assigned_species_common_name,
+                    bs.scientific_name AS assigned_species_scientific_name
+                FROM visits v
+                LEFT JOIN cameras c ON c.id = v.camera_id
+                LEFT JOIN bird_species bs ON bs.id = v.species_id
+                {where}
+                ORDER BY v.detected_at DESC
+                LIMIT ? OFFSET ?
+                """,
+                params,
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def count(self, *, camera_id: str | None = None) -> int:
+        with db_session(self.db_path) as conn:
+            if camera_id:
+                row = conn.execute(
+                    "SELECT COUNT(*) AS c FROM visits WHERE camera_id = ?",
+                    (camera_id,),
+                ).fetchone()
+            else:
+                row = conn.execute("SELECT COUNT(*) AS c FROM visits").fetchone()
+            return int(row["c"]) if row else 0
+
+    def stats(self) -> dict[str, Any]:
+        today_prefix = datetime.now(timezone.utc).date().isoformat()
+        with db_session(self.db_path) as conn:
+            total = conn.execute("SELECT COUNT(*) AS c FROM visits").fetchone()["c"]
+            today = conn.execute(
+                "SELECT COUNT(*) AS c FROM visits WHERE detected_at LIKE ?",
+                (f"{today_prefix}%",),
+            ).fetchone()["c"]
+            species_rows = conn.execute(
+                """
+                SELECT species, COUNT(*) AS c
+                FROM visits
+                GROUP BY species
+                ORDER BY c DESC
+                LIMIT 50
+                """
+            ).fetchall()
+            hour_rows = conn.execute(
+                """
+                SELECT substr(detected_at, 12, 2) AS hour, COUNT(*) AS c
+                FROM visits
+                WHERE detected_at LIKE ?
+                GROUP BY hour
+                ORDER BY hour
+                """,
+                (f"{today_prefix}%",),
+            ).fetchall()
+            last = conn.execute(
+                "SELECT detected_at FROM visits ORDER BY detected_at DESC LIMIT 1"
+            ).fetchone()
+            cam_total = conn.execute("SELECT COUNT(*) AS c FROM cameras").fetchone()["c"]
+            cam_active = conn.execute(
+                "SELECT COUNT(*) AS c FROM cameras WHERE enabled = 1"
+            ).fetchone()["c"]
+
+        return {
+            "total_visits": int(total),
+            "visits_today": int(today),
+            "active_cameras": int(cam_active),
+            "total_cameras": int(cam_total),
+            "species_counts": {r["species"]: int(r["c"]) for r in species_rows},
+            "visits_by_hour": {
+                (r["hour"] or "00"): int(r["c"]) for r in hour_rows if r["hour"]
+            },
+            "last_visit_at": last["detected_at"] if last else None,
+        }
+
+    @staticmethod
+    def to_out(row: dict[str, Any]) -> VisitOut:
+        bbox = None
+        metadata: dict[str, Any] = {}
+        try:
+            if row.get("bbox_json"):
+                bbox = json.loads(row["bbox_json"])
+        except Exception:
+            bbox = None
+        try:
+            metadata = json.loads(row.get("metadata_json") or "{}")
+        except Exception:
+            metadata = {}
+
+        clip_path = row.get("clip_path")
+        thumb_path = row.get("thumbnail_path")
+        return VisitOut(
+            id=row["id"],
+            camera_id=row["camera_id"],
+            camera_name=row.get("camera_name"),
+            species=row["species"],
+            confidence=float(row["confidence"]),
+            detected_at=row["detected_at"],
+            dwell_seconds=float(row["dwell_seconds"]),
+            clip_path=clip_path,
+            thumbnail_path=thumb_path,
+            clip_url=_media_url(clip_path),
+            thumbnail_url=_media_url(thumb_path),
+            bbox=bbox,
+            zone_id=row.get("zone_id"),
+            species_id=row.get("species_id"),
+            assigned_species_common_name=row.get("assigned_species_common_name"),
+            assigned_species_scientific_name=row.get(
+                "assigned_species_scientific_name"
+            ),
+            metadata=metadata,
+        )
+
+
+class BirdSpeciesRepository:
+    def __init__(self, db_path: Path) -> None:
+        self.db_path = db_path
+
+    def list_all(self) -> list[dict[str, Any]]:
+        with db_session(self.db_path) as conn:
+            rows = conn.execute(
+                "SELECT * FROM bird_species ORDER BY common_name COLLATE NOCASE ASC"
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def get(self, species_id: str) -> dict[str, Any] | None:
+        with db_session(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT * FROM bird_species WHERE id = ?", (species_id,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def create(
+        self,
+        *,
+        common_name: str,
+        scientific_name: str,
+        description: str,
+        reference_image_path: str | None,
+        species_id: str | None = None,
+    ) -> dict[str, Any]:
+        species_id = species_id or str(uuid.uuid4())
+        created_at = _utc_now()
+        with db_session(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO bird_species (
+                    id, common_name, scientific_name, description,
+                    reference_image_path, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    species_id,
+                    common_name,
+                    scientific_name,
+                    description,
+                    reference_image_path,
+                    created_at,
+                ),
+            )
+        species = self.get(species_id)
+        assert species is not None
+        return species
+
+    def delete(self, species_id: str) -> dict[str, Any] | None:
+        with db_session(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT * FROM bird_species WHERE id = ?", (species_id,)
+            ).fetchone()
+            if row is None:
+                return None
+            species = dict(row)
+            conn.execute("DELETE FROM bird_species WHERE id = ?", (species_id,))
+            return species
+
+    @staticmethod
+    def to_out(row: dict[str, Any]) -> BirdSpeciesOut:
+        image_path = row.get("reference_image_path")
+        image_url = (
+            f"/reference-birds/{Path(image_path).name}" if image_path else None
+        )
+        return BirdSpeciesOut(
+            id=row["id"],
+            common_name=row["common_name"],
+            scientific_name=row["scientific_name"],
+            description=row.get("description") or "",
+            reference_image_path=image_path,
+            reference_image_url=image_url,
+            created_at=row["created_at"],
+        )
+
+
+class SettingsRepository:
+    def __init__(self, db_path: Path) -> None:
+        self.db_path = db_path
+
+    def get(self, key: str, default: str | None = None) -> str | None:
+        with db_session(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT value FROM app_settings WHERE key = ?", (key,)
+            ).fetchone()
+            if row is None:
+                return default
+            return str(row["value"])
+
+    def get_json(self, key: str, default: Any = None) -> Any:
+        raw = self.get(key)
+        if raw is None:
+            return default
+        try:
+            return json.loads(raw)
+        except Exception:
+            return default
+
+    def set(self, key: str, value: str) -> None:
+        with db_session(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO app_settings (key, value, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+                """,
+                (key, value, _utc_now()),
+            )
+
+    def set_json(self, key: str, value: Any) -> None:
+        self.set(key, json.dumps(value))
+
+    def get_all(self) -> dict[str, str]:
+        with db_session(self.db_path) as conn:
+            rows = conn.execute("SELECT key, value FROM app_settings").fetchall()
+            return {r["key"]: r["value"] for r in rows}

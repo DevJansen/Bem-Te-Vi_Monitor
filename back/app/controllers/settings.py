@@ -1,0 +1,260 @@
+"""REST routes for application settings."""
+
+from __future__ import annotations
+
+import ipaddress
+import json
+import logging
+from concurrent.futures import ThreadPoolExecutor
+
+from fastapi import APIRouter, HTTPException, Request
+
+from app.core.config import get_settings
+from app.domain.models import (
+    AppSettingsOut,
+    AppSettingsUpdate,
+    EnvironmentConnectionTest,
+    EnvironmentSettingsOut,
+    EnvironmentSettingsUpdate,
+    NotificationTestRequest,
+    NotificationTestResponse,
+)
+from app.infra.database.repository import SettingsRepository
+from app.services.environment_settings import (
+    read_environment_settings,
+    save_environment_settings,
+    test_environment_connection,
+)
+from app.services.notification_service import get_notification_service
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/settings", tags=["settings"])
+_test_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="notify-test")
+
+
+def _repo() -> SettingsRepository:
+    return SettingsRepository(get_settings().db_path)
+
+
+def _require_local_environment_request(request: Request) -> None:
+    client_host = request.client.host if request.client else ""
+    try:
+        is_local = ipaddress.ip_address(client_host).is_loopback
+    except ValueError:
+        is_local = False
+    if not is_local:
+        raise HTTPException(
+            status_code=403,
+            detail="A configuração de segredos só pode ser acessada localmente",
+        )
+
+
+def _build_out() -> AppSettingsOut:
+    settings = get_settings()
+    repo = _repo()
+    stored = repo.get_all()
+
+    def _bool(key: str, default: bool) -> bool:
+        raw = stored.get(key)
+        if raw is None:
+            return default
+        return str(raw).lower() in {"1", "true", "yes", "on"}
+
+    def _float(key: str, default: float) -> float:
+        raw = stored.get(key)
+        if raw is None:
+            return default
+        try:
+            return float(raw)
+        except ValueError:
+            return default
+
+    extra_raw = stored.get("extra_json", "{}")
+    try:
+        extra = json.loads(extra_raw)
+        if not isinstance(extra, dict):
+            extra = {}
+    except Exception:
+        extra = {}
+
+    return AppSettingsOut(
+        telegram_configured=settings.telegram_enabled,
+        discord_configured=settings.discord_enabled,
+        yolo_model=settings.yolo_model,
+        yolo_confidence=min(
+            1.0,
+            max(
+                0.60,
+                settings.yolo_confidence,
+                _float("yolo_confidence", settings.yolo_confidence),
+            ),
+        ),
+        pre_record_seconds=max(
+            3.0,
+            _float("pre_record_seconds", settings.pre_record_seconds),
+        ),
+        post_record_seconds=_float("post_record_seconds", settings.post_record_seconds),
+        audio_analysis_enabled=_bool("audio_analysis_enabled", False),
+        audio_confidence_threshold=min(
+            1.0,
+            max(0.70, _float("audio_confidence_threshold", 0.70)),
+        ),
+        notifications_enabled=_bool("notifications_enabled", True),
+        min_confidence_notify=_float(
+            "min_confidence_notify", settings.yolo_confidence
+        ),
+        extra=extra,
+    )
+
+
+@router.get("", response_model=AppSettingsOut)
+async def get_app_settings() -> AppSettingsOut:
+    try:
+        return _build_out()
+    except Exception as exc:
+        logger.exception("get_app_settings failed")
+        raise HTTPException(status_code=500, detail="Failed to load settings") from exc
+
+
+@router.get("/env", response_model=EnvironmentSettingsOut)
+async def get_environment_settings(request: Request) -> EnvironmentSettingsOut:
+    _require_local_environment_request(request)
+    try:
+        return read_environment_settings()
+    except Exception as exc:
+        logger.exception("get_environment_settings failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível ler as variáveis de ambiente",
+        ) from exc
+
+
+@router.post("/env", response_model=EnvironmentSettingsOut)
+async def save_environment(
+    payload: EnvironmentSettingsUpdate,
+    request: Request,
+) -> EnvironmentSettingsOut:
+    _require_local_environment_request(request)
+    try:
+        return save_environment_settings(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("save_environment failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível salvar as variáveis de ambiente",
+        ) from exc
+
+
+@router.post("/env/test", response_model=NotificationTestResponse)
+def test_environment(
+    payload: EnvironmentConnectionTest,
+    request: Request,
+) -> NotificationTestResponse:
+    _require_local_environment_request(request)
+    try:
+        return test_environment_connection(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("test_environment failed integration=%s", payload.integration)
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível testar a integração",
+        ) from exc
+
+
+@router.put("", response_model=AppSettingsOut)
+async def update_app_settings(payload: AppSettingsUpdate) -> AppSettingsOut:
+    try:
+        repo = _repo()
+        if payload.notifications_enabled is not None:
+            repo.set(
+                "notifications_enabled",
+                "true" if payload.notifications_enabled else "false",
+            )
+        if payload.min_confidence_notify is not None:
+            repo.set("min_confidence_notify", str(payload.min_confidence_notify))
+        if payload.yolo_confidence is not None:
+            repo.set("yolo_confidence", str(payload.yolo_confidence))
+        if payload.pre_record_seconds is not None:
+            repo.set("pre_record_seconds", str(payload.pre_record_seconds))
+        if payload.post_record_seconds is not None:
+            repo.set("post_record_seconds", str(payload.post_record_seconds))
+        if payload.audio_analysis_enabled is not None:
+            repo.set(
+                "audio_analysis_enabled",
+                "true" if payload.audio_analysis_enabled else "false",
+            )
+        if payload.audio_confidence_threshold is not None:
+            repo.set(
+                "audio_confidence_threshold",
+                str(payload.audio_confidence_threshold),
+            )
+        if payload.extra is not None:
+            repo.set_json("extra_json", payload.extra)
+        return _build_out()
+    except Exception as exc:
+        logger.exception("update_app_settings failed")
+        raise HTTPException(status_code=500, detail="Failed to update settings") from exc
+
+
+@router.post("/test-notification", response_model=NotificationTestResponse)
+async def test_notification(payload: NotificationTestRequest) -> NotificationTestResponse:
+    """Send a one-shot test alert without blocking the video pipeline."""
+    channel = (payload.channel or "").strip().lower()
+    settings = get_settings()
+    notifier = get_notification_service()
+
+    if channel == "telegram":
+        if not settings.telegram_enabled:
+            raise HTTPException(
+                status_code=400,
+                detail="Telegram não configurado. Preencha TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID no .env",
+            )
+        try:
+            future = _test_pool.submit(
+                notifier._send_telegram,
+                "AviaWatch — teste de notificação Telegram\nCanal local OK.",
+                None,
+            )
+            future.result(timeout=20)
+            return NotificationTestResponse(
+                ok=True,
+                message="Mensagem de teste enviada ao Telegram.",
+            )
+        except Exception as exc:
+            logger.exception("Telegram test failed")
+            raise HTTPException(
+                status_code=502,
+                detail=f"Falha ao enviar teste Telegram: {exc}",
+            ) from exc
+
+    if channel == "discord":
+        if not settings.discord_enabled:
+            raise HTTPException(
+                status_code=400,
+                detail="Discord não configurado. Preencha DISCORD_WEBHOOK_URL no .env",
+            )
+        try:
+            future = _test_pool.submit(
+                notifier._send_discord,
+                "AviaWatch — teste de notificação Discord\nCanal local OK.",
+                None,
+            )
+            future.result(timeout=20)
+            return NotificationTestResponse(
+                ok=True,
+                message="Mensagem de teste enviada ao Discord.",
+            )
+        except Exception as exc:
+            logger.exception("Discord test failed")
+            raise HTTPException(
+                status_code=502,
+                detail=f"Falha ao enviar teste Discord: {exc}",
+            ) from exc
+
+    raise HTTPException(status_code=400, detail="Canal inválido. Use 'telegram' ou 'discord'.")

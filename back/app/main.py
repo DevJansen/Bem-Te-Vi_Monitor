@@ -1,0 +1,208 @@
+"""AviaWatch API — entry point."""
+
+from __future__ import annotations
+
+import logging
+import os
+import sys
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from dotenv import load_dotenv
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+
+# Ensure `back/` is on sys.path when running as `python -m app.main`
+_BACK_DIR = Path(__file__).resolve().parents[1]
+if str(_BACK_DIR) not in sys.path:
+    sys.path.insert(0, str(_BACK_DIR))
+
+load_dotenv()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("aviawatch")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    from app.core.config import get_settings
+    from app.infra.ai.detector import get_bird_detector
+    from app.infra.ai.pipeline import get_pipeline_supervisor
+    from app.infra.camera.manager import get_camera_manager
+    from app.infra.database import close_all_connections, init_database
+    from app.infra.media.retention import MediaRetentionWorker
+    from app.services.audio_analysis import get_audio_analysis_service
+    from app.services.notification_service import get_notification_service
+    from app.services.recording_analysis import get_recording_analysis_service
+
+    settings = get_settings()
+    settings.ensure_directories()
+
+    try:
+        init_database(settings.db_path)
+    except Exception:
+        logger.exception("Database initialization failed")
+        raise
+
+    notifier = get_notification_service()
+    notifier.start()
+
+    supervisor = get_pipeline_supervisor()
+    supervisor.set_visit_handler(notifier.notify_visit)
+    audio_analysis = get_audio_analysis_service()
+
+    # Warm YOLO in background thread so API starts quickly
+    def _warm_model() -> None:
+        try:
+            get_bird_detector().load()
+        except Exception:
+            logger.exception("YOLO warm-up failed")
+
+    import threading
+
+    threading.Thread(target=_warm_model, name="yolo-warmup", daemon=True).start()
+
+    try:
+        get_camera_manager().load_enabled()
+        supervisor.sync_from_db()
+        audio_analysis.start()
+        logger.info(
+            "AviaWatch ready — data dir=%s (local only, no cloud sync)",
+            settings.app_data_dir,
+        )
+    except Exception:
+        logger.exception("Failed to start camera pipelines")
+
+    retention_worker = MediaRetentionWorker(settings)
+    retention_worker.start()
+    app.state.settings = settings
+    yield
+
+    logger.info("Shutting down AviaWatch…")
+    retention_worker.stop()
+    try:
+        audio_analysis.stop()
+        audio_analysis.join(timeout=10)
+    except Exception:
+        logger.exception("Audio analysis shutdown error")
+    try:
+        supervisor.shutdown()
+    except Exception:
+        logger.exception("Pipeline shutdown error")
+    try:
+        get_camera_manager().shutdown()
+    except Exception:
+        logger.exception("Camera manager shutdown error")
+    try:
+        notifier.stop()
+    except Exception:
+        logger.exception("Notification service shutdown error")
+    try:
+        get_recording_analysis_service().shutdown()
+    except Exception:
+        logger.exception("Recording analysis shutdown error")
+    try:
+        close_all_connections()
+    except Exception:
+        logger.exception("DB close error")
+
+
+app = FastAPI(
+    title="AviaWatch",
+    description="Sistema local de monitoramento de avifauna por IA",
+    version="0.2.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Static local captures (clips / thumbs) — never proxied externally by the app
+from app.core.config import get_settings as _get_settings_for_mount
+
+_settings = _get_settings_for_mount()
+_settings.ensure_directories()
+app.mount(
+    "/captures",
+    StaticFiles(directory=str(_settings.captures_dir)),
+    name="captures",
+)
+app.mount(
+    "/reference-birds",
+    StaticFiles(directory=str(_settings.reference_birds_dir)),
+    name="reference-birds",
+)
+
+from app.controllers import api_router
+
+app.include_router(api_router)
+
+
+@app.get("/", response_class=HTMLResponse)
+async def root() -> str:
+    """Evita 404 se alguém abrir a porta da API em vez do painel."""
+    return """<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="refresh" content="0;url=http://127.0.0.1:5173" />
+  <title>AviaWatch API</title>
+  <style>
+    body { font-family: Segoe UI, sans-serif; background:#0a0f0d; color:#e8f5ef;
+           display:flex; min-height:100vh; align-items:center; justify-content:center; }
+    a { color:#34d399; }
+    .box { max-width:28rem; padding:1.5rem; border:1px solid #1a2420; border-radius:12px; background:#111816; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>AviaWatch — API</h1>
+    <p>Esta é a porta da <strong>API</strong> (8000), não o painel.</p>
+    <p>Abra o painel em <a href="http://127.0.0.1:5173">http://127.0.0.1:5173</a></p>
+    <p>Docs: <a href="/docs">/docs</a></p>
+  </div>
+</body>
+</html>"""
+
+
+@app.get("/health")
+async def health() -> dict[str, str]:
+    return {"status": "ok", "service": "aviawatch"}
+
+
+@app.get("/api/health")
+async def api_health() -> dict[str, str]:
+    return {"status": "ok", "service": "aviawatch-api"}
+
+
+def run() -> None:
+    import uvicorn
+
+    port = int(os.getenv("PORT", "8000"))
+    # Default loopback keeps the API local; override with HOST=0.0.0.0 if needed
+    host = os.getenv("HOST", "127.0.0.1")
+    uvicorn.run(
+        "app.main:app",
+        host=host,
+        port=port,
+        reload=False,
+    )
+
+
+if __name__ == "__main__":
+    run()

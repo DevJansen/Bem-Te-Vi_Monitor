@@ -1,0 +1,17 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+opencv-python>=4.10.0
+ultralytics>=8.3.0
+pydantic>=2.9.0
+python-dotenv>=1.0.0
+python-multipart>=0.0.20
+requests>=2.32.0
+cryptography>=43.0.0
+numpy>=1.26.0
+birdnetlib>=0.18.1
+librosa>=0.10.2
+audioread>=3.0.1
+audioop-lts>=0.2.2; python_version >= "3.13"
+# sqlite3 is part of the Python standard library — no pip install required
+# onvif-zeep is optional for ONVIF device discovery
+# BirdNET also requires a TensorFlow Lite/TensorFlow runtime compatible with Python.

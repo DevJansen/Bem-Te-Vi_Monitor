@@ -1,0 +1,312 @@
+import { useEffect, useState, type FormEvent } from "react";
+import { Bird, LoaderCircle, Plus, Trash2, X } from "lucide-react";
+import type { BirdSpecies } from "@/types";
+import { createSpecies, deleteSpecies, getErrorMessage } from "@/services/api";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+
+type Props = {
+  species: BirdSpecies[];
+  loading: boolean;
+  error: string | null;
+  onCatalogChanged: () => void;
+};
+
+const inputClass =
+  "mt-1 block w-full rounded-lg border border-dark-700 bg-dark-900 px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-emerald-500/50";
+
+export function SpeciesCatalog({
+  species,
+  loading,
+  error: loadError,
+  onCatalogChanged,
+}: Props) {
+  const [modalOpen, setModalOpen] = useState(false);
+  const [commonName, setCommonName] = useState("");
+  const [scientificName, setScientificName] = useState("");
+  const [description, setDescription] = useState("");
+  const [referenceImage, setReferenceImage] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [deletingSpecies, setDeletingSpecies] = useState<BirdSpecies | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
+
+  const resetForm = () => {
+    setCommonName("");
+    setScientificName("");
+    setDescription("");
+    setReferenceImage(null);
+    setFormError(null);
+  };
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setFormError(null);
+    try {
+      await createSpecies({
+        common_name: commonName.trim(),
+        scientific_name: scientificName.trim(),
+        description: description.trim(),
+        reference_image: referenceImage,
+      });
+      resetForm();
+      setModalOpen(false);
+      setToast("Espécie cadastrada no catálogo local.");
+      onCatalogChanged();
+    } catch (cause) {
+      setFormError(getErrorMessage(cause, "Não foi possível cadastrar a espécie."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deletingSpecies) return;
+    setDeleting(true);
+    setActionError(null);
+    try {
+      await deleteSpecies(deletingSpecies.id);
+      setDeletingSpecies(null);
+      setToast("Espécie removida do catálogo.");
+      onCatalogChanged();
+    } catch (cause) {
+      setActionError(getErrorMessage(cause, "Não foi possível excluir a espécie."));
+      setDeletingSpecies(null);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <section>
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="font-display text-lg font-semibold text-[var(--color-text-primary)]">
+            Catálogo local de aves
+          </h2>
+          <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+            {species.length} espécie(s) cadastrada(s), armazenadas somente neste computador.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            resetForm();
+            setModalOpen(true);
+          }}
+          className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-3 py-2 text-sm font-semibold text-dark-900 transition hover:bg-emerald-400"
+        >
+          <Plus className="h-4 w-4" />
+          Cadastrar Nova Ave
+        </button>
+      </div>
+
+      {loadError || actionError ? (
+        <p role="alert" className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+          {loadError ?? actionError}
+        </p>
+      ) : null}
+
+      {loading && species.length === 0 ? (
+        <p className="text-sm text-[var(--color-text-muted)]">Carregando catálogo…</p>
+      ) : species.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-dark-700 px-6 py-12 text-center">
+          <Bird className="mx-auto h-8 w-8 text-emerald-400" />
+          <p className="mt-3 text-sm text-[var(--color-text-muted)]">
+            Seu catálogo ainda está vazio. Cadastre as aves comuns na sua região.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {species.map((item) => (
+            <article
+              key={item.id}
+              className="overflow-hidden rounded-xl border border-dark-700 bg-dark-800"
+            >
+              <div className="aspect-[4/3] bg-dark-900">
+                {item.reference_image_url ? (
+                  <img
+                    src={item.reference_image_url}
+                    alt={`Foto de referência: ${item.common_name}`}
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="flex h-full flex-col items-center justify-center gap-2 text-[var(--color-text-muted)]">
+                    <Bird className="h-9 w-9 text-emerald-400/70" />
+                    <span className="text-xs">Sem foto de referência</span>
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2 p-4">
+                <h3 className="font-medium text-[var(--color-text-primary)]">
+                  {item.common_name}
+                </h3>
+                <p className="text-sm italic text-emerald-300">
+                  {item.scientific_name}
+                </p>
+                {item.description ? (
+                  <p className="line-clamp-3 text-xs leading-relaxed text-[var(--color-text-muted)]">
+                    {item.description}
+                  </p>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setDeletingSpecies(item)}
+                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-red-300 transition hover:bg-red-500/10"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Excluir espécie
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      {modalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/70"
+            aria-label="Fechar cadastro"
+            disabled={saving}
+            onClick={() => setModalOpen(false)}
+          />
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="species-modal-title"
+            className="relative z-10 w-full max-w-lg rounded-xl border border-dark-700 bg-dark-800 shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-dark-700 px-5 py-4">
+              <div>
+                <h2
+                  id="species-modal-title"
+                  className="font-display text-lg font-semibold text-[var(--color-text-primary)]"
+                >
+                  Cadastrar Nova Ave
+                </h2>
+                <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                  Os dados e a foto ficam armazenados localmente.
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Fechar"
+                disabled={saving}
+                onClick={() => setModalOpen(false)}
+                className="rounded-lg p-1.5 text-[var(--color-text-muted)] hover:bg-dark-700"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={(event) => void submit(event)} className="space-y-4 px-5 py-4">
+              <label className="block text-xs text-[var(--color-text-muted)]">
+                Nome popular
+                <input
+                  required
+                  maxLength={120}
+                  value={commonName}
+                  onChange={(event) => setCommonName(event.target.value)}
+                  placeholder="Ex.: Beija-flor-de-papo-branco"
+                  className={inputClass}
+                />
+              </label>
+              <label className="block text-xs text-[var(--color-text-muted)]">
+                Nome científico
+                <input
+                  required
+                  maxLength={160}
+                  value={scientificName}
+                  onChange={(event) => setScientificName(event.target.value)}
+                  placeholder="Ex.: Amazilia versicolor"
+                  className={inputClass}
+                />
+              </label>
+              <label className="block text-xs text-[var(--color-text-muted)]">
+                Observações ou características
+                <textarea
+                  maxLength={4000}
+                  rows={3}
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  placeholder="Descrição, comportamento ou características para identificação."
+                  className={inputClass}
+                />
+              </label>
+              <label className="block text-xs text-[var(--color-text-muted)]">
+                Foto de referência (opcional, máximo 8 MB)
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] ?? null;
+                    setReferenceImage(file);
+                    if (file && file.size > 8 * 1024 * 1024) {
+                      setFormError("A foto de referência deve ter no máximo 8 MB.");
+                    } else {
+                      setFormError(null);
+                    }
+                  }}
+                  className={`${inputClass} file:mr-3 file:rounded-md file:border-0 file:bg-emerald-500/15 file:px-2 file:py-1 file:text-xs file:text-emerald-300`}
+                />
+              </label>
+              {formError ? (
+                <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                  {formError}
+                </p>
+              ) : null}
+              <div className="flex justify-end gap-2 border-t border-dark-700 pt-4">
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => setModalOpen(false)}
+                  className="rounded-lg border border-dark-700 px-4 py-2 text-sm text-[var(--color-text-muted)] hover:bg-dark-700"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || (referenceImage?.size ?? 0) > 8 * 1024 * 1024}
+                  className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-dark-900 transition hover:bg-emerald-400 disabled:opacity-60"
+                >
+                  {saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+                  {saving ? "Salvando…" : "Salvar espécie"}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
+
+      <ConfirmDialog
+        open={deletingSpecies !== null}
+        title="Excluir espécie do catálogo?"
+        message={
+          deletingSpecies
+            ? `Deseja realmente remover ${deletingSpecies.common_name}? Os registros de visitas existentes serão mantidos, mas perderão a associação ao catálogo.`
+            : ""
+        }
+        confirmLabel="Excluir espécie"
+        busy={deleting}
+        onCancel={() => setDeletingSpecies(null)}
+        onConfirm={() => void confirmDelete()}
+      />
+
+      {toast ? (
+        <p role="status" className="fixed bottom-5 right-5 z-50 rounded-lg border border-emerald-500/30 bg-emerald-950 px-4 py-3 text-sm text-emerald-300 shadow-xl">
+          {toast}
+        </p>
+      ) : null}
+    </section>
+  );
+}

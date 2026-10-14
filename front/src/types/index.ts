@@ -1,0 +1,259 @@
+/** Tipos do domínio AviaWatch (alinhados à API FastAPI local). */
+
+export type CameraId = string;
+
+export type SourceType = "usb" | "rtsp" | "onvif";
+
+export type CameraStatus =
+  | "idle"
+  | "connecting"
+  | "online"
+  | "reconnecting"
+  | "error"
+  | "stopped"
+  | "disabled";
+
+export type AppTab =
+  | "dashboard"
+  | "cameras"
+  | "gallery"
+  | "species"
+  | "analytics"
+  | "settings";
+
+export type ZonePoint = {
+  x: number;
+  y: number;
+};
+
+export type ZoneMode = "include" | "exclude";
+
+export type Zone = {
+  id: string;
+  name: string;
+  points: ZonePoint[];
+  mode: ZoneMode;
+  min_dwell_seconds: number;
+  cooldown_seconds: number;
+  absence_tolerance_seconds: number;
+  enabled: boolean;
+};
+
+export type Camera = {
+  id: CameraId;
+  name: string;
+  source_type: SourceType;
+  source_uri: string;
+  has_credentials: boolean;
+  enabled: boolean;
+  zones: Zone[];
+  status: CameraStatus | string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CameraCreatePayload = {
+  name: string;
+  source_type: SourceType;
+  source_uri: string;
+  username?: string | null;
+  password?: string | null;
+  enabled?: boolean;
+  zones?: Zone[];
+};
+
+export type CameraUpdatePayload = {
+  name?: string;
+  source_type?: SourceType;
+  source_uri?: string;
+  username?: string | null;
+  password?: string | null;
+  enabled?: boolean;
+  zones?: Zone[];
+  clear_credentials?: boolean;
+};
+
+export type RecordingAnalysisStatus =
+  | "queued"
+  | "processing"
+  | "completed"
+  | "failed";
+
+export type RecordingAnalysis = {
+  id: string;
+  camera_id: CameraId;
+  filename: string;
+  status: RecordingAnalysisStatus;
+  progress: number;
+  visits_created: number;
+  error: string | null;
+};
+
+export type BirdVisit = {
+  id: string;
+  camera_id: CameraId;
+  camera_name: string | null;
+  species: string;
+  confidence: number;
+  detected_at: string;
+  dwell_seconds: number;
+  clip_path: string | null;
+  thumbnail_path: string | null;
+  clip_url: string | null;
+  thumbnail_url: string | null;
+  bbox: number[] | null;
+  zone_id: string | null;
+  species_id: string | null;
+  assigned_species_common_name: string | null;
+  assigned_species_scientific_name: string | null;
+  metadata: {
+    crop_path?: string | null;
+    identification_status?: string;
+    external_identification?: {
+      scientific_name: string;
+      common_name: string;
+    };
+    [key: string]: unknown;
+  };
+};
+
+export type BirdSpecies = {
+  id: string;
+  common_name: string;
+  scientific_name: string;
+  description: string;
+  reference_image_path: string | null;
+  reference_image_url: string | null;
+  created_at: string;
+};
+
+export type BirdSpeciesCreatePayload = {
+  common_name: string;
+  scientific_name: string;
+  description: string;
+  reference_image?: File | null;
+};
+
+export type HistoryDeletionResult = {
+  deleted_records: number;
+  deleted_media_files: number;
+  failed_records: string[];
+  failed_media_files: string[];
+};
+
+export type Metrics = {
+  total_visits: number;
+  visits_today: number;
+  active_cameras: number;
+  total_cameras: number;
+  species_counts: Record<string, number>;
+  visits_by_hour: Record<string, number>;
+  last_visit_at: string | null;
+  generated_at: string;
+};
+
+export type AnalyticsSummary = {
+  visits_today: number;
+  visits_last_7_days: number;
+  total_visits: number;
+  most_frequent_species: string | null;
+  most_frequent_species_count: number;
+  average_duration_seconds: number;
+  peak_hour: string | null;
+};
+
+export type HourlyDistribution = {
+  hour: string;
+  visits: number;
+};
+
+export type LifeListSpecies = {
+  id: string;
+  common_name: string;
+  scientific_name: string;
+  description: string;
+  is_unlocked: boolean;
+  first_seen_at: string | null;
+  featured_photo_url: string | null;
+  reference_image_url: string | null;
+  sightings_count: number;
+};
+
+export type AppSettings = {
+  telegram_configured: boolean;
+  discord_configured: boolean;
+  yolo_model: string;
+  yolo_confidence: number;
+  pre_record_seconds: number;
+  post_record_seconds: number;
+  audio_analysis_enabled: boolean;
+  audio_confidence_threshold: number;
+  notifications_enabled: boolean;
+  min_confidence_notify: number;
+  extra: Record<string, unknown>;
+};
+
+export type AppSettingsUpdate = {
+  notifications_enabled?: boolean;
+  min_confidence_notify?: number;
+  yolo_confidence?: number;
+  pre_record_seconds?: number;
+  post_record_seconds?: number;
+  audio_analysis_enabled?: boolean;
+  audio_confidence_threshold?: number;
+  extra?: Record<string, unknown>;
+};
+
+export type AudioDetection = {
+  id: string;
+  event_type: "AUDIO_DETECTION";
+  camera_id: string;
+  camera_name: string;
+  detected_at: string;
+  species: string;
+  scientific_name: string;
+  confidence: number;
+  linked_visit_id: string | null;
+};
+
+export type AudioAnalysisStatus = {
+  enabled: boolean;
+  status: "disabled" | "starting" | "monitoring" | "no_cameras" | "error";
+  message: string;
+  monitored_cameras: number;
+};
+
+export type HealthResponse = {
+  status: string;
+  service: string;
+};
+
+export type AiStatus = "online" | "degraded" | "offline" | "loading";
+
+export type NotificationChannel = "telegram" | "discord";
+
+export type EnvironmentIntegration = "telegram" | "discord" | "ai_external";
+
+export type EnvironmentSettings = {
+  telegram_bot_token: string | null;
+  telegram_chat_id: string | null;
+  discord_webhook_url: string | null;
+  ai_external_api_key: string | null;
+  telegram_bot_token_configured: boolean;
+  telegram_chat_id_configured: boolean;
+  discord_webhook_url_configured: boolean;
+  ai_external_api_key_configured: boolean;
+  telegram_configured: boolean;
+  discord_configured: boolean;
+  ai_external_configured: boolean;
+};
+
+export type EnvironmentSettingsUpdate = {
+  telegram_bot_token?: string;
+  telegram_chat_id?: string;
+  discord_webhook_url?: string;
+  ai_external_api_key?: string;
+  clear_telegram?: boolean;
+  clear_discord?: boolean;
+  clear_ai_external?: boolean;
+};

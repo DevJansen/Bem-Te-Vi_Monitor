@@ -1,0 +1,73 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-dark-900: #0a0f0d;
+  --color-dark-800: #111816;
+  --color-dark-700: #1a2420;
+  --color-emerald-500: #10b981;
+  --color-emerald-400: #34d399;
+  --color-text-primary: #e8f5ef;
+  --color-text-muted: #8aa399;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  background-color: var(--color-dark-900);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@layer base {
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: "Space Grotesk", "Segoe UI", sans-serif;
+    letter-spacing: -0.02em;
+  }
+
+  a {
+    color: var(--color-emerald-400);
+    text-decoration: none;
+  }
+
+  a:hover {
+    color: var(--color-emerald-500);
+  }
+}
+
+@layer utilities {
+  .bg-surface {
+    background-color: var(--color-dark-800);
+  }
+
+  .bg-surface-elevated {
+    background-color: var(--color-dark-700);
+  }
+
+  .text-accent {
+    color: var(--color-emerald-400);
+  }
+
+  .border-accent {
+    border-color: var(--color-emerald-500);
+  }
+}

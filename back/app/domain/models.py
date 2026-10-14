@@ -1,0 +1,264 @@
+"""Domain models and API schemas."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from enum import Enum
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field, field_validator
+
+
+class SourceType(str, Enum):
+    USB = "usb"
+    RTSP = "rtsp"
+    ONVIF = "onvif"
+
+
+class ZoneMode(str, Enum):
+    INCLUDE = "include"
+    EXCLUDE = "exclude"
+
+
+class Point(BaseModel):
+    x: float = Field(ge=0.0, le=1.0)
+    y: float = Field(ge=0.0, le=1.0)
+
+
+class ZoneConfig(BaseModel):
+    id: str
+    name: str = "zone"
+    points: list[Point] = Field(min_length=3)
+    mode: ZoneMode = ZoneMode.INCLUDE
+    min_dwell_seconds: float = Field(default=2.0, ge=0.0)
+    cooldown_seconds: float = Field(default=30.0, ge=0.0)
+    absence_tolerance_seconds: float = Field(default=1.0, ge=0.0)
+    enabled: bool = True
+
+
+class CameraZones(BaseModel):
+    zones: list[ZoneConfig] = Field(default_factory=list)
+
+
+class CameraCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    source_type: SourceType
+    source_uri: str = Field(
+        description="USB index (e.g. '0') or RTSP/ONVIF host/URL",
+    )
+    username: str | None = None
+    password: str | None = None
+    enabled: bool = True
+    zones: list[ZoneConfig] = Field(default_factory=list)
+
+    @field_validator("source_uri")
+    @classmethod
+    def strip_uri(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("source_uri is required")
+        return cleaned
+
+
+class CameraUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    source_type: SourceType | None = None
+    source_uri: str | None = None
+    username: str | None = None
+    password: str | None = None
+    enabled: bool | None = None
+    zones: list[ZoneConfig] | None = None
+    clear_credentials: bool = False
+
+
+class CameraOut(BaseModel):
+    id: str
+    name: str
+    source_type: SourceType
+    source_uri: str
+    has_credentials: bool = False
+    enabled: bool
+    zones: list[ZoneConfig] = Field(default_factory=list)
+    status: str = "idle"
+    created_at: str
+    updated_at: str
+
+
+class VisitOut(BaseModel):
+    id: str
+    camera_id: str
+    camera_name: str | None = None
+    species: str
+    confidence: float
+    detected_at: str
+    dwell_seconds: float
+    clip_path: str | None = None
+    thumbnail_path: str | None = None
+    clip_url: str | None = None
+    thumbnail_url: str | None = None
+    bbox: list[float] | None = None
+    zone_id: str | None = None
+    species_id: str | None = None
+    assigned_species_common_name: str | None = None
+    assigned_species_scientific_name: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class BirdSpeciesOut(BaseModel):
+    id: str
+    common_name: str
+    scientific_name: str
+    description: str
+    reference_image_path: str | None = None
+    reference_image_url: str | None = None
+    created_at: str
+
+
+class VisitSpeciesAssignment(BaseModel):
+    species_id: str | None
+
+
+class AppSettingsOut(BaseModel):
+    telegram_configured: bool
+    discord_configured: bool
+    yolo_model: str
+    yolo_confidence: float
+    pre_record_seconds: float
+    post_record_seconds: float
+    audio_analysis_enabled: bool = False
+    audio_confidence_threshold: float = Field(default=0.70, ge=0.70, le=1.0)
+    notifications_enabled: bool = True
+    min_confidence_notify: float = 0.35
+    extra: dict[str, Any] = Field(default_factory=dict)
+
+
+class AppSettingsUpdate(BaseModel):
+    notifications_enabled: bool | None = None
+    min_confidence_notify: float | None = Field(default=None, ge=0.0, le=1.0)
+    yolo_confidence: float | None = Field(default=None, ge=0.60, le=1.0)
+    pre_record_seconds: float | None = Field(default=None, ge=3.0, le=30.0)
+    post_record_seconds: float | None = Field(default=None, ge=0.0, le=30.0)
+    audio_analysis_enabled: bool | None = None
+    audio_confidence_threshold: float | None = Field(
+        default=None, ge=0.70, le=1.0
+    )
+    extra: dict[str, Any] | None = None
+
+
+class AudioDetectionOut(BaseModel):
+    id: str
+    event_type: Literal["AUDIO_DETECTION"] = "AUDIO_DETECTION"
+    camera_id: str
+    camera_name: str
+    detected_at: str
+    species: str
+    scientific_name: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    linked_visit_id: str | None = None
+
+
+class AudioAnalysisStatusOut(BaseModel):
+    enabled: bool
+    status: Literal["disabled", "starting", "monitoring", "no_cameras", "error"]
+    message: str
+    monitored_cameras: int = Field(ge=0)
+
+
+class StatsOut(BaseModel):
+    total_visits: int
+    visits_today: int
+    active_cameras: int
+    total_cameras: int
+    species_counts: dict[str, int] = Field(default_factory=dict)
+    visits_by_hour: dict[str, int] = Field(default_factory=dict)
+    last_visit_at: str | None = None
+    generated_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
+
+
+class AnalyticsSummaryOut(BaseModel):
+    visits_today: int
+    visits_last_7_days: int
+    total_visits: int
+    most_frequent_species: str | None
+    most_frequent_species_count: int
+    average_duration_seconds: float
+    peak_hour: str | None
+
+
+class HourlyDistributionOut(BaseModel):
+    hour: str
+    visits: int
+
+
+class LifeListSpeciesOut(BaseModel):
+    id: str
+    common_name: str
+    scientific_name: str
+    description: str
+    is_unlocked: bool
+    first_seen_at: str | None
+    featured_photo_url: str | None
+    reference_image_url: str | None
+    sightings_count: int
+
+
+class NotificationTestRequest(BaseModel):
+    channel: str = Field(description="telegram | discord")
+
+
+class NotificationTestResponse(BaseModel):
+    ok: bool
+    message: str
+
+
+class RecordingAnalysisOut(BaseModel):
+    id: str
+    camera_id: str
+    filename: str
+    status: Literal["queued", "processing", "completed", "failed"]
+    progress: float = Field(ge=0.0, le=100.0)
+    visits_created: int = Field(ge=0)
+    error: str | None = None
+
+
+class HistoryDeletionOut(BaseModel):
+    deleted_records: int = Field(ge=0)
+    deleted_media_files: int = Field(ge=0)
+    failed_records: list[str] = Field(default_factory=list)
+    failed_media_files: list[str] = Field(default_factory=list)
+
+
+class ConfirmHistoryReset(BaseModel):
+    confirmation: Literal["EXCLUIR TUDO"]
+
+
+class EnvironmentSettingsOut(BaseModel):
+    telegram_bot_token: str | None = None
+    telegram_chat_id: str | None = None
+    discord_webhook_url: str | None = None
+    ai_external_api_key: str | None = None
+    telegram_bot_token_configured: bool
+    telegram_chat_id_configured: bool
+    discord_webhook_url_configured: bool
+    ai_external_api_key_configured: bool
+    telegram_configured: bool
+    discord_configured: bool
+    ai_external_configured: bool
+
+
+class EnvironmentSettingsUpdate(BaseModel):
+    telegram_bot_token: str | None = Field(default=None, max_length=512)
+    telegram_chat_id: str | None = Field(default=None, max_length=128)
+    discord_webhook_url: str | None = Field(default=None, max_length=2048)
+    ai_external_api_key: str | None = Field(default=None, max_length=512)
+    clear_telegram: bool = False
+    clear_discord: bool = False
+    clear_ai_external: bool = False
+
+
+class EnvironmentConnectionTest(BaseModel):
+    integration: Literal["telegram", "discord", "ai_external"]
+    telegram_bot_token: str | None = Field(default=None, max_length=512)
+    telegram_chat_id: str | None = Field(default=None, max_length=128)
+    discord_webhook_url: str | None = Field(default=None, max_length=2048)
+    ai_external_api_key: str | None = Field(default=None, max_length=512)
