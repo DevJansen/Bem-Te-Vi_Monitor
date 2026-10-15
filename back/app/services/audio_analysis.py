@@ -18,6 +18,7 @@ from app.infra.camera.crypto import decrypt_secret
 from app.infra.camera.streamer import CameraStreamer, StreamConfig
 from app.infra.database.audio_repository import AudioDetectionRepository
 from app.infra.database.repository import CameraRepository, SettingsRepository
+from app.services.birdnet_runtime import available_runtime, ensure_tflite_runtime
 
 logger = logging.getLogger(__name__)
 
@@ -43,13 +44,10 @@ def _audio_engine_issue() -> str | None:
             "BirdNET não está instalado. Instale as dependências de bioacústica "
             "e reinicie o backend."
         )
-    if (
-        importlib.util.find_spec("tflite_runtime") is None
-        and importlib.util.find_spec("tensorflow") is None
-    ):
+    if available_runtime() is None:
         return (
-            "O BirdNET precisa de TensorFlow Lite ou TensorFlow compatível "
-            "com este Python."
+            "O BirdNET precisa de um runtime TFLite. Instale 'ai-edge-litert' "
+            "(recomendado) ou TensorFlow, compatível com este Python."
         )
     if importlib.util.find_spec("librosa") is None:
         return "A dependência librosa do BirdNET não está instalada."
@@ -64,13 +62,17 @@ def _get_analyzer() -> Any:
         if _analyzer_error is not None:
             raise RuntimeError(_analyzer_error)
         try:
+            # Prepara o runtime TFLite (aplica o shim do ai-edge-litert quando
+            # necessário) antes de importar o birdnetlib.
+            if ensure_tflite_runtime() is None:
+                raise RuntimeError("Nenhum runtime TFLite disponível para o BirdNET.")
             from birdnetlib.analyzer import Analyzer
 
             _analyzer = Analyzer()
         except Exception as exc:
             _analyzer_error = (
-                "Não foi possível iniciar o BirdNET. Verifique as dependências "
-                "de TensorFlow Lite e os logs do backend."
+                "Não foi possível iniciar o BirdNET. Verifique o runtime TFLite "
+                "(ai-edge-litert/TensorFlow) e os logs do backend."
             )
             logger.exception("BirdNET analyzer initialization failed")
             raise RuntimeError(_analyzer_error) from exc

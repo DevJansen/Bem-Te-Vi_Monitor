@@ -14,4 +14,8 @@ audioread>=3.0.1
 audioop-lts>=0.2.2; python_version >= "3.13"
 # sqlite3 is part of the Python standard library — no pip install required
 # onvif-zeep is optional for ONVIF device discovery
-# BirdNET also requires a TensorFlow Lite/TensorFlow runtime compatible with Python.
+# Runtime TFLite usado pelo BirdNET. O ai-edge-litert é o runtime oficial atual
+# do Google e possui wheels para plataformas/Pythons onde tflite-runtime e
+# tensorflow não existem (ex.: Windows + Python 3.14). O birdnetlib o utiliza
+# por meio de um shim de compatibilidade — ver app/services/birdnet_runtime.py.
+ai-edge-litert>=2.1.0
