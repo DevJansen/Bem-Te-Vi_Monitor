@@ -11,6 +11,7 @@ from app.domain.models import (
     AnalyticsSummaryOut,
     HourlyDistributionOut,
     LifeListSpeciesOut,
+    WeatherCorrelationOut,
 )
 from app.infra.database.analytics_repository import AnalyticsRepository
 
@@ -64,4 +65,17 @@ def get_lifelist() -> list[LifeListSpeciesOut]:
         raise HTTPException(
             status_code=500,
             detail="Não foi possível carregar o álbum de espécies.",
+        ) from exc
+
+
+@router.get("/weather-correlation", response_model=WeatherCorrelationOut)
+def get_weather_correlation() -> WeatherCorrelationOut:
+    """Cruza a frequência de visitas com as condições do tempo."""
+    try:
+        return WeatherCorrelationOut(**_repository().weather_correlation())
+    except Exception as exc:
+        logger.exception("get_weather_correlation failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível calcular a correlação climática.",
         ) from exc

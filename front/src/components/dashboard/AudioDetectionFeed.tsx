@@ -4,6 +4,7 @@ import { fetchAudioAnalysisStatus, fetchAudioDetections, getErrorMessage } from 
 import type { AudioAnalysisStatus, AudioDetection } from "@/types";
 import { usePolling } from "@/hooks/usePolling";
 import { formatDateTime, formatPercent } from "@/utils/format";
+import { WeatherBadges } from "@/components/common/WeatherBadges";
 
 type FeedData = {
   status: AudioAnalysisStatus;
@@ -133,6 +134,12 @@ export function AudioDetectionFeed() {
                       {detection.camera_name} · {formatDateTime(detection.detected_at)}
                       {detection.linked_visit_id ? " · visita visual associada" : ""}
                     </p>
+                    <WeatherBadges
+                      temperature={detection.temperature}
+                      humidity={detection.humidity}
+                      weather_code={detection.weather_code}
+                      className="mt-1"
+                    />
                   </div>
                 </div>
                 <span className="shrink-0 rounded-full border border-violet-400/20 bg-violet-400/10 px-2.5 py-1 text-xs font-semibold text-violet-200">

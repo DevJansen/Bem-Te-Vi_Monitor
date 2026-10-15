@@ -14,6 +14,7 @@ from app.controllers import (
     video_feed,
     videos,
     visits,
+    weather,
 )
 
 api_router = APIRouter()
@@ -28,5 +29,6 @@ api_router.include_router(stats.router)
 api_router.include_router(analytics.router)
 api_router.include_router(video_feed.router)
 api_router.include_router(videos.router)
+api_router.include_router(weather.router)
 
 __all__ = ["api_router"]

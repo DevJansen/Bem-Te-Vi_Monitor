@@ -23,30 +23,35 @@ import {
   fetchAnalyticsSummary,
   fetchHourlyDistribution,
   fetchLifeList,
+  fetchWeatherCorrelation,
   getErrorMessage,
 } from "@/services/api";
 import type {
   AnalyticsSummary,
   HourlyDistribution,
   LifeListSpecies,
+  WeatherCorrelation,
 } from "@/types";
 import { usePolling } from "@/hooks/usePolling";
 import { formatDateTime, formatSpeciesLabel } from "@/utils/format";
+import { WeatherCorrelationPanel } from "@/components/dashboard/WeatherCorrelationPanel";
 
 type AnalyticsData = {
   summary: AnalyticsSummary;
   hourly: HourlyDistribution[];
   lifeList: LifeListSpecies[];
+  weather: WeatherCorrelation;
 };
 
 async function loadAnalytics(): Promise<AnalyticsData> {
   try {
-    const [summary, hourly, lifeList] = await Promise.all([
+    const [summary, hourly, lifeList, weather] = await Promise.all([
       fetchAnalyticsSummary(),
       fetchHourlyDistribution(),
       fetchLifeList(),
+      fetchWeatherCorrelation(),
     ]);
-    return { summary, hourly, lifeList };
+    return { summary, hourly, lifeList, weather };
   } catch (error) {
     throw new Error(
       getErrorMessage(error, "Não foi possível carregar as estatísticas."),
@@ -259,6 +264,8 @@ export function AnalyticsDashboard() {
               </ResponsiveContainer>
             </div>
           </section>
+
+          <WeatherCorrelationPanel data={data.weather} />
 
           <section>
             <div className="mb-4 flex flex-wrap items-end justify-between gap-2">

@@ -67,6 +67,18 @@ async def lifespan(app: FastAPI):
 
     threading.Thread(target=_warm_model, name="yolo-warmup", daemon=True).start()
 
+    # Pré-aquece o cache de clima em segundo plano, para que o primeiro widget/
+    # visita já encontre o valor disponível sem bloquear a thread do pipeline.
+    from app.services.weather_service import get_weather_service
+
+    def _warm_weather() -> None:
+        try:
+            get_weather_service().current()
+        except Exception:
+            logger.exception("Weather warm-up failed")
+
+    threading.Thread(target=_warm_weather, name="weather-warmup", daemon=True).start()
+
     try:
         get_camera_manager().load_enabled()
         supervisor.sync_from_db()

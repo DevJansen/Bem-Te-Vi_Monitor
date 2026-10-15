@@ -41,6 +41,13 @@ class Settings(BaseModel):
     post_record_seconds: float = 2.0
     camera_reconnect_delay_sec: float = 3.0
     media_retention_days: int = Field(default=30, ge=1)
+    # Localização do alimentador (latitude/longitude), usada pela integração
+    # meteorológica com a Open-Meteo. Padrão: São Paulo/SP.
+    latitude: float = Field(default=-23.5505, ge=-90.0, le=90.0)
+    longitude: float = Field(default=-46.6333, ge=-180.0, le=180.0)
+    # Intervalo (minutos) de atualização do cache local de clima. Evita
+    # requisições excessivas à API pública da Open-Meteo.
+    weather_cache_minutes: int = Field(default=30, ge=5, le=1440)
 
     @property
     def db_path(self) -> Path:
@@ -132,6 +139,15 @@ class Settings(BaseModel):
                 os.getenv("CAMERA_RECONNECT_DELAY_SEC", "3.0")
             ),
             media_retention_days=int(os.getenv("MEDIA_RETENTION_DAYS", "30")),
+            latitude=min(
+                90.0, max(-90.0, float(os.getenv("LATITUDE", "-23.5505")))
+            ),
+            longitude=min(
+                180.0, max(-180.0, float(os.getenv("LONGITUDE", "-46.6333")))
+            ),
+            weather_cache_minutes=max(
+                5, int(os.getenv("WEATHER_CACHE_MINUTES", "30"))
+            ),
         )
 
 

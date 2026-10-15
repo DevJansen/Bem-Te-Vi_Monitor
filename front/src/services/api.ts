@@ -13,6 +13,7 @@ import type {
   Camera,
   CameraCreatePayload,
   CameraUpdatePayload,
+  CurrentWeather,
   EnvironmentIntegration,
   EnvironmentSettings,
   EnvironmentSettingsUpdate,
@@ -25,6 +26,7 @@ import type {
   RecordingAnalysis,
   RoiSettings,
   RoiZone,
+  WeatherCorrelation,
   Zone,
 } from "@/types";
 
@@ -254,6 +256,20 @@ export async function fetchHourlyDistribution(): Promise<HourlyDistribution[]> {
 
 export async function fetchLifeList(): Promise<LifeListSpecies[]> {
   const { data } = await api.get<LifeListSpecies[]>("/analytics/lifelist");
+  return data;
+}
+
+/** Clima atual do local do alimentador (widget do painel). */
+export async function fetchCurrentWeather(): Promise<CurrentWeather> {
+  const { data } = await api.get<CurrentWeather>("/weather/current");
+  return data;
+}
+
+/** Cruzamento entre frequência de visitas e condições do tempo. */
+export async function fetchWeatherCorrelation(): Promise<WeatherCorrelation> {
+  const { data } = await api.get<WeatherCorrelation>(
+    "/analytics/weather-correlation",
+  );
   return data;
 }
 

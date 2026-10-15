@@ -20,12 +20,23 @@ from app.domain.models import (
     ZoneConfig,
 )
 from app.infra.database.connection import db_session
+from app.services.weather_service import current_weather_for_storage
 
 logger = logging.getLogger(__name__)
 
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _optional_float(value: Any) -> float | None:
+    """Converte um valor de coluna (possivelmente NULL) em float ou None."""
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _media_url(relative: str | None) -> str | None:
@@ -210,15 +221,32 @@ class VisitRepository:
         zone_id: str | None,
         metadata: dict[str, Any] | None = None,
         visit_id: str | None = None,
+        temperature: float | None = None,
+        humidity: float | None = None,
+        weather_code: str | None = None,
+        wind_speed: float | None = None,
     ) -> dict[str, Any]:
         vid = visit_id or str(uuid.uuid4())
+        # Registra as condições do tempo no momento da visita. Quando o chamador
+        # não informa nada, consulta o cache local da Open-Meteo (resiliente a
+        # falhas de internet: pode gravar nulos sem interromper a visita).
+        if all(
+            value is None
+            for value in (temperature, humidity, weather_code, wind_speed)
+        ):
+            weather = current_weather_for_storage()
+            temperature = weather.get("temperature")
+            humidity = weather.get("humidity")
+            weather_code = weather.get("weather_code")
+            wind_speed = weather.get("wind_speed")
         with db_session(self.db_path) as conn:
             conn.execute(
                 """
                 INSERT INTO visits (
                     id, camera_id, species, confidence, detected_at, dwell_seconds,
-                    clip_path, thumbnail_path, bbox_json, zone_id, metadata_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    clip_path, thumbnail_path, bbox_json, zone_id, metadata_json,
+                    temperature, humidity, weather_code, wind_speed
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     vid,
@@ -232,6 +260,10 @@ class VisitRepository:
                     json.dumps(bbox) if bbox is not None else None,
                     zone_id,
                     json.dumps(metadata or {}),
+                    temperature,
+                    humidity,
+                    weather_code,
+                    wind_speed,
                 ),
             )
         visit = self.get(vid)
@@ -459,6 +491,10 @@ class VisitRepository:
             assigned_species_scientific_name=row.get(
                 "assigned_species_scientific_name"
             ),
+            temperature=_optional_float(row.get("temperature")),
+            humidity=_optional_float(row.get("humidity")),
+            weather_code=row.get("weather_code"),
+            wind_speed=_optional_float(row.get("wind_speed")),
             metadata=metadata,
         )
 

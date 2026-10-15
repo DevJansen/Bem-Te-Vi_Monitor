@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from app.infra.database.connection import db_session
+from app.services.weather_service import current_weather_for_storage
 
 
 class AudioDetectionRepository:
@@ -25,6 +26,9 @@ class AudioDetectionRepository:
     ) -> dict[str, Any]:
         detection_id = str(uuid.uuid4())
         created_at = datetime.now(timezone.utc).isoformat()
+        # Condições do tempo no momento da detecção sonora (pode ficar nulo se
+        # a internet estiver indisponível — não impede o registro).
+        weather = current_weather_for_storage()
         with db_session(self.db_path) as conn:
             linked_visit = conn.execute(
                 """
@@ -45,8 +49,9 @@ class AudioDetectionRepository:
                 """
                 INSERT INTO audio_detections (
                     id, event_type, camera_id, detected_at, species,
-                    scientific_name, confidence, linked_visit_id, created_at
-                ) VALUES (?, 'AUDIO_DETECTION', ?, ?, ?, ?, ?, ?, ?)
+                    scientific_name, confidence, linked_visit_id, created_at,
+                    temperature, humidity, weather_code, wind_speed
+                ) VALUES (?, 'AUDIO_DETECTION', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     detection_id,
@@ -57,6 +62,10 @@ class AudioDetectionRepository:
                     confidence,
                     linked_visit["id"] if linked_visit else None,
                     created_at,
+                    weather.get("temperature"),
+                    weather.get("humidity"),
+                    weather.get("weather_code"),
+                    weather.get("wind_speed"),
                 ),
             )
             row = conn.execute(

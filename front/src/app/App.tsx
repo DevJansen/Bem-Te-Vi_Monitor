@@ -3,6 +3,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { KPIBoard } from "@/components/dashboard/KPIBoard";
 import { LiveStreamView } from "@/components/dashboard/LiveStreamView";
+import { WeatherWidget } from "@/components/dashboard/WeatherWidget";
 import { VisitsChart } from "@/components/dashboard/VisitsChart";
 import { SpeciesRanking } from "@/components/dashboard/SpeciesRanking";
 import { CameraGrid } from "@/components/cameras/CameraGrid";
@@ -192,6 +193,7 @@ export function App() {
 
           {tab === "dashboard" ? (
             <div className="space-y-4">
+              <WeatherWidget />
               <KPIBoard metrics={metricsQuery.data} loading={metricsQuery.loading} />
               <div className="grid gap-4 xl:grid-cols-3">
                 <div className="xl:col-span-2">

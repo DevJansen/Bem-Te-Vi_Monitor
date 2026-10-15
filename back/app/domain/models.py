@@ -150,6 +150,11 @@ class VisitOut(BaseModel):
     species_id: str | None = None
     assigned_species_common_name: str | None = None
     assigned_species_scientific_name: str | None = None
+    # Condições meteorológicas no momento da visita (integração Open-Meteo).
+    temperature: float | None = None
+    humidity: float | None = None
+    weather_code: str | None = None
+    wind_speed: float | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -238,6 +243,11 @@ class AudioDetectionOut(BaseModel):
     scientific_name: str
     confidence: float = Field(ge=0.0, le=1.0)
     linked_visit_id: str | None = None
+    # Condições meteorológicas no momento da detecção sonora.
+    temperature: float | None = None
+    humidity: float | None = None
+    weather_code: str | None = None
+    wind_speed: float | None = None
 
 
 class AudioAnalysisStatusOut(BaseModel):
@@ -345,3 +355,51 @@ class EnvironmentConnectionTest(BaseModel):
     telegram_chat_id: str | None = Field(default=None, max_length=128)
     discord_webhook_url: str | None = Field(default=None, max_length=2048)
     ai_external_api_key: str | None = Field(default=None, max_length=512)
+
+
+class CurrentWeatherOut(BaseModel):
+    """Clima atual do local do alimentador (widget do painel)."""
+
+    available: bool = False
+    temperature: float | None = None
+    humidity: float | None = None
+    wind_speed: float | None = None
+    # Rótulo legível em pt-BR (ex.: "Ensolarado", "Chuva leve").
+    condition: str = "Sem dados"
+    # Categoria ampla usada na correlação (ex.: "Ensolarado", "Chuva").
+    category: str = "Sem dados"
+    icon: str = "🌡️"
+    weather_code: int | None = None
+    fetched_at: str | None = None
+    source: str = "open-meteo"
+
+
+class WeatherConditionStatOut(BaseModel):
+    """Agrupamento de visitas por condição/categoria meteorológica."""
+
+    condition: str
+    visits: int = Field(ge=0)
+    avg_temperature: float | None = None
+    avg_humidity: float | None = None
+    avg_wind_speed: float | None = None
+
+
+class WeatherHourStatOut(BaseModel):
+    """Horário de pico e temperatura média das visitas nesse horário."""
+
+    hour: str
+    visits: int = Field(ge=0)
+    avg_temperature: float | None = None
+
+
+class WeatherCorrelationOut(BaseModel):
+    """Cruzamento entre frequência de visitas e condições do tempo."""
+
+    total_visits: int = Field(ge=0)
+    visits_with_weather: int = Field(ge=0)
+    avg_temperature_on_visits: float | None = None
+    min_temperature_on_visits: float | None = None
+    max_temperature_on_visits: float | None = None
+    by_condition: list[WeatherConditionStatOut] = Field(default_factory=list)
+    by_category: list[WeatherConditionStatOut] = Field(default_factory=list)
+    peak_hours: list[WeatherHourStatOut] = Field(default_factory=list)

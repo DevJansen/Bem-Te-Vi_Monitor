@@ -130,6 +130,11 @@ export type BirdVisit = {
   species_id: string | null;
   assigned_species_common_name: string | null;
   assigned_species_scientific_name: string | null;
+  /** Condições do tempo no momento da visita (Open-Meteo). */
+  temperature: number | null;
+  humidity: number | null;
+  weather_code: string | null;
+  wind_speed: number | null;
   metadata: {
     crop_path?: string | null;
     identification_status?: string;
@@ -255,6 +260,11 @@ export type AudioDetection = {
   scientific_name: string;
   confidence: number;
   linked_visit_id: string | null;
+  /** Condições do tempo no momento da detecção sonora (Open-Meteo). */
+  temperature: number | null;
+  humidity: number | null;
+  weather_code: string | null;
+  wind_speed: number | null;
 };
 
 export type AudioAnalysisStatus = {
@@ -297,4 +307,46 @@ export type EnvironmentSettingsUpdate = {
   clear_telegram?: boolean;
   clear_discord?: boolean;
   clear_ai_external?: boolean;
+};
+
+/** Clima atual do local do alimentador (integração Open-Meteo). */
+export type CurrentWeather = {
+  available: boolean;
+  temperature: number | null;
+  humidity: number | null;
+  wind_speed: number | null;
+  condition: string;
+  category: string;
+  icon: string;
+  weather_code: number | null;
+  fetched_at: string | null;
+  source: string;
+};
+
+/** Visitas agrupadas por condição/categoria meteorológica. */
+export type WeatherConditionStat = {
+  condition: string;
+  visits: number;
+  avg_temperature: number | null;
+  avg_humidity: number | null;
+  avg_wind_speed: number | null;
+};
+
+/** Horário de pico e temperatura média das visitas nesse horário. */
+export type WeatherHourStat = {
+  hour: string;
+  visits: number;
+  avg_temperature: number | null;
+};
+
+/** Cruzamento entre frequência de visitas e condições do tempo. */
+export type WeatherCorrelation = {
+  total_visits: number;
+  visits_with_weather: number;
+  avg_temperature_on_visits: number | null;
+  min_temperature_on_visits: number | null;
+  max_temperature_on_visits: number | null;
+  by_condition: WeatherConditionStat[];
+  by_category: WeatherConditionStat[];
+  peak_hours: WeatherHourStat[];
 };

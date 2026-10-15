@@ -18,6 +18,7 @@ import {
 import { formatDateTime, formatPercent, formatSpeciesLabel } from "@/utils/format";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { VideoPlayerModal } from "@/components/common/VideoPlayerModal";
+import { WeatherBadges } from "@/components/common/WeatherBadges";
 
 type Props = {
   visits: BirdVisit[];
@@ -386,6 +387,12 @@ export function GalleryGrid({
                   <p className="text-xs text-[var(--color-text-muted)]">
                     {formatDateTime(visit.detected_at)} · {formatPercent(visit.confidence)}
                   </p>
+                  <WeatherBadges
+                    temperature={visit.temperature}
+                    humidity={visit.humidity}
+                    weather_code={visit.weather_code}
+                    className="pt-1"
+                  />
                   <p className="truncate text-xs text-[var(--color-text-muted)]">
                     {visit.camera_name ?? visit.camera_id}
                   </p>

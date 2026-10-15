@@ -103,6 +103,23 @@ MIGRATIONS: list[tuple[int, str]] = [
             ON audio_detections(camera_id, detected_at DESC);
         """,
     ),
+    (
+        4,
+        """
+        ALTER TABLE visits ADD COLUMN temperature REAL;
+        ALTER TABLE visits ADD COLUMN humidity REAL;
+        ALTER TABLE visits ADD COLUMN weather_code TEXT;
+        ALTER TABLE visits ADD COLUMN wind_speed REAL;
+
+        ALTER TABLE audio_detections ADD COLUMN temperature REAL;
+        ALTER TABLE audio_detections ADD COLUMN humidity REAL;
+        ALTER TABLE audio_detections ADD COLUMN weather_code TEXT;
+        ALTER TABLE audio_detections ADD COLUMN wind_speed REAL;
+
+        CREATE INDEX IF NOT EXISTS idx_visits_weather_code
+            ON visits(weather_code);
+        """,
+    ),
 ]
 
 
