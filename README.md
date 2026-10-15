@@ -8,6 +8,10 @@ exclusão por câmera, consultar snapshots e clipes e, opcionalmente, pedir a
 identificação de uma ave a uma API externa. Alertas pelo Telegram e Discord também
 são opcionais. O processamento e os arquivos permanecem locais por padrão.
 
+> **Quer entender como usar sem precisar programar?** Leia o
+> [**Guia do Usuário (README-USO.md)**](README-USO.md) — explica todas as funcionalidades
+> em linguagem simples, com exemplos do dia a dia.
+
 ---
 
 ## Requisitos
