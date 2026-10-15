@@ -197,6 +197,9 @@ export function App() {
                 <div className="xl:col-span-2">
                   <LiveStreamView
                     cameras={camerasQuery.data ?? []}
+                    onEditZones={setZoneCamera}
+                    onEditRoi={setRoiCamera}
+                    onDelete={(cam) => void handleDelete(cam)}
                   />
                 </div>
                 <SpeciesRanking metrics={metricsQuery.data} />

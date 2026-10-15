@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Box, Gauge, VideoOff } from "lucide-react";
+import { Box, Crosshair, Frame, Gauge, Trash2, VideoOff } from "lucide-react";
 import type { Camera } from "@/types";
 import { videoFeedUrl } from "@/services/api";
 import { cn } from "@/utils/cn";
@@ -7,11 +7,22 @@ import { StatusDot } from "@/components/common/StatusDot";
 
 type Props = {
   cameras: Camera[];
+  /** Abre o editor de áreas poligonais da câmera selecionada. */
+  onEditZones: (camera: Camera) => void;
+  /** Abre o editor de Zonas de Interesse (ROI) da câmera selecionada. */
+  onEditRoi: (camera: Camera) => void;
+  /** Remove a câmera selecionada (com confirmação). */
+  onDelete: (camera: Camera) => void;
 };
 
 type StreamConnection = "connected" | "reconnecting" | "offline";
 
-export function LiveStreamView({ cameras }: Props) {
+export function LiveStreamView({
+  cameras,
+  onEditZones,
+  onEditRoi,
+  onDelete,
+}: Props) {
   const enabled = cameras.filter((c) => c.enabled);
   const [selectedId, setSelectedId] = useState<string>("");
   const [showBoxes, setShowBoxes] = useState(true);
@@ -131,6 +142,36 @@ export function LiveStreamView({ cameras }: Props) {
             <span className="tabular-nums text-[var(--color-text-primary)]">{fps}</span>{" "}
             FPS
           </div>
+
+          <span className="hidden h-5 w-px bg-dark-700 sm:block" aria-hidden />
+
+          <button
+            type="button"
+            onClick={() => selected && onEditRoi(selected)}
+            disabled={!selected}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-dark-700 bg-dark-900 px-2.5 py-1.5 text-xs font-medium text-sky-300 transition hover:bg-sky-500/10 disabled:opacity-40"
+          >
+            <Frame className="h-3.5 w-3.5" />
+            Zonas ROI
+          </button>
+          <button
+            type="button"
+            onClick={() => selected && onEditZones(selected)}
+            disabled={!selected}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-dark-700 bg-dark-900 px-2.5 py-1.5 text-xs font-medium text-emerald-300 transition hover:bg-emerald-500/10 disabled:opacity-40"
+          >
+            <Crosshair className="h-3.5 w-3.5" />
+            Editar área
+          </button>
+          <button
+            type="button"
+            onClick={() => selected && onDelete(selected)}
+            disabled={!selected}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-dark-700 bg-dark-900 px-2.5 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-500/10 disabled:opacity-40"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Remover
+          </button>
         </div>
       </div>
 
