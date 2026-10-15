@@ -8,6 +8,7 @@ import { SpeciesRanking } from "@/components/dashboard/SpeciesRanking";
 import { CameraGrid } from "@/components/cameras/CameraGrid";
 import { AddCameraModal } from "@/components/cameras/AddCameraModal";
 import { ZoneEditorModal } from "@/components/cameras/ZoneEditorModal";
+import { RoiEditorModal } from "@/components/cameras/RoiEditorModal";
 import { RecordingImport } from "@/components/cameras/RecordingImport";
 import { GalleryGrid } from "@/components/gallery/GalleryGrid";
 import { EnvSettings } from "@/components/settings/EnvSettings";
@@ -70,6 +71,7 @@ export function App() {
   const [tab, setTab] = useState<AppTab>("dashboard");
   const [modalOpen, setModalOpen] = useState(false);
   const [zoneCamera, setZoneCamera] = useState<Camera | null>(null);
+  const [roiCamera, setRoiCamera] = useState<Camera | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [deletedVisitIds, setDeletedVisitIds] = useState<Set<string>>(new Set());
 
@@ -217,6 +219,7 @@ export function App() {
                 onToggle={(cam, enabled) => void handleToggle(cam, enabled)}
                 onDelete={(cam) => void handleDelete(cam)}
                 onEditZones={setZoneCamera}
+                onEditRoi={setRoiCamera}
               />
             </div>
           ) : null}
@@ -274,6 +277,11 @@ export function App() {
       <ZoneEditorModal
         camera={zoneCamera}
         onClose={() => setZoneCamera(null)}
+        onSaved={() => void camerasQuery.refresh()}
+      />
+      <RoiEditorModal
+        camera={roiCamera}
+        onClose={() => setRoiCamera(null)}
         onSaved={() => void camerasQuery.refresh()}
       />
     </div>

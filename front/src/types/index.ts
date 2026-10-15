@@ -39,6 +39,30 @@ export type Zone = {
   enabled: boolean;
 };
 
+/**
+ * Tipo de zona de interesse (ROI):
+ * - `include`: monitorar — só registra visitas dentro do retângulo.
+ * - `exclude`: ignorar — descarta detecções dentro do retângulo.
+ */
+export type RoiType = "include" | "exclude";
+
+/** Retângulo de interesse com coordenadas normalizadas (0..1). */
+export type RoiZone = {
+  id: string;
+  name: string;
+  type: RoiType;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+};
+
+/** Conjunto de zonas de interesse de uma câmera. */
+export type RoiSettings = {
+  camera_id?: string | null;
+  zones: RoiZone[];
+};
+
 export type Camera = {
   id: CameraId;
   name: string;

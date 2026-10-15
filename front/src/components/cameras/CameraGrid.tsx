@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Crosshair, Plus, Trash2, Wifi, WifiOff } from "lucide-react";
+import { Crosshair, Frame, Plus, Trash2, Wifi, WifiOff } from "lucide-react";
 import type { Camera } from "@/types";
 import { StatusDot } from "@/components/common/StatusDot";
 import { statusLabel } from "@/utils/format";
@@ -12,6 +12,7 @@ type Props = {
   onToggle: (camera: Camera, enabled: boolean) => void;
   onDelete: (camera: Camera) => void;
   onEditZones: (camera: Camera) => void;
+  onEditRoi: (camera: Camera) => void;
 };
 
 export function CameraGrid({
@@ -21,6 +22,7 @@ export function CameraGrid({
   onToggle,
   onDelete,
   onEditZones,
+  onEditRoi,
 }: Props) {
   return (
     <section>
@@ -114,6 +116,14 @@ export function CameraGrid({
                     Ativa
                   </label>
                   <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => onEditRoi(camera)}
+                      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-sky-300 transition hover:bg-sky-500/10"
+                    >
+                      <Frame className="h-3.5 w-3.5" />
+                      Zonas ROI
+                    </button>
                     <button
                       type="button"
                       onClick={() => onEditZones(camera)}

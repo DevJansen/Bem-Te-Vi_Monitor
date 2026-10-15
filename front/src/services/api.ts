@@ -23,6 +23,8 @@ import type {
   Metrics,
   NotificationChannel,
   RecordingAnalysis,
+  RoiSettings,
+  RoiZone,
   Zone,
 } from "@/types";
 
@@ -95,6 +97,28 @@ export async function saveCameraZones(id: string, zones: Zone[]): Promise<Zone[]
     zones,
   });
   return data.zones;
+}
+
+/* ——— Zonas de interesse (ROI) ——— */
+
+/** Busca as zonas de interesse (ROI) salvas para a câmera. */
+export async function fetchRoi(cameraId: string): Promise<RoiZone[]> {
+  const { data } = await api.get<RoiSettings>("/settings/roi", {
+    params: { camera_id: cameraId },
+  });
+  return data.zones ?? [];
+}
+
+/** Salva as zonas de interesse (ROI) da câmera. */
+export async function saveRoi(
+  cameraId: string,
+  zones: RoiZone[],
+): Promise<RoiZone[]> {
+  const { data } = await api.post<RoiSettings>("/settings/roi", {
+    camera_id: cameraId,
+    zones,
+  });
+  return data.zones ?? [];
 }
 
 export async function deleteCamera(id: string): Promise<void> {

@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class SourceType(str, Enum):
@@ -38,6 +39,54 @@ class ZoneConfig(BaseModel):
 
 class CameraZones(BaseModel):
     zones: list[ZoneConfig] = Field(default_factory=list)
+
+
+class RoiType(str, Enum):
+    """Tipo de zona de interesse.
+
+    - INCLUDE: monitorar — só registra visitas dentro do retângulo.
+    - EXCLUDE: ignorar — descarta detecções dentro do retângulo (ex.: galhos,
+      tráfego, reflexos).
+    """
+
+    INCLUDE = "include"
+    EXCLUDE = "exclude"
+
+
+class RoiZone(BaseModel):
+    """Retângulo de interesse com coordenadas normalizadas (0..1).
+
+    ``(x1, y1)`` é o canto superior esquerdo e ``(x2, y2)`` o canto inferior
+    direito, sempre em relação ao quadro inteiro (largura/altura = 1.0).
+    """
+
+    id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    name: str = "Zona"
+    type: RoiType = RoiType.INCLUDE
+    x1: float = Field(ge=0.0, le=1.0)
+    y1: float = Field(ge=0.0, le=1.0)
+    x2: float = Field(ge=0.0, le=1.0)
+    y2: float = Field(ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def _ordenar_cantos(self) -> "RoiZone":
+        """Garante ``x1 <= x2`` e ``y1 <= y2``, mesmo se vierem invertidos."""
+        if self.x1 > self.x2:
+            self.x1, self.x2 = self.x2, self.x1
+        if self.y1 > self.y2:
+            self.y1, self.y2 = self.y2, self.y1
+        return self
+
+    def contains(self, x: float, y: float) -> bool:
+        """Indica se o ponto normalizado ``(x, y)`` está dentro do retângulo."""
+        return self.x1 <= x <= self.x2 and self.y1 <= y <= self.y2
+
+
+class RoiSettings(BaseModel):
+    """Zonas de interesse (ROI) de uma câmera."""
+
+    camera_id: str | None = None
+    zones: list[RoiZone] = Field(default_factory=list)
 
 
 class CameraCreate(BaseModel):

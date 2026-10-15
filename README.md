@@ -254,6 +254,29 @@ regiões mesmo quando sobrepostas a uma inclusão. O pipeline mascara a imagem a
 da inferência e também valida a posição das detecções antes de criar visitas.
 Alterações nas zonas reiniciam o pipeline daquela câmera.
 
+### Selecionar Zonas de Interesse (ROI) retangulares
+
+Além das áreas poligonais, cada câmera conta com um editor visual de **Zonas de
+Interesse (ROI)** retangulares, pensado para recortes rápidos sobre o feed:
+
+1. Na câmera, clique em **Zonas ROI**.
+2. Escolha o modo de desenho:
+   - 🟢 **Zona de Inclusão (Monitorar):** só registra visitas e fotos se o
+     passarinho aparecer dentro do quadrado.
+   - 🔴 **Zona de Exclusão (Ignorar):** descarta qualquer detecção dentro do
+     quadrado (galhos balançando, vento, tráfego, reflexos).
+3. Clique e arraste o mouse sobre o vídeo para desenhar o retângulo, com borda
+   colorida e fundo translúcido. Os botões flutuantes **Desfazer Último**,
+   **Limpar Tudo** e **Salvar Zonas** agilizam a edição, e a lista lateral permite
+   remover zonas individualmente.
+
+As coordenadas são normalizadas (`x1, y1, x2, y2` entre `0` e `1`) e vinculadas à
+câmera. O filtro usa o **centro da caixa delimitadora** da ave: havendo inclusões, a
+ave precisa estar em pelo menos uma delas; qualquer exclusão sobreposta descarta a
+detecção. As ROI retangulares somam-se às áreas poligonais (união de inclusões e
+união de exclusões) e o pipeline recarrega as zonas automaticamente após salvar,
+sem reiniciar o backend.
+
 ### Consultar visitas e pedir identificação externa
 
 - **Painel:** acompanhe streams, indicadores e estatísticas.
@@ -384,6 +407,8 @@ aviawatch/
 | GET/POST | `/api/cameras` | Listar / criar câmeras |
 | GET/PUT/DELETE | `/api/cameras/{id}` | Detalhe / atualizar / remover |
 | GET/PUT | `/api/cameras/{id}/zones` | Carregar / salvar polígonos de inclusão e exclusão |
+| GET | `/api/settings/roi?camera_id={id}` | Ler as Zonas de Interesse (ROI) retangulares da câmera |
+| POST | `/api/settings/roi` | Salvar as ROI retangulares (`{camera_id, zones:[{type, x1, y1, x2, y2}]}`) e aplicar em runtime |
 | GET | `/api/visits` | Eventos de aves |
 | GET | `/api/visits/{id}` | Detalhe de uma visita |
 | PUT | `/api/visits/{visit_id}/assign-species` | Associar ou desassociar visita a uma espécie (`{"species_id":"..."}`) |
@@ -441,8 +466,8 @@ backup: proteja a pasta `back/app-data/` e o arquivo `back/.env`. O catálogo e 
 de referência também ficam em `back/app-data/`.
 
 O processamento YOLO roda a cada quatro quadros, usando fluxo óptico nos quadros
-intermediários e as zonas poligonais como ROIs. A inferência é restrita à classe
-`bird` do COCO (id `14`). Quando a ave para de se mover para se alimentar e o
+intermediários e as zonas poligonais e as ROI retangulares como filtros espaciais.
+A inferência é restrita à classe `bird` do COCO (id `14`). Quando a ave para de se mover para se alimentar e o
 YOLO perde a detecção, o rastreio mantém a mesma caixa "em espera" pela janela de
 `OBJECT_PERSISTENCE_TIME`, de modo que a visita não é reiniciada por uma perda
 momentânea. Em cenas sem aves rastreadas, a inferência só roda quando há

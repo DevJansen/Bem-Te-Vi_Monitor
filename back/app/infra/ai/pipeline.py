@@ -14,7 +14,7 @@ import cv2
 import numpy as np
 
 from app.core.config import get_settings
-from app.domain.models import VisitOut, ZoneConfig, ZoneMode
+from app.domain.models import RoiType, RoiZone, VisitOut, ZoneConfig, ZoneMode
 from app.infra.ai.annotate import draw_bird_detections
 from app.infra.ai.box_tracker import BoxTracker
 from app.infra.ai.detector import BirdDetector, Detection, get_bird_detector
@@ -58,6 +58,8 @@ class CameraPipeline(threading.Thread):
         self.classifier = classifier or get_default_species_classifier()
         self.on_visit = on_visit
         self._stop = threading.Event()
+        # Sinaliza que zonas/ROI devem ser recarregadas sem reiniciar o pipeline.
+        self._zones_reload = threading.Event()
         self.camera_repo = CameraRepository(self.settings.db_path)
         self.visit_repo = VisitRepository(self.settings.db_path)
         self.settings_repo = SettingsRepository(self.settings.db_path)
@@ -66,6 +68,8 @@ class CameraPipeline(threading.Thread):
         # Portão de movimento inicial: evita rodar o YOLO em cenas paradas.
         self.motion = MotionDetector(sensitivity=self.settings.motion_sensitivity)
         self._configured_zones: list[ZoneConfig] = []
+        # Zonas de interesse (ROI) retangulares: incluir (monitorar) ou excluir.
+        self._roi_zones: list[RoiZone] = []
         self._post_frames_remaining = 0
         self._pending_event: dict[str, Any] | None = None
         self._post_collected: list[np.ndarray] = []
@@ -74,11 +78,16 @@ class CameraPipeline(threading.Thread):
     def stop(self) -> None:
         self._stop.set()
 
+    def request_zones_reload(self) -> None:
+        """Pede a recarga das zonas e ROI no próximo ciclo do laço."""
+        self._zones_reload.set()
+
     def _load_zones(self) -> None:
         row = self.camera_repo.get(self.camera_id)
         if not row:
             self._configured_zones = []
             self.zone_validator.set_zones([])
+            self._load_roi()
             return
         try:
             data = json.loads(row.get("zones_json") or '{"zones":[]}')
@@ -90,6 +99,19 @@ class CameraPipeline(threading.Thread):
         self.zone_validator.set_zones(
             [zone for zone in self._configured_zones if zone.mode == ZoneMode.INCLUDE]
         )
+        self._load_roi()
+
+    def _load_roi(self) -> None:
+        """Carrega as zonas de interesse (ROI) retangulares da câmera."""
+        try:
+            stored = self.settings_repo.get_json(
+                f"roi_zones:{self.camera_id}", {"zones": []}
+            )
+            raw_zones = (stored or {}).get("zones", []) if stored else []
+            self._roi_zones = [RoiZone.model_validate(z) for z in raw_zones]
+        except Exception:
+            logger.exception("Invalid ROI for camera %s", self.camera_id)
+            self._roi_zones = []
 
     def _apply_calibration(self, tracker: BoxTracker) -> None:
         """Lê a calibração ativa e aplica nos componentes do pipeline.
@@ -166,16 +188,41 @@ class CameraPipeline(threading.Thread):
     def _is_detection_allowed(
         self, detection: Detection, width: int, height: int
     ) -> bool:
+        """Valida a detecção contra as ROI retangulares e as zonas poligonais.
+
+        Regras (aplicadas ao centro da caixa delimitadora):
+
+        - Se existir qualquer região de inclusão (ROI ou polígono), a ave
+          precisa estar dentro de ao menos uma delas.
+        - Se o centro cair em qualquer região de exclusão (ROI ou polígono),
+          a detecção é descartada — útil para ignorar galhos, reflexos ou
+          tráfego.
+        """
         center_x, center_y = detection.normalized_center(width, height)
+
+        roi_includes = [z for z in self._roi_zones if z.type == RoiType.INCLUDE]
+        roi_excludes = [z for z in self._roi_zones if z.type == RoiType.EXCLUDE]
         inclusion_zones = [
             zone for zone in self._configured_zones if zone.mode == ZoneMode.INCLUDE
         ]
-        if inclusion_zones and not any(
-            point_in_polygon(
-                center_x, center_y, [(point.x, point.y) for point in zone.points]
+
+        # Inclusão: exige que o centro esteja dentro de alguma região válida.
+        if roi_includes or inclusion_zones:
+            inside_include = any(
+                zone.contains(center_x, center_y) for zone in roi_includes
+            ) or any(
+                point_in_polygon(
+                    center_x,
+                    center_y,
+                    [(point.x, point.y) for point in zone.points],
+                )
+                for zone in inclusion_zones
             )
-            for zone in inclusion_zones
-        ):
+            if not inside_include:
+                return False
+
+        # Exclusão: descarta detecções dentro de áreas ignoradas.
+        if any(zone.contains(center_x, center_y) for zone in roi_excludes):
             return False
         return not any(
             point_in_polygon(
@@ -308,7 +355,13 @@ class CameraPipeline(threading.Thread):
 
         while not self._stop.is_set():
             try:
-                if time.time() - last_zone_reload > 15:
+                # Recarrega zonas/ROI quando solicitado (ex.: salvou no painel)
+                # ou a cada 15s como rede de segurança.
+                if self._zones_reload.is_set():
+                    self._load_zones()
+                    self._zones_reload.clear()
+                    last_zone_reload = time.time()
+                elif time.time() - last_zone_reload > 15:
                     self._load_zones()
                     last_zone_reload = time.time()
 
@@ -458,6 +511,21 @@ class PipelineSupervisor:
         row = CameraRepository(get_settings().db_path).get(camera_id)
         if row and row["enabled"]:
             self.start_camera(camera_id)
+
+    def reload_zones(self, camera_id: str | None = None) -> None:
+        """Pede a recarga de zonas/ROI sem reiniciar os pipelines.
+
+        Se ``camera_id`` for informado, recarrega apenas aquela câmera; caso
+        contrário, recarrega todos os pipelines em execução.
+        """
+        with self._lock:
+            if camera_id is None:
+                pipelines = list(self._pipelines.values())
+            else:
+                pipeline = self._pipelines.get(camera_id)
+                pipelines = [pipeline] if pipeline is not None else []
+        for pipeline in pipelines:
+            pipeline.request_zones_reload()
 
     def sync_from_db(self) -> None:
         settings = get_settings()

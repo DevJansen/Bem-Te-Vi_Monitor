@@ -20,8 +20,10 @@ from app.domain.models import (
     EnvironmentSettingsUpdate,
     NotificationTestRequest,
     NotificationTestResponse,
+    RoiSettings,
 )
 from app.infra.database.repository import SettingsRepository
+from app.infra.ai.pipeline import get_pipeline_supervisor
 from app.services.calibration import get_calibration_service
 from app.services.environment_settings import (
     read_environment_settings,
@@ -140,6 +142,50 @@ async def update_calibration(payload: CalibrationUpdate) -> CalibrationOut:
         raise HTTPException(
             status_code=500,
             detail="Não foi possível salvar a calibração",
+        ) from exc
+
+
+# Prefixo das chaves de ROI no repositório de configurações.
+_ROI_KEY_PREFIX = "roi_zones"
+
+
+def _roi_key(camera_id: str | None) -> str:
+    """Chave de armazenamento das zonas de interesse (por câmera)."""
+    return f"{_ROI_KEY_PREFIX}:{camera_id or 'default'}"
+
+
+@router.get("/roi", response_model=RoiSettings)
+async def get_roi(camera_id: str | None = None) -> RoiSettings:
+    """Retorna as zonas de interesse (ROI) salvas para a câmera informada."""
+    try:
+        stored = _repo().get_json(_roi_key(camera_id), {"zones": []})
+        return RoiSettings.model_validate(
+            {"camera_id": camera_id, **(stored or {})}
+        )
+    except Exception as exc:
+        logger.exception("get_roi failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível carregar as zonas de interesse",
+        ) from exc
+
+
+@router.post("/roi", response_model=RoiSettings)
+async def save_roi(payload: RoiSettings) -> RoiSettings:
+    """Salva as zonas de interesse e aplica nos pipelines em execução."""
+    try:
+        _repo().set_json(
+            _roi_key(payload.camera_id),
+            {"zones": [zone.model_dump() for zone in payload.zones]},
+        )
+        # Recarrega as zonas sem reiniciar o backend.
+        get_pipeline_supervisor().reload_zones(payload.camera_id)
+        return payload
+    except Exception as exc:
+        logger.exception("save_roi failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível salvar as zonas de interesse",
         ) from exc
 
 
