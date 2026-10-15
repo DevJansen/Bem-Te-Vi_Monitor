@@ -9,3 +9,8 @@ __pycache__/
 
 # Build do frontend (gerado por `npm run build`)
 front/dist/
+
+# Dados locais do app (banco, mídia e chaves) — nunca versionar.
+# Mantém apenas o .gitkeep para preservar a pasta.
+back/app-data/*
+!back/app-data/.gitkeep
