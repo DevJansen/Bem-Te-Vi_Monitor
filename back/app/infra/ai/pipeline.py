@@ -18,6 +18,7 @@ from app.domain.models import VisitOut, ZoneConfig, ZoneMode
 from app.infra.ai.annotate import draw_bird_detections
 from app.infra.ai.box_tracker import BoxTracker
 from app.infra.ai.detector import BirdDetector, Detection, get_bird_detector
+from app.infra.ai.motion import MotionDetector
 from app.infra.ai.pre_record_buffer import PreRecordBuffer
 from app.infra.ai.species_classifier import SpeciesClassifier, get_default_species_classifier
 from app.infra.ai.zone_validator import ZoneValidator, point_in_polygon
@@ -30,10 +31,16 @@ from app.infra.media.storage import (
     save_clip_mp4,
     save_thumbnail,
 )
+from app.services.calibration import get_calibration_service
 
 logger = logging.getLogger(__name__)
 
 VisitHandler = Callable[[VisitOut], None]
+
+# Número máximo de ciclos de inferência que podem ser pulados por ausência de
+# movimento. Funciona como rede de segurança: garante uma inferência periódica
+# mesmo em cenas aparentemente paradas (ex.: ave que aparece lentamente).
+IDLE_INFER_MAX_SKIPS = 8
 
 
 class CameraPipeline(threading.Thread):
@@ -56,6 +63,8 @@ class CameraPipeline(threading.Thread):
         self.settings_repo = SettingsRepository(self.settings.db_path)
         self.buffer = PreRecordBuffer(seconds=self.settings.pre_record_seconds)
         self.zone_validator = ZoneValidator()
+        # Portão de movimento inicial: evita rodar o YOLO em cenas paradas.
+        self.motion = MotionDetector(sensitivity=self.settings.motion_sensitivity)
         self._configured_zones: list[ZoneConfig] = []
         self._post_frames_remaining = 0
         self._pending_event: dict[str, Any] | None = None
@@ -82,14 +91,16 @@ class CameraPipeline(threading.Thread):
             [zone for zone in self._configured_zones if zone.mode == ZoneMode.INCLUDE]
         )
 
-    def _confidence_threshold(self) -> float:
-        raw = self.settings_repo.get("yolo_confidence")
-        if raw is not None:
-            try:
-                return float(raw)
-            except ValueError:
-                pass
-        return self.settings.yolo_confidence
+    def _apply_calibration(self, tracker: BoxTracker) -> None:
+        """Lê a calibração ativa e aplica nos componentes do pipeline.
+
+        Chamado periodicamente (não a cada quadro) para refletir ajustes feitos
+        no painel sem reiniciar o backend. A leitura é em memória (rápida).
+        """
+        calibration = get_calibration_service().current()
+        self.detector.set_confidence(calibration.yolo_confidence)
+        tracker.retention_seconds = calibration.object_persistence_time
+        self.motion.set_sensitivity(calibration.motion_sensitivity)
 
     def _notify_enabled(self) -> bool:
         raw = self.settings_repo.get("notifications_enabled", "true")
@@ -287,7 +298,13 @@ class CameraPipeline(threading.Thread):
         frame_idx = 0
         last_zone_reload = 0.0
         detections: list[Detection] = []
-        tracker = BoxTracker()
+        # Rastreio com persistência: mantém aves imóveis na mesma visita mesmo
+        # que o YOLO perca a detecção por alguns instantes.
+        tracker = BoxTracker(retention_seconds=self.settings.object_persistence_time)
+        # Aplica a calibração assim que o pipeline inicia.
+        self._apply_calibration(tracker)
+        # Contador de ciclos de inferência pulados por ausência de movimento.
+        idle_inference_skips = 0
 
         while not self._stop.is_set():
             try:
@@ -323,12 +340,25 @@ class CameraPipeline(threading.Thread):
                         self._finalize_visit()
 
                 if frame_idx % infer_every_n == 0:
-                    self.detector.confidence = min(
-                        1.0,
-                        max(0.60, self._confidence_threshold()),
-                    )
-                    detections = self._detect_in_zones(frame)
-                    tracker.reset(frame, detections)
+                    # Relê a calibração do painel (em memória) a cada ciclo de
+                    # inferência, para refletir ajustes quase em tempo real.
+                    self._apply_calibration(tracker)
+                    # Portão de movimento: roda o YOLO quando há movimento, quando
+                    # já existe uma ave rastreada (não perdê-la se ficar imóvel) ou,
+                    # por segurança, a cada `IDLE_INFER_MAX_SKIPS` ciclos parados.
+                    has_motion = self.motion.detect(frame)
+                    if (
+                        has_motion
+                        or tracker.has_tracks()
+                        or idle_inference_skips >= IDLE_INFER_MAX_SKIPS
+                    ):
+                        # Sincroniza as âncoras do YOLO; se vier vazio, o rastreio
+                        # retém as caixas conhecidas pela janela de persistência.
+                        detections = tracker.sync(frame, self._detect_in_zones(frame))
+                        idle_inference_skips = 0
+                    else:
+                        idle_inference_skips += 1
+                        detections = tracker.update(frame)
                 else:
                     detections = tracker.update(frame)
 

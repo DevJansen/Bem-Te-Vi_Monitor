@@ -10,6 +10,12 @@ from app.domain.models import Point, ZoneConfig
 
 logger = logging.getLogger(__name__)
 
+# Tolerância mínima (em segundos) de ausência antes de encerrar uma presença.
+# Garante que perdas momentâneas de detecção (ave imóvel ou oclusão breve) não
+# reiniciem o contador de permanência (dwell) a cada quadro. Complementa a
+# retenção de rastreio do BoxTracker.
+MIN_ABSENCE_GRACE_SECONDS = 10.0
+
 
 def point_in_polygon(x: float, y: float, polygon: list[tuple[float, float]]) -> bool:
     """Ray-casting point-in-polygon for normalized coordinates."""
@@ -147,7 +153,10 @@ class ZoneValidator:
             else:
                 if state.last_seen_inside is not None:
                     absent = now - state.last_seen_inside
-                    if absent > max(state.zone.absence_tolerance_seconds, 10.0):
+                    if absent > max(
+                        state.zone.absence_tolerance_seconds,
+                        MIN_ABSENCE_GRACE_SECONDS,
+                    ):
                         state.inside_since = None
                         state.last_seen_inside = None
                         state.triggered_for_presence = False

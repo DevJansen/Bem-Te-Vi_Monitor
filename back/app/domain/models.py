@@ -122,6 +122,7 @@ class AppSettingsOut(BaseModel):
     telegram_configured: bool
     discord_configured: bool
     yolo_model: str
+    # Espelho somente-leitura da calibração atual (ver /api/settings/calibration).
     yolo_confidence: float
     pre_record_seconds: float
     post_record_seconds: float
@@ -135,7 +136,8 @@ class AppSettingsOut(BaseModel):
 class AppSettingsUpdate(BaseModel):
     notifications_enabled: bool | None = None
     min_confidence_notify: float | None = Field(default=None, ge=0.0, le=1.0)
-    yolo_confidence: float | None = Field(default=None, ge=0.60, le=1.0)
+    # Mantido por compatibilidade: encaminhado para a calibração.
+    yolo_confidence: float | None = Field(default=None, ge=0.05, le=1.0)
     pre_record_seconds: float | None = Field(default=None, ge=3.0, le=30.0)
     post_record_seconds: float | None = Field(default=None, ge=0.0, le=30.0)
     audio_analysis_enabled: bool | None = None
@@ -143,6 +145,38 @@ class AppSettingsUpdate(BaseModel):
         default=None, ge=0.70, le=1.0
     )
     extra: dict[str, Any] | None = None
+
+
+class CalibrationProfile(str, Enum):
+    """Perfis prontos de calibração, pensados para usuários não técnicos."""
+
+    STATIONARY = "stationary"  # Passarinhos Parados / Alimentador
+    FAST_MOTION = "fast_motion"  # Alta Movimentação / Voo Rápido
+    CUSTOM = "custom"  # Ajustado manualmente nos sliders
+
+
+class CalibrationOut(BaseModel):
+    """Parâmetros de calibração ativos, aplicados em tempo de execução."""
+
+    # Limiar de certeza da IA (menor = mais sensível).
+    yolo_confidence: float = Field(ge=0.05, le=1.0)
+    # Tempo máximo (s) que o rastreio mantém a visita mesmo com a ave imóvel.
+    object_persistence_time: float = Field(ge=0.0, le=30.0)
+    # Sensibilidade de detecção de movimento inicial (0 a 1).
+    motion_sensitivity: float = Field(ge=0.0, le=1.0)
+    # Perfil atualmente selecionado.
+    profile: CalibrationProfile = CalibrationProfile.CUSTOM
+    # Perfil sugerido como ponto de partida para o usuário.
+    recommended_profile: CalibrationProfile = CalibrationProfile.STATIONARY
+
+
+class CalibrationUpdate(BaseModel):
+    """Atualização parcial da calibração."""
+
+    profile: CalibrationProfile | None = None
+    yolo_confidence: float | None = Field(default=None, ge=0.05, le=1.0)
+    object_persistence_time: float | None = Field(default=None, ge=0.0, le=30.0)
+    motion_sensitivity: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class AudioDetectionOut(BaseModel):

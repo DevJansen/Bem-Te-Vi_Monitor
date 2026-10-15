@@ -13,6 +13,8 @@ from app.core.config import get_settings
 from app.domain.models import (
     AppSettingsOut,
     AppSettingsUpdate,
+    CalibrationOut,
+    CalibrationUpdate,
     EnvironmentConnectionTest,
     EnvironmentSettingsOut,
     EnvironmentSettingsUpdate,
@@ -20,6 +22,7 @@ from app.domain.models import (
     NotificationTestResponse,
 )
 from app.infra.database.repository import SettingsRepository
+from app.services.calibration import get_calibration_service
 from app.services.environment_settings import (
     read_environment_settings,
     save_environment_settings,
@@ -77,18 +80,14 @@ def _build_out() -> AppSettingsOut:
     except Exception:
         extra = {}
 
+    calibration = get_calibration_service().current()
+
     return AppSettingsOut(
         telegram_configured=settings.telegram_enabled,
         discord_configured=settings.discord_enabled,
         yolo_model=settings.yolo_model,
-        yolo_confidence=min(
-            1.0,
-            max(
-                0.60,
-                settings.yolo_confidence,
-                _float("yolo_confidence", settings.yolo_confidence),
-            ),
-        ),
+        # Espelha a calibração ativa (fonte de verdade: /api/settings/calibration).
+        yolo_confidence=calibration.yolo_confidence,
         pre_record_seconds=max(
             3.0,
             _float("pre_record_seconds", settings.pre_record_seconds),
@@ -114,6 +113,34 @@ async def get_app_settings() -> AppSettingsOut:
     except Exception as exc:
         logger.exception("get_app_settings failed")
         raise HTTPException(status_code=500, detail="Failed to load settings") from exc
+
+
+@router.get("/calibration", response_model=CalibrationOut)
+async def get_calibration() -> CalibrationOut:
+    """Retorna os parâmetros de calibração de sensibilidade ativos."""
+    try:
+        return get_calibration_service().current()
+    except Exception as exc:
+        logger.exception("get_calibration failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível carregar a calibração",
+        ) from exc
+
+
+@router.post("/calibration", response_model=CalibrationOut)
+async def update_calibration(payload: CalibrationUpdate) -> CalibrationOut:
+    """Atualiza a calibração e aplica em tempo de execução (sem reiniciar)."""
+    try:
+        return get_calibration_service().update(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("update_calibration failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível salvar a calibração",
+        ) from exc
 
 
 @router.get("/env", response_model=EnvironmentSettingsOut)
@@ -179,7 +206,10 @@ async def update_app_settings(payload: AppSettingsUpdate) -> AppSettingsOut:
         if payload.min_confidence_notify is not None:
             repo.set("min_confidence_notify", str(payload.min_confidence_notify))
         if payload.yolo_confidence is not None:
-            repo.set("yolo_confidence", str(payload.yolo_confidence))
+            # Encaminha para a calibração (fonte de verdade) e aplica em runtime.
+            get_calibration_service().update(
+                CalibrationUpdate(yolo_confidence=payload.yolo_confidence)
+            )
         if payload.pre_record_seconds is not None:
             repo.set("pre_record_seconds", str(payload.pre_record_seconds))
         if payload.post_record_seconds is not None:

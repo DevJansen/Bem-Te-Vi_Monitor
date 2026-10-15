@@ -114,7 +114,6 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
         audio_analysis_enabled: settings.audio_analysis_enabled,
         audio_confidence_threshold: settings.audio_confidence_threshold,
         min_confidence_notify: settings.min_confidence_notify,
-        yolo_confidence: settings.yolo_confidence,
         pre_record_seconds: settings.pre_record_seconds,
         post_record_seconds: settings.post_record_seconds,
       });
@@ -430,14 +429,6 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
             onChange={(v) => setSettings({ ...settings, min_confidence_notify: v })}
           />
           <NumberField
-            label="Confiança YOLO"
-            value={settings.yolo_confidence}
-            min={0.6}
-            max={1}
-            step={0.05}
-            onChange={(v) => setSettings({ ...settings, yolo_confidence: v })}
-          />
-          <NumberField
             label="Pré-gravação (s)"
             value={settings.pre_record_seconds}
             min={3}
@@ -454,6 +445,15 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
             onChange={(v) => setSettings({ ...settings, post_record_seconds: v })}
           />
         </div>
+
+        <p className="mt-3 text-xs text-[var(--color-text-muted)]">
+          A sensibilidade do YOLO e o tempo de permanência das aves imóveis agora
+          ficam na seção{" "}
+          <strong className="text-[var(--color-text-primary)]">
+            Calibração e Ajustes
+          </strong>
+          , com perfis prontos e controles explicativos.
+        </p>
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <button

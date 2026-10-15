@@ -25,7 +25,18 @@ class Settings(BaseModel):
     ai_external_model: str = "gpt-4o-mini"
     app_data_dir: Path = DEFAULT_APP_DATA_DIR
     yolo_model: str = "yolov8n.pt"
-    yolo_confidence: float = Field(default=0.60, ge=0.60, le=1.0)
+    # Sensibilidade da detecção: quanto menor o limiar, mais aves são detectadas
+    # (inclusive à distância e com pouca luz), ao custo de mais falsos positivos.
+    # 0.30 é o padrão recomendado para câmeras de comedouro/ninho.
+    yolo_confidence: float = Field(default=0.30, ge=0.05, le=1.0)
+    # Tempo de permanência imóvel (segundos): por quanto tempo o rastreio mantém
+    # a visita ativa mesmo se a ave ficar totalmente imóvel se alimentando.
+    object_persistence_time: float = Field(default=5.0, ge=0.0, le=30.0)
+    # Sensibilidade de detecção de movimento inicial (0 a 1). Valores maiores
+    # detectam movimentos mais sutis (ave chegando ao comedouro).
+    motion_sensitivity: float = Field(default=0.5, ge=0.0, le=1.0)
+    # Classe do dataset COCO para "bird". Mantida em 14 como padrão.
+    yolo_bird_class_id: int = Field(default=14, ge=0)
     pre_record_seconds: float = Field(default=3.0, ge=3.0, le=30.0)
     post_record_seconds: float = 2.0
     camera_reconnect_delay_sec: float = 3.0
@@ -91,10 +102,27 @@ class Settings(BaseModel):
             ai_external_model=os.getenv("AI_EXTERNAL_MODEL", "gpt-4o-mini"),
             app_data_dir=Path(app_data) if app_data else DEFAULT_APP_DATA_DIR,
             yolo_model=os.getenv("YOLO_MODEL", "yolov8n.pt"),
-            yolo_confidence=max(
-                0.60,
-                float(os.getenv("YOLO_CONFIDENCE", "0.60")),
+            yolo_confidence=min(
+                1.0,
+                max(0.05, float(os.getenv("YOLO_CONFIDENCE", "0.30"))),
             ),
+            object_persistence_time=min(
+                30.0,
+                max(
+                    0.0,
+                    float(
+                        os.getenv(
+                            "OBJECT_PERSISTENCE_TIME",
+                            os.getenv("YOLO_TRACK_RETENTION_SECONDS", "5.0"),
+                        )
+                    ),
+                ),
+            ),
+            motion_sensitivity=min(
+                1.0,
+                max(0.0, float(os.getenv("MOTION_SENSITIVITY", "0.5"))),
+            ),
+            yolo_bird_class_id=max(0, int(os.getenv("YOLO_BIRD_CLASS_ID", "14"))),
             pre_record_seconds=max(
                 3.0,
                 float(os.getenv("PRE_RECORD_SECONDS", "3.0")),

@@ -1,4 +1,11 @@
-"""YOLOv8 bird detector (COCO class 'bird')."""
+"""Detector de aves com YOLOv8 (classe COCO 'bird').
+
+Ajustes de sensibilidade:
+- O limiar de confiança pode chegar a 0.05, permitindo detectar aves com menor
+  grau de certeza visual (câmeras distantes, contraluz, pouca luz).
+- A inferência é restrita à classe de ave do COCO (id 14), o que remove o ruído
+  de fundo e evita contabilizar objetos que não são pássaros.
+"""
 
 from __future__ import annotations
 
@@ -12,9 +19,13 @@ from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-# COCO class id for bird
+# Id da classe "bird" no dataset COCO padrão e nome exibido no rótulo.
 BIRD_CLASS_ID = 14
 BIRD_CLASS_NAME = "bird"
+
+# Faixa aceita para o limiar de confiança do YOLO.
+CONFIDENCE_MIN = 0.05
+CONFIDENCE_MAX = 1.0
 
 
 @dataclass
@@ -22,7 +33,7 @@ class Detection:
     class_id: int
     class_name: str
     confidence: float
-    # xyxy absolute pixels
+    # Caixa no formato xyxy em pixels absolutos.
     bbox: tuple[float, float, float, float]
 
     @property
@@ -38,15 +49,32 @@ class Detection:
         return [float(v) for v in self.bbox]
 
 
-class BirdDetector:
-    """Thread-safe wrapper around Ultralytics YOLOv8."""
+def clamp_confidence(value: float) -> float:
+    """Garante que o limiar fique dentro da faixa suportada pelo detector."""
+    return min(CONFIDENCE_MAX, max(CONFIDENCE_MIN, float(value)))
 
-    def __init__(self, model_name: str | None = None, confidence: float | None = None) -> None:
+
+class BirdDetector:
+    """Envelope thread-safe em torno do Ultralytics YOLOv8."""
+
+    def __init__(
+        self,
+        model_name: str | None = None,
+        confidence: float | None = None,
+        bird_class_id: int | None = None,
+    ) -> None:
         settings = get_settings()
         self.model_name = model_name or settings.yolo_model
-        self.confidence = min(
-            1.0,
-            max(0.60, confidence if confidence is not None else settings.yolo_confidence),
+        # Sensibilidade inicial: vem do .env, mas é sobrescrita em runtime pelo
+        # serviço de calibração (ver app/services/calibration.py).
+        self.confidence = clamp_confidence(
+            confidence if confidence is not None else settings.yolo_confidence
+        )
+        # Classe alvo da inferência (14 = "bird" no COCO).
+        self.bird_class_id = int(
+            bird_class_id
+            if bird_class_id is not None
+            else settings.yolo_bird_class_id
         )
         self._model = None
         self._lock = threading.RLock()
@@ -61,6 +89,10 @@ class BirdDetector:
     def load_error(self) -> str | None:
         return self._load_error
 
+    def set_confidence(self, value: float) -> None:
+        """Atualiza o limiar de confiança em tempo real (thread-safe)."""
+        self.confidence = clamp_confidence(value)
+
     def load(self, *, force: bool = False) -> bool:
         with self._lock:
             if self._model is not None:
@@ -71,13 +103,13 @@ class BirdDetector:
             try:
                 from ultralytics import YOLO
 
-                logger.info("Loading YOLO model %s (local inference only)", self.model_name)
+                logger.info("Carregando modelo YOLO %s (inferência local)", self.model_name)
                 self._model = YOLO(self.model_name)
                 self._load_error = None
                 return True
             except Exception as exc:
                 self._load_error = str(exc)
-                logger.exception("Failed to load YOLO model %s", self.model_name)
+                logger.exception("Falha ao carregar o modelo YOLO %s", self.model_name)
                 return False
 
     def detect(self, frame: np.ndarray) -> list[Detection]:
@@ -90,12 +122,14 @@ class BirdDetector:
             try:
                 results = self._model.predict(
                     source=frame,
-                    conf=min(1.0, max(0.60, self.confidence)),
-                    classes=[BIRD_CLASS_ID],
+                    # Aplica o limiar calibrado (com o piso de segurança da faixa).
+                    conf=clamp_confidence(self.confidence),
+                    # Filtro de classe: somente aves (COCO id 14).
+                    classes=[self.bird_class_id],
                     verbose=False,
                 )
             except Exception:
-                logger.exception("YOLO inference failed")
+                logger.exception("Falha na inferência do YOLO")
                 return []
 
         detections: list[Detection] = []
@@ -122,7 +156,7 @@ class BirdDetector:
                         )
                     )
         except Exception:
-            logger.exception("Failed to parse YOLO results")
+            logger.exception("Falha ao interpretar o resultado do YOLO")
             return []
         return detections
 

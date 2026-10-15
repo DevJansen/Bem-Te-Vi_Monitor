@@ -26,6 +26,7 @@ from app.infra.ai.species_classifier import get_default_species_classifier
 from app.infra.ai.zone_validator import ZoneValidator, point_in_polygon
 from app.infra.database.repository import CameraRepository, VisitRepository
 from app.infra.media.storage import relative_to_captures, save_bird_crop, save_thumbnail
+from app.services.calibration import get_calibration_service
 
 logger = logging.getLogger(__name__)
 
@@ -249,10 +250,9 @@ class RecordingAnalysisService:
             raise RuntimeError(
                 detector.load_error or "O modelo YOLOv8 não pôde ser carregado."
             )
-        detector.confidence = max(
-            0.60,
-            min(1.0, settings.yolo_confidence),
-        )
+        # Usa o mesmo limiar calibrado da análise ao vivo (menor = mais sensível),
+        # permitindo encontrar aves imóveis se alimentando também nos vídeos.
+        detector.set_confidence(get_calibration_service().current().yolo_confidence)
 
         capture = cv2.VideoCapture(str(job.path))
         if not capture.isOpened():

@@ -63,11 +63,15 @@ desabilitados. As integrações também podem ser configuradas depois em
 > em chamados, capturas de tela ou commits. O arquivo contém segredos e deve ficar
 > apenas na máquina que executa o backend.
 
-O backend usa confiança YOLO mínima de `0.60`, mantém pelo menos `3` segundos de
-pré-gravação e remove clipes, snapshots e recortes locais com mais de 30 dias. Esses padrões
-podem ser ajustados no `back\.env` (`YOLO_CONFIDENCE`, `PRE_RECORD_SECONDS` e
-`MEDIA_RETENTION_DAYS`). O limite mínimo de confiança é `0.60` e a retenção deve
-ser de pelo menos um dia.
+O backend usa confiança YOLO de `0.30` (sensibilidade maior, ideal para aves
+distantes ou paradas), tempo de permanência de `5` segundos para aves imóveis,
+sensibilidade de movimento de `0.5`, mantém pelo menos `3` segundos de
+pré-gravação e remove clipes, snapshots e recortes locais com mais de 30 dias.
+Esses padrões podem ser ajustados no `back\.env` (`YOLO_CONFIDENCE`,
+`OBJECT_PERSISTENCE_TIME`, `MOTION_SENSITIVITY`, `PRE_RECORD_SECONDS` e
+`MEDIA_RETENTION_DAYS`) ou em tempo real no painel, em
+**Configurações → Calibração e Ajustes**. O limite mínimo de confiança é `0.05`
+e a retenção deve ser de pelo menos um dia.
 
 ### Variáveis disponíveis
 
@@ -83,7 +87,10 @@ O arquivo `back\.env.example` contém os nomes e os valores padrão. Copie-o par
 | `AI_EXTERNAL_MODEL` | Modelo compatível com visão | Padrão: `gpt-4o-mini` |
 | `PORT` | Porta configurada na aplicação | Padrão: `8000`; os comandos de inicialização fornecidos usam a porta `8000` |
 | `YOLO_MODEL` | Arquivo/modelo de detecção | Padrão: `yolov8n.pt` |
-| `YOLO_CONFIDENCE` | Confiança mínima do YOLO | Padrão/mínimo: `0.60` |
+| `YOLO_CONFIDENCE` | Sensibilidade da detecção (menor = mais sensível) | Padrão: `0.30`; faixa: `0.05` a `1.0` |
+| `OBJECT_PERSISTENCE_TIME` | Tempo (s) que o rastreio mantém a visita com a ave imóvel | Padrão: `5.0`; faixa: `0` a `30` |
+| `MOTION_SENSITIVITY` | Sensibilidade de detecção de movimento inicial | Padrão: `0.5`; faixa: `0` a `1` |
+| `YOLO_BIRD_CLASS_ID` | Classe do COCO usada na inferência | Padrão: `14` (`bird`) |
 | `PRE_RECORD_SECONDS` | Duração anterior à detecção incluída no clipe | Padrão/mínimo: `3.0` |
 | `POST_RECORD_SECONDS` | Duração posterior à detecção | Padrão: `2.0` |
 | `CAMERA_RECONNECT_DELAY_SEC` | Intervalo de reconexão da câmera | Padrão: `3.0` |
@@ -316,8 +323,13 @@ de configuração (`*_configured`), nunca os segredos nem seus sufixos. Os endpo
 de leitura, gravação e teste são restritos a conexões locais. Não exponha o backend
 diretamente à rede ou à Internet.
 
-Na seção de preferências também é possível ajustar a confiança do YOLO, limites de
-notificação, gravação pré/pós-detecção e habilitar/desabilitar notificações.
+Na seção **Calibração e Ajustes** o usuário escolhe entre dois perfis prontos —
+**Passarinhos Parados / Alimentador** (recomendado) e **Alta Movimentação / Voo
+Rápido** — ou ajusta manualmente, com sliders explicativos, a *Sensibilidade da
+IA*, o *Tempo de permanência imóvel* (3–15 s) e a *Sensibilidade de movimento
+inicial*. Em **Preferências da IA e alertas** ficam os limites de notificação,
+gravação pré/pós-detecção e o liga/desliga de notificações. Tudo é aplicado em
+tempo de execução, sem reiniciar o backend.
 
 ### Excluir visitas e limpar o histórico
 
@@ -384,6 +396,8 @@ aviawatch/
 | DELETE | `/api/events?older_than_days=N` | Excluir visitas anteriores ao limite de dias informado |
 | DELETE | `/api/events/all` | Apagar todo o histórico e a mídia; exige confirmação `EXCLUIR TUDO` |
 | GET/PUT | `/api/settings` | Configurações persistidas |
+| GET | `/api/settings/calibration` | Calibração de sensibilidade ativa (confiança, permanência e movimento) |
+| POST | `/api/settings/calibration` | Atualizar a calibração e aplicar em tempo de execução (perfil ou valores) |
 | POST | `/api/settings/test-notification` | Teste Telegram/Discord |
 | GET | `/api/settings/env` | Ler integrações com credenciais mascaradas |
 | POST | `/api/settings/env` | Salvar variáveis permitidas no `back/.env` e aplicá-las em runtime |
@@ -425,9 +439,15 @@ backup: proteja a pasta `back/app-data/` e o arquivo `back/.env`. O catálogo e 
 de referência também ficam em `back/app-data/`.
 
 O processamento YOLO roda a cada quatro quadros, usando fluxo óptico nos quadros
-intermediários e as zonas poligonais como ROIs. A pré-gravação inclui os três segundos
-anteriores à detecção; saídas temporárias da zona de até dez segundos são consideradas
-a mesma presença. Snapshots, recortes e clipes vencidos são limpos diariamente conforme
+intermediários e as zonas poligonais como ROIs. A inferência é restrita à classe
+`bird` do COCO (id `14`). Quando a ave para de se mover para se alimentar e o
+YOLO perde a detecção, o rastreio mantém a mesma caixa "em espera" pela janela de
+`OBJECT_PERSISTENCE_TIME`, de modo que a visita não é reiniciada por uma perda
+momentânea. Em cenas sem aves rastreadas, a inferência só roda quando há
+movimento suficiente (`MOTION_SENSITIVITY`), com uma verificação periódica de
+segurança. A pré-gravação inclui os três segundos anteriores à detecção;
+saídas temporárias da zona de até dez segundos são consideradas a mesma presença.
+Snapshots, recortes e clipes vencidos são limpos diariamente conforme
 `MEDIA_RETENTION_DAYS`, sem remover registros do SQLite.
 
 ---

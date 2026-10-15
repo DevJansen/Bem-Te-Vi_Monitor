@@ -8,6 +8,8 @@ import type {
   BirdSpecies,
   BirdSpeciesCreatePayload,
   BirdVisit,
+  Calibration,
+  CalibrationUpdate,
   Camera,
   CameraCreatePayload,
   CameraUpdatePayload,
@@ -254,6 +256,20 @@ export async function fetchSettings(): Promise<AppSettings> {
 
 export async function updateSettings(payload: AppSettingsUpdate): Promise<AppSettings> {
   const { data } = await api.put<AppSettings>("/settings", payload);
+  return data;
+}
+
+/* ——— Calibração de sensibilidade ——— */
+
+export async function fetchCalibration(): Promise<Calibration> {
+  const { data } = await api.get<Calibration>("/settings/calibration");
+  return data;
+}
+
+export async function updateCalibration(
+  payload: CalibrationUpdate,
+): Promise<Calibration> {
+  const { data } = await api.post<Calibration>("/settings/calibration", payload);
   return data;
 }
 

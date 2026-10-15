@@ -11,6 +11,7 @@ import { ZoneEditorModal } from "@/components/cameras/ZoneEditorModal";
 import { RecordingImport } from "@/components/cameras/RecordingImport";
 import { GalleryGrid } from "@/components/gallery/GalleryGrid";
 import { EnvSettings } from "@/components/settings/EnvSettings";
+import { CalibrationPanel } from "@/components/settings/CalibrationPanel";
 import { SpeciesCatalog } from "@/components/species/SpeciesCatalog";
 import { AudioDetectionFeed } from "@/components/dashboard/AudioDetectionFeed";
 import { usePolling } from "@/hooks/usePolling";
@@ -257,7 +258,10 @@ export function App() {
           ) : null}
 
           {tab === "settings" ? (
-            <EnvSettings onHistoryCleared={handleHistoryCleared} />
+            <div className="space-y-6">
+              <CalibrationPanel />
+              <EnvSettings onHistoryCleared={handleHistoryCleared} />
+            </div>
           ) : null}
         </main>
       </div>

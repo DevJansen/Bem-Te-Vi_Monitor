@@ -204,6 +204,23 @@ export type AppSettingsUpdate = {
   extra?: Record<string, unknown>;
 };
 
+export type CalibrationProfile = "stationary" | "fast_motion" | "custom";
+
+export type Calibration = {
+  yolo_confidence: number;
+  object_persistence_time: number;
+  motion_sensitivity: number;
+  profile: CalibrationProfile;
+  recommended_profile: CalibrationProfile;
+};
+
+export type CalibrationUpdate = {
+  profile?: CalibrationProfile;
+  yolo_confidence?: number;
+  object_persistence_time?: number;
+  motion_sensitivity?: number;
+};
+
 export type AudioDetection = {
   id: string;
   event_type: "AUDIO_DETECTION";
