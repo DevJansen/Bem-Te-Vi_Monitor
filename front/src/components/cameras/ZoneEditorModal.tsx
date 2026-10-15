@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { Check, Minus, Plus, RefreshCw, Save, Trash2, Undo2, X } from "lucide-react";
 import type { Camera, Zone, ZoneMode, ZonePoint } from "@/types";
 import {
@@ -7,6 +7,7 @@ import {
   saveCameraZones,
   videoFeedUrl,
 } from "@/services/api";
+import { abortMjpegStream } from "@/utils/stream";
 
 type Props = {
   camera: Camera | null;
@@ -28,6 +29,8 @@ export function ZoneEditorModal({ camera, onClose, onSaved }: Props) {
   const [streamVersion, setStreamVersion] = useState(0);
   const [imageReady, setImageReady] = useState(false);
   const [streamError, setStreamError] = useState(false);
+  // Referência ao <img> do stream, para abortar a conexão ao fechar o editor.
+  const imgRef = useRef<HTMLImageElement | null>(null);
 
   useEffect(() => {
     if (!camera) return;
@@ -52,6 +55,13 @@ export function ZoneEditorModal({ camera, onClose, onSaved }: Props) {
       cancelled = true;
     };
   }, [camera]);
+
+  // Encerra a conexão MJPEG ao fechar o editor (ou trocar de câmera),
+  // liberando o slot de conexão do navegador para as próximas requisições.
+  useEffect(() => {
+    const img = imgRef.current;
+    return () => abortMjpegStream(img);
+  }, [camera?.id]);
 
   if (!camera) return null;
 
@@ -135,6 +145,7 @@ export function ZoneEditorModal({ camera, onClose, onSaved }: Props) {
           <div>
             <div className="relative overflow-hidden rounded-lg bg-black">
               <img
+                ref={imgRef}
                 src={streamSrc}
                 alt={`Stream ao vivo de ${camera.name}`}
                 className="block h-auto w-full"

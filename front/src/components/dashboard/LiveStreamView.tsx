@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Box, Crosshair, Frame, Gauge, Trash2, VideoOff } from "lucide-react";
 import type { Camera } from "@/types";
 import { videoFeedUrl } from "@/services/api";
 import { cn } from "@/utils/cn";
+import { abortMjpegStream } from "@/utils/stream";
 import { StatusDot } from "@/components/common/StatusDot";
 
 type Props = {
@@ -27,11 +28,18 @@ export function LiveStreamView({
   const [selectedId, setSelectedId] = useState<string>("");
   const [showBoxes, setShowBoxes] = useState(true);
   const [fps, setFps] = useState(0);
-  const [streamKey, setStreamKey] = useState(0);
+  // Cada mudança de versão gera uma URL nova, forçando o navegador a abrir uma
+  // conexão MJPEG limpa (sem reaproveitar conexões antigas ou zumbis).
+  const [streamVersion, setStreamVersion] = useState<number>(() => Date.now());
   const [streamConnection, setStreamConnection] =
     useState<StreamConnection>("reconnecting");
+
+  const imgRef = useRef<HTMLImageElement | null>(null);
   const lastLoad = useRef<number | null>(null);
   const fpsSamples = useRef<number[]>([]);
+  const retryRef = useRef<number | null>(null);
+  const reconnectAttempts = useRef(0);
+  const estavaOffline = useRef(false);
 
   useEffect(() => {
     if (!selectedId && enabled[0]) {
@@ -42,25 +50,75 @@ export function LiveStreamView({
   }, [enabled, selectedId]);
 
   const selected = enabled.find((c) => c.id === selectedId) ?? null;
+  const cameraStatus = String(selected?.status ?? "").toLowerCase();
+  const cameraOffline = ["error", "stopped", "disabled"].includes(cameraStatus);
 
   const feedSrc = selected
-    ? `${videoFeedUrl(selected.id, showBoxes)}&k=${streamKey}`
+    ? `${videoFeedUrl(selected.id, showBoxes)}&v=${streamVersion}`
     : null;
 
+  /** Cancela uma reconexão agendada. */
+  const clearRetry = useCallback(() => {
+    if (retryRef.current !== null) {
+      window.clearTimeout(retryRef.current);
+      retryRef.current = null;
+    }
+  }, []);
+
+  /** Reinicia a transmissão abrindo uma nova conexão MJPEG. */
+  const reconnect = useCallback(() => {
+    clearRetry();
+    setStreamVersion(Date.now());
+  }, [clearRetry]);
+
+  // Reinicia o estado da transmissão sempre que a fonte muda.
   useEffect(() => {
     setStreamConnection("reconnecting");
     lastLoad.current = null;
     fpsSamples.current = [];
     setFps(0);
+    return clearRetry;
+  }, [feedSrc, clearRetry]);
+
+  // Gerencia a conexão MJPEG imperativamente. Ao trocar a fonte — ou ao
+  // desmontar o painel numa troca de aba — a conexão anterior é encerrada na
+  // hora; ao (re)montar, uma nova conexão é aberta. Isso libera o slot de
+  // conexão do navegador e evita o acúmulo de transmissões (o "precisa dar F5").
+  // No StrictMode (dev) o efeito é reexecutado e reabre a conexão sozinho.
+  useEffect(() => {
+    const img = imgRef.current;
+    if (!img) return;
+    if (!feedSrc) {
+      abortMjpegStream(img);
+      return;
+    }
+    img.src = feedSrc;
+    return () => abortMjpegStream(img);
   }, [feedSrc]);
 
-  const cameraStatus = String(selected?.status ?? "").toLowerCase();
-  const connection: StreamConnection =
-    ["error", "stopped", "disabled"].includes(cameraStatus)
-      ? "offline"
-      : ["connecting", "reconnecting", "idle"].includes(cameraStatus)
-        ? "reconnecting"
-        : streamConnection;
+  // Ao recuperar o foco da aba do navegador, garante uma transmissão ativa.
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") reconnect();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [reconnect]);
+
+  // Quando a câmera volta a ficar online, reabre a transmissão.
+  useEffect(() => {
+    if (estavaOffline.current && !cameraOffline && feedSrc) {
+      setStreamConnection("reconnecting");
+      reconnect();
+    }
+    estavaOffline.current = cameraOffline;
+  }, [cameraOffline, feedSrc, reconnect]);
+
+  const connection: StreamConnection = cameraOffline
+    ? "offline"
+    : ["connecting", "reconnecting", "idle"].includes(cameraStatus)
+      ? "reconnecting"
+      : streamConnection;
   const connectionLabel =
     connection === "connected"
       ? "Conectado"
@@ -69,6 +127,8 @@ export function LiveStreamView({
         : "Câmera Offline";
 
   const onImgLoad = () => {
+    reconnectAttempts.current = 0;
+    clearRetry();
     setStreamConnection("connected");
     const now = performance.now();
     if (lastLoad.current != null) {
@@ -83,6 +143,19 @@ export function LiveStreamView({
       }
     }
     lastLoad.current = now;
+  };
+
+  const onImgError = () => {
+    setStreamConnection("offline");
+    // Backoff exponencial (até 10s) para não sobrecarregar o servidor.
+    const attempt = reconnectAttempts.current;
+    reconnectAttempts.current = Math.min(attempt + 1, 6);
+    clearRetry();
+    retryRef.current = window.setTimeout(() => {
+      retryRef.current = null;
+      setStreamConnection("reconnecting");
+      reconnect();
+    }, Math.min(1_500 * 2 ** attempt, 10_000));
   };
 
   return (
@@ -103,9 +176,9 @@ export function LiveStreamView({
               value={selectedId}
               onChange={(e) => {
                 setSelectedId(e.target.value);
-                setStreamKey((k) => k + 1);
                 fpsSamples.current = [];
                 setFps(0);
+                reconnect();
               }}
               className="bg-transparent text-[var(--color-text-primary)] outline-none"
             >
@@ -184,12 +257,11 @@ export function LiveStreamView({
         ) : (
           <>
             <img
-              key={feedSrc}
-              src={feedSrc}
+              ref={imgRef}
               alt={`Stream ${selected.name}`}
               className="h-full w-full object-contain"
               onLoad={onImgLoad}
-              onError={() => setStreamConnection("offline")}
+              onError={onImgError}
             />
             <div className="absolute left-3 top-3 flex items-center gap-2 rounded-md bg-dark-900/80 px-2 py-1 text-xs backdrop-blur">
               <StatusDot

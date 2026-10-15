@@ -9,6 +9,7 @@ import { Eraser, Frame, RefreshCw, Save, Trash2, Undo2, X } from "lucide-react";
 import type { Camera, RoiType, RoiZone } from "@/types";
 import { fetchRoi, getErrorMessage, saveRoi, videoFeedUrl } from "@/services/api";
 import { cn } from "@/utils/cn";
+import { abortMjpegStream } from "@/utils/stream";
 
 type Props = {
   camera: Camera | null;
@@ -53,6 +54,8 @@ export function RoiEditorModal({ camera, onClose, onSaved }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   // Espelho do rascunho para ler o valor final sem depender de re-render.
   const draftRef = useRef<DraftRect | null>(null);
+  // Referência ao <img> do stream, para abortar a conexão ao fechar o editor.
+  const imgRef = useRef<HTMLImageElement | null>(null);
 
   /* ——— Carregamento das zonas salvas ——— */
   useEffect(() => {
@@ -82,6 +85,13 @@ export function RoiEditorModal({ camera, onClose, onSaved }: Props) {
       cancelled = true;
     };
   }, [camera]);
+
+  // Encerra a conexão MJPEG ao fechar o editor (ou trocar de câmera),
+  // liberando o slot de conexão do navegador para as próximas requisições.
+  useEffect(() => {
+    const img = imgRef.current;
+    return () => abortMjpegStream(img);
+  }, [camera?.id]);
 
   /* ——— Desenho do canvas (zonas salvas + rascunho) ——— */
   const redraw = useCallback(() => {
@@ -298,6 +308,7 @@ export function RoiEditorModal({ camera, onClose, onSaved }: Props) {
               className="relative overflow-hidden rounded-lg bg-black"
             >
               <img
+                ref={imgRef}
                 src={streamSrc}
                 alt={`Stream ao vivo de ${camera.name}`}
                 className="block h-auto w-full select-none"
