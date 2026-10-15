@@ -102,6 +102,9 @@ O arquivo `back\.env.example` contém os nomes e os valores padrão. Copie-o par
 | `CAMERA_RECONNECT_DELAY_SEC` | Intervalo de reconexão da câmera | Padrão: `3.0` |
 | `MEDIA_RETENTION_DAYS` | Retenção de mídia local | Padrão: `30`; mínimo: `1` |
 | `APP_DATA_DIR` | Diretório para banco, mídia e segredos de câmera | Opcional; padrão: `back\app-data` |
+| `LATITUDE` | Latitude do alimentador (usada pela integração meteorológica) | Padrão: `-23.5505` (São Paulo/SP) |
+| `LONGITUDE` | Longitude do alimentador (usada pela integração meteorológica) | Padrão: `-46.6333` (São Paulo/SP) |
+| `WEATHER_CACHE_MINUTES` | Intervalo (min) de atualização do cache local de clima | Padrão: `30`; mínimo: `5` |
 
 O painel administra a integração de IA Externa por completo (chave, URL base e
 modelo), além dos segredos do Telegram e do Discord. As demais opções avançadas
@@ -418,6 +421,7 @@ aviawatch/
 | GET | `/api/settings/roi?camera_id={id}` | Ler as Zonas de Interesse (ROI) retangulares da câmera |
 | POST | `/api/settings/roi` | Salvar as ROI retangulares (`{camera_id, zones:[{type, x1, y1, x2, y2}]}`) e aplicar em runtime |
 | GET | `/api/visits` | Eventos de aves |
+| GET | `/api/visits/today` | Visitas de hoje (mais recentes primeiro) |
 | GET | `/api/visits/{id}` | Detalhe de uma visita |
 | PUT | `/api/visits/{visit_id}/assign-species` | Associar ou desassociar visita a uma espécie (`{"species_id":"..."}`) |
 | POST | `/api/visits/{id}/identify-external` | Identificar sob demanda usando o recorte local da visita |
@@ -440,9 +444,14 @@ aviawatch/
 | GET | `/api/analytics/summary` | Visitas de hoje, últimos 7 dias e total; espécie líder, duração média e horário de pico |
 | GET | `/api/analytics/hourly-distribution` | Contagem histórica de visitas para cada hora do dia (00h–23h) |
 | GET | `/api/analytics/lifelist` | Espécies do catálogo, desbloqueio, primeiro registro, foto e número de avistagens |
+| GET | `/api/analytics/achievements` | Conquistas desbloqueadas e disponíveis |
+| GET | `/api/analytics/weather-correlation` | Relação entre o clima (chuva/temperatura/vento) e as visitas |
 | GET | `/api/audio-detections?limit=30` | Detecções sonoras recentes, confiança e visita visual associada |
 | GET | `/api/audio-detections/status` | Estado da análise BirdNET e câmeras monitoradas |
+| GET | `/api/audio-detections/devices` | Dispositivos de áudio de entrada disponíveis (microfones) |
 | GET | `/api/video-feed/{id}?boxes=true` | Stream MJPEG com caixas de detecção (use `boxes=false` para ocultá-las) |
+| GET | `/api/video-feed/{id}/snapshot` | Foto atual da câmera |
+| GET | `/api/weather/current` | Clima atual no alimentador (temperatura, chuva e vento) |
 | GET | `/api/videos/{arquivo}` | Streaming do clipe (MP4/H.264) com suporte a requisições `Range` |
 | GET | `/captures/...` | Thumbnails e demais mídias estáticas |
 
