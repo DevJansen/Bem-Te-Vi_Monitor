@@ -6,6 +6,7 @@ import { LiveStreamView } from "@/components/dashboard/LiveStreamView";
 import { WeatherWidget } from "@/components/dashboard/WeatherWidget";
 import { VisitsChart } from "@/components/dashboard/VisitsChart";
 import { SpeciesRanking } from "@/components/dashboard/SpeciesRanking";
+import { TodayVisitsPanel } from "@/components/dashboard/TodayVisitsPanel";
 import { CameraGrid } from "@/components/cameras/CameraGrid";
 import { AddCameraModal } from "@/components/cameras/AddCameraModal";
 import { ZoneEditorModal } from "@/components/cameras/ZoneEditorModal";
@@ -206,6 +207,7 @@ export function App() {
                 </div>
                 <SpeciesRanking metrics={metricsQuery.data} />
               </div>
+              <TodayVisitsPanel />
               <VisitsChart metrics={metricsQuery.data} />
               <AudioDetectionFeed />
             </div>

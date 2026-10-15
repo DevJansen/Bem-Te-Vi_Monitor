@@ -398,6 +398,30 @@ class VisitRepository:
             ).fetchall()
             return [dict(r) for r in rows]
 
+    def list_today(self, *, limit: int = 100) -> list[dict[str, Any]]:
+        """Visitas registradas hoje (data UTC do servidor), mais recentes primeiro.
+
+        Cada linha já traz ``thumbnail_path`` (miniatura capturada pelo YOLOv8),
+        que o ``to_out`` converte em ``thumbnail_url`` para o painel.
+        """
+        today_prefix = datetime.now(timezone.utc).date().isoformat()
+        with db_session(self.db_path) as conn:
+            rows = conn.execute(
+                """
+                SELECT v.*, c.name AS camera_name,
+                    bs.common_name AS assigned_species_common_name,
+                    bs.scientific_name AS assigned_species_scientific_name
+                FROM visits v
+                LEFT JOIN cameras c ON c.id = v.camera_id
+                LEFT JOIN bird_species bs ON bs.id = v.species_id
+                WHERE v.detected_at LIKE ?
+                ORDER BY v.detected_at DESC
+                LIMIT ?
+                """,
+                (f"{today_prefix}%", limit),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
     def count(self, *, camera_id: str | None = None) -> int:
         with db_session(self.db_path) as conn:
             if camera_id:

@@ -53,6 +53,22 @@ async def list_visits(
         raise HTTPException(status_code=500, detail="Failed to list visits") from exc
 
 
+@router.get("/today", response_model=list[VisitOut])
+async def list_today_visits(
+    limit: int = Query(default=50, ge=1, le=200),
+) -> list[VisitOut]:
+    """Visitas de hoje (mais recentes primeiro), com a miniatura do YOLOv8."""
+    try:
+        rows = _repo().list_today(limit=limit)
+        return [VisitRepository.to_out(r) for r in rows]
+    except Exception as exc:
+        logger.exception("list_today_visits failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível listar as visitas de hoje.",
+        ) from exc
+
+
 @router.get("/{visit_id}", response_model=VisitOut)
 async def get_visit(visit_id: str) -> VisitOut:
     row = _repo().get(visit_id)

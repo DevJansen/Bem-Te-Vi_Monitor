@@ -10,6 +10,36 @@ from app.infra.database.connection import db_session
 from app.infra.database.repository import _media_url, _optional_float
 from app.services.weather_service import category_for_label
 
+# Limiares de raridade (por número de avistagens da espécie no histórico local).
+# 1-2 avistagens: Rara · 3-9: Incomum · 10+: Comum.
+RARITY_RARE_MAX = 2
+RARITY_UNCOMMON_MAX = 9
+
+
+def _rarity_for_sightings(sightings: int) -> str:
+    """Classifica a raridade de uma espécie a partir do nº de avistagens."""
+    if sightings <= 0:
+        return "Não observada"
+    if sightings <= RARITY_RARE_MAX:
+        return "Rara"
+    if sightings <= RARITY_UNCOMMON_MAX:
+        return "Incomum"
+    return "Comum"
+
+
+def _species_badges(sightings: int, rarity: str) -> list[str]:
+    """Medalhas/marcos exibidos no card de cada espécie do álbum."""
+    badges: list[str] = []
+    if sightings > 0:
+        badges.append("Primeira Vez")
+    if rarity == "Rara":
+        badges.append("Ave Rara")
+    if sightings >= 10:
+        badges.append("Espécie Fiel")
+    if sightings >= 50:
+        badges.append("Superstar")
+    return badges
+
 
 class AnalyticsRepository:
     def __init__(self, db_path: Path) -> None:
@@ -228,7 +258,15 @@ class AnalyticsRepository:
                         WHERE first_visit.species_id = bs.id
                         ORDER BY first_visit.detected_at ASC, first_visit.id ASC
                         LIMIT 1
-                    ) AS first_visit_thumbnail_path
+                    ) AS first_visit_thumbnail_path,
+                    (
+                        SELECT best.thumbnail_path
+                        FROM visits AS best
+                        WHERE best.species_id = bs.id
+                            AND best.thumbnail_path IS NOT NULL
+                        ORDER BY best.confidence DESC, best.detected_at DESC
+                        LIMIT 1
+                    ) AS best_photo_path
                 FROM bird_species bs
                 LEFT JOIN visits v ON v.species_id = bs.id
                 GROUP BY bs.id
@@ -245,6 +283,8 @@ class AnalyticsRepository:
                 if reference_path
                 else None
             )
+            sightings = int(row["sightings_count"])
+            rarity = _rarity_for_sightings(sightings)
             result.append(
                 {
                     "id": row["id"],
@@ -255,7 +295,168 @@ class AnalyticsRepository:
                     "first_seen_at": row["first_seen_at"],
                     "featured_photo_url": first_visit_photo,
                     "reference_image_url": reference_image_url,
-                    "sightings_count": int(row["sightings_count"]),
+                    "sightings_count": sightings,
+                    # Campos gamificados do álbum de figurinhas.
+                    "visits_count": sightings,
+                    "rarity": rarity,
+                    "best_photo_url": _media_url(row["best_photo_path"]),
+                    "badges": _species_badges(sightings, rarity),
                 }
             )
         return result
+
+    def achievements(self) -> list[dict[str, Any]]:
+        """Medalhas/marcos globais conquistados pelo observador.
+
+        Cada conquista devolve o progresso atual e o alvo, permitindo que o
+        front-end desenhe a barra de progresso e o estado bloqueado/desbloqueado.
+        """
+        with db_session(self.db_path) as conn:
+            totals = conn.execute(
+                """
+                SELECT
+                    COUNT(*) AS total_visits,
+                    COUNT(DISTINCT species_id) AS species_observed,
+                    COUNT(DISTINCT substr(detected_at, 1, 10)) AS active_days
+                FROM visits
+                """
+            ).fetchone()
+            dawn_count = conn.execute(
+                """
+                SELECT COUNT(*) AS c FROM visits
+                WHERE length(detected_at) >= 13
+                    AND CAST(substr(detected_at, 12, 2) AS INTEGER) < 6
+                """
+            ).fetchone()["c"]
+            night_count = conn.execute(
+                """
+                SELECT COUNT(*) AS c FROM visits
+                WHERE length(detected_at) >= 13
+                    AND CAST(substr(detected_at, 12, 2) AS INTEGER) >= 20
+                """
+            ).fetchone()["c"]
+            rain_count = conn.execute(
+                """
+                SELECT COUNT(*) AS c FROM visits
+                WHERE weather_code LIKE '%Chuva%'
+                    OR weather_code LIKE '%Chuvisco%'
+                    OR weather_code LIKE '%Pancada%'
+                    OR weather_code LIKE '%Tempestade%'
+                """
+            ).fetchone()["c"]
+            rare_count = conn.execute(
+                """
+                SELECT COUNT(*) AS c FROM (
+                    SELECT species_id FROM visits
+                    WHERE species_id IS NOT NULL
+                    GROUP BY species_id
+                    HAVING COUNT(*) BETWEEN 1 AND ?
+                )
+                """,
+                (RARITY_RARE_MAX,),
+            ).fetchone()["c"]
+
+        total_visits = int(totals["total_visits"] or 0)
+        species_observed = int(totals["species_observed"] or 0)
+        active_days = int(totals["active_days"] or 0)
+        dawn_count = int(dawn_count or 0)
+        night_count = int(night_count or 0)
+        rain_count = int(rain_count or 0)
+        rare_count = int(rare_count or 0)
+
+        # (id, nome, descrição, ícone, alvo, progresso atual)
+        definitions: list[tuple[str, str, str, str, int, int]] = [
+            (
+                "primeira_visita",
+                "Primeira Visita",
+                "Registre a primeira ave no alimentador.",
+                "🐣",
+                1,
+                total_visits,
+            ),
+            (
+                "explorador",
+                "Explorador",
+                "Descubra 3 espécies diferentes.",
+                "🔭",
+                3,
+                species_observed,
+            ),
+            (
+                "colecionador",
+                "Colecionador",
+                "Descubra 5 espécies diferentes.",
+                "📖",
+                5,
+                species_observed,
+            ),
+            (
+                "naturalista",
+                "Naturalista",
+                "Descubra 10 espécies diferentes.",
+                "🌿",
+                10,
+                species_observed,
+            ),
+            (
+                "madrugador",
+                "Madrugador",
+                "Registre uma visita antes das 6h.",
+                "🌅",
+                1,
+                dawn_count,
+            ),
+            (
+                "coruja",
+                "Coruja",
+                "Registre uma visita após as 20h.",
+                "🌙",
+                1,
+                night_count,
+            ),
+            (
+                "cacador_de_raridades",
+                "Caçador de Raridades",
+                "Aviste uma espécie rara no alimentador.",
+                "💎",
+                1,
+                rare_count,
+            ),
+            (
+                "observador_de_chuva",
+                "Observador de Chuva",
+                "Registre uma visita em dia de chuva.",
+                "🌧️",
+                1,
+                rain_count,
+            ),
+            (
+                "dedicado",
+                "Dedicado",
+                "Acumule 100 visitas registradas.",
+                "🏅",
+                100,
+                total_visits,
+            ),
+            (
+                "constante",
+                "Constante",
+                "Registre aves em 7 dias diferentes.",
+                "📅",
+                7,
+                active_days,
+            ),
+        ]
+
+        return [
+            {
+                "id": badge_id,
+                "name": name,
+                "description": description,
+                "icon": icon,
+                "target": target,
+                "progress": min(progress, target),
+                "unlocked": progress >= target,
+            }
+            for (badge_id, name, description, icon, target, progress) in definitions
+        ]

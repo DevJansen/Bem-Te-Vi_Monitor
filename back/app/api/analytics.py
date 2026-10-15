@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.core.config import get_settings
 from app.domain.models import (
+    AchievementOut,
     AnalyticsSummaryOut,
     HourlyDistributionOut,
     LifeListSpeciesOut,
@@ -65,6 +66,21 @@ def get_lifelist() -> list[LifeListSpeciesOut]:
         raise HTTPException(
             status_code=500,
             detail="Não foi possível carregar o álbum de espécies.",
+        ) from exc
+
+
+@router.get("/achievements", response_model=list[AchievementOut])
+def get_achievements() -> list[AchievementOut]:
+    """Medalhas/marcos conquistados pelo observador."""
+    try:
+        return [
+            AchievementOut(**row) for row in _repository().achievements()
+        ]
+    except Exception as exc:
+        logger.exception("get_achievements failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível carregar as conquistas.",
         ) from exc
 
 

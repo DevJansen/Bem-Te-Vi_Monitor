@@ -206,6 +206,25 @@ export type LifeListSpecies = {
   featured_photo_url: string | null;
   reference_image_url: string | null;
   sightings_count: number;
+  /** Campos gamificados do álbum de figurinhas. */
+  visits_count: number;
+  rarity: RarityTier;
+  best_photo_url: string | null;
+  badges: string[];
+};
+
+/** Raridade da espécie no álbum, conforme o nº de avistagens. */
+export type RarityTier = "Comum" | "Incomum" | "Rara" | "Não observada";
+
+/** Medalha/marco conquistado pelo observador. */
+export type Achievement = {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  target: number;
+  progress: number;
+  unlocked: boolean;
 };
 
 export type AppSettings = {

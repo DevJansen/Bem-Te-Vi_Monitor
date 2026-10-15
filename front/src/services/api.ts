@@ -1,5 +1,6 @@
 import axios, { type AxiosError } from "axios";
 import type {
+  Achievement,
   AppSettings,
   AppSettingsUpdate,
   AnalyticsSummary,
@@ -256,6 +257,20 @@ export async function fetchHourlyDistribution(): Promise<HourlyDistribution[]> {
 
 export async function fetchLifeList(): Promise<LifeListSpecies[]> {
   const { data } = await api.get<LifeListSpecies[]>("/analytics/lifelist");
+  return data;
+}
+
+/** Medalhas/marcos conquistados pelo observador. */
+export async function fetchAchievements(): Promise<Achievement[]> {
+  const { data } = await api.get<Achievement[]>("/analytics/achievements");
+  return data;
+}
+
+/** Visitas de hoje (mais recentes primeiro), com a miniatura do YOLOv8. */
+export async function fetchTodayVisits(limit = 50): Promise<BirdVisit[]> {
+  const { data } = await api.get<BirdVisit[]>("/visits/today", {
+    params: { limit },
+  });
   return data;
 }
 

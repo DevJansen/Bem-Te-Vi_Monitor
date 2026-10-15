@@ -293,6 +293,24 @@ class LifeListSpeciesOut(BaseModel):
     featured_photo_url: str | None
     reference_image_url: str | None
     sightings_count: int
+    # Campos gamificados do álbum de figurinhas.
+    visits_count: int = 0
+    # Raridade: "Comum" | "Incomum" | "Rara" | "Não observada".
+    rarity: str = "Não observada"
+    best_photo_url: str | None = None
+    badges: list[str] = Field(default_factory=list)
+
+
+class AchievementOut(BaseModel):
+    """Medalha/marco do observador, com progresso e estado."""
+
+    id: str
+    name: str
+    description: str
+    icon: str
+    target: int = Field(ge=1)
+    progress: int = Field(ge=0)
+    unlocked: bool
 
 
 class NotificationTestRequest(BaseModel):

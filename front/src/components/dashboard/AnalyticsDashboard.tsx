@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Bar,
   BarChart,
@@ -10,16 +11,18 @@ import {
 } from "recharts";
 import {
   Bird,
+  BookOpen,
   CalendarDays,
   Clock3,
   Eye,
-  LockKeyhole,
   RefreshCw,
   Sparkles,
   Timer,
+  Trophy,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
+  fetchAchievements,
   fetchAnalyticsSummary,
   fetchHourlyDistribution,
   fetchLifeList,
@@ -27,31 +30,37 @@ import {
   getErrorMessage,
 } from "@/services/api";
 import type {
+  Achievement,
   AnalyticsSummary,
   HourlyDistribution,
   LifeListSpecies,
   WeatherCorrelation,
 } from "@/types";
 import { usePolling } from "@/hooks/usePolling";
-import { formatDateTime, formatSpeciesLabel } from "@/utils/format";
+import { formatSpeciesLabel } from "@/utils/format";
+import { cn } from "@/utils/cn";
 import { WeatherCorrelationPanel } from "@/components/dashboard/WeatherCorrelationPanel";
+import { LifeListAlbum } from "@/components/dashboard/LifeListAlbum";
+import { AchievementsGrid } from "@/components/dashboard/AchievementsGrid";
 
 type AnalyticsData = {
   summary: AnalyticsSummary;
   hourly: HourlyDistribution[];
   lifeList: LifeListSpecies[];
   weather: WeatherCorrelation;
+  achievements: Achievement[];
 };
 
 async function loadAnalytics(): Promise<AnalyticsData> {
   try {
-    const [summary, hourly, lifeList, weather] = await Promise.all([
+    const [summary, hourly, lifeList, weather, achievements] = await Promise.all([
       fetchAnalyticsSummary(),
       fetchHourlyDistribution(),
       fetchLifeList(),
       fetchWeatherCorrelation(),
+      fetchAchievements(),
     ]);
-    return { summary, hourly, lifeList, weather };
+    return { summary, hourly, lifeList, weather, achievements };
   } catch (error) {
     throw new Error(
       getErrorMessage(error, "Não foi possível carregar as estatísticas."),
@@ -109,6 +118,8 @@ export function AnalyticsDashboard() {
   const data = query.data;
   const unlockedCount = data?.lifeList.filter((item) => item.is_unlocked).length ?? 0;
   const peakHour = data?.summary.peak_hour;
+  // Aba interna: Álbum de figurinhas x Medalhas do observador.
+  const [view, setView] = useState<"album" | "badges">("album");
 
   return (
     <div className="space-y-6">
@@ -267,104 +278,49 @@ export function AnalyticsDashboard() {
 
           <WeatherCorrelationPanel data={data.weather} />
 
-          <section>
-            <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
-              <div>
-                <h2 className="font-display text-base font-semibold text-[var(--color-text-primary)]">
-                  Álbum de conquistas
-                </h2>
-                <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                  Sua Life List de espécies cadastradas no catálogo
-                </p>
-              </div>
-              <p className="text-xs text-[var(--color-text-muted)]">
-                {unlockedCount} desbloqueada(s) · {data.lifeList.length} no catálogo
-              </p>
+          <section aria-label="Álbum e conquistas">
+            {/* Alternância entre o álbum de figurinhas e as medalhas */}
+            <div className="mb-4 inline-flex flex-wrap gap-1 rounded-xl border border-dark-700 bg-dark-800 p-1.5">
+              <button
+                type="button"
+                onClick={() => setView("album")}
+                aria-pressed={view === "album"}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition",
+                  view === "album"
+                    ? "bg-emerald-500/15 text-emerald-300"
+                    : "text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]",
+                )}
+              >
+                <BookOpen className="h-4 w-4" />
+                Álbum de Conquistas
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("badges")}
+                aria-pressed={view === "badges"}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition",
+                  view === "badges"
+                    ? "bg-amber-400/15 text-amber-200"
+                    : "text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]",
+                )}
+              >
+                <Trophy className="h-4 w-4" />
+                Medalhas
+                {data.achievements.length > 0 ? (
+                  <span className="rounded-full bg-dark-900 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">
+                    {data.achievements.filter((item) => item.unlocked).length}/
+                    {data.achievements.length}
+                  </span>
+                ) : null}
+              </button>
             </div>
 
-            {data.lifeList.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-dark-700 px-6 py-10 text-center">
-                <Bird className="mx-auto h-8 w-8 text-emerald-400" />
-                <p className="mt-3 text-sm text-[var(--color-text-muted)]">
-                  Seu álbum está vazio. Cadastre espécies em “Minhas Aves” para começar.
-                </p>
-              </div>
+            {view === "album" ? (
+              <LifeListAlbum species={data.lifeList} />
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {data.lifeList.map((species) => {
-                  const imageUrl =
-                    species.featured_photo_url ?? species.reference_image_url;
-                  return (
-                    <article
-                      key={species.id}
-                      className={`overflow-hidden rounded-xl border bg-dark-800 ${
-                        species.is_unlocked
-                          ? "border-emerald-500/25"
-                          : "border-dark-700"
-                      }`}
-                    >
-                      <div className="relative aspect-[4/3] overflow-hidden bg-dark-900">
-                        {imageUrl ? (
-                          <img
-                            src={imageUrl}
-                            alt={
-                              species.is_unlocked
-                                ? `Registro de ${species.common_name}`
-                                : `Silhueta de ${species.common_name}`
-                            }
-                            className={`h-full w-full object-cover ${
-                              species.is_unlocked
-                                ? ""
-                                : "grayscale opacity-35"
-                            }`}
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="flex h-full items-center justify-center">
-                            <Bird
-                              aria-hidden
-                              className={`h-16 w-16 ${
-                                species.is_unlocked
-                                  ? "text-emerald-400/50"
-                                  : "text-[var(--color-text-muted)]/30"
-                              }`}
-                            />
-                          </div>
-                        )}
-                        {!species.is_unlocked ? (
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                            <LockKeyhole className="h-7 w-7 text-white/70" />
-                          </div>
-                        ) : null}
-                        <span
-                          className={`absolute left-3 top-3 rounded-full border px-2.5 py-1 text-[10px] font-semibold ${
-                            species.is_unlocked
-                              ? "border-emerald-400/30 bg-dark-900/80 text-emerald-300"
-                              : "border-white/10 bg-dark-900/80 text-[var(--color-text-muted)]"
-                          }`}
-                        >
-                          {species.is_unlocked
-                            ? `Primeiro registro: ${formatDateTime(species.first_seen_at)}`
-                            : "Ainda não registrada"}
-                        </span>
-                      </div>
-                      <div className="space-y-1 p-4">
-                        <h3 className="font-medium text-[var(--color-text-primary)]">
-                          {species.common_name}
-                        </h3>
-                        <p className="text-xs italic text-[var(--color-text-muted)]">
-                          {species.scientific_name}
-                        </p>
-                        <p className="pt-2 text-xs text-[var(--color-text-muted)]">
-                          {species.is_unlocked
-                            ? `${numberFormat.format(species.sightings_count)} visita(s)`
-                            : "Visite o alimentador para desbloquear"}
-                        </p>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
+              <AchievementsGrid achievements={data.achievements} />
             )}
           </section>
         </>
