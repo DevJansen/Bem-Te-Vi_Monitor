@@ -23,6 +23,10 @@ class Settings(BaseModel):
     discord_webhook_url: str = ""
     ai_external_api_key: str = ""
     ai_external_model: str = "gpt-4o-mini"
+    # URL base do provedor de IA compatível com a API da OpenAI. Serve para
+    # OpenRouter, Groq, Ollama, o endpoint OpenAI-compatível do Gemini etc.
+    # O chat é chamado em "{base}/chat/completions".
+    ai_external_base_url: str = "https://api.openai.com/v1"
     app_data_dir: Path = DEFAULT_APP_DATA_DIR
     yolo_model: str = "yolov8n.pt"
     # Sensibilidade da detecção: quanto menor o limiar, mais aves são detectadas
@@ -107,6 +111,9 @@ class Settings(BaseModel):
             discord_webhook_url=os.getenv("DISCORD_WEBHOOK_URL", ""),
             ai_external_api_key=os.getenv("AI_EXTERNAL_API_KEY", ""),
             ai_external_model=os.getenv("AI_EXTERNAL_MODEL", "gpt-4o-mini"),
+            ai_external_base_url=os.getenv(
+                "AI_EXTERNAL_BASE_URL", "https://api.openai.com/v1"
+            ),
             app_data_dir=Path(app_data) if app_data else DEFAULT_APP_DATA_DIR,
             yolo_model=os.getenv("YOLO_MODEL", "yolov8n.pt"),
             yolo_confidence=min(

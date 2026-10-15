@@ -18,6 +18,11 @@ from app.domain.models import (
     EnvironmentSettingsUpdate,
     NotificationTestResponse,
 )
+from app.services.external_species_identifier import (
+    DEFAULT_BASE_URL,
+    normalize_base_url,
+    provider_error_detail,
+)
 from app.services.notification_service import get_notification_service
 
 logger = logging.getLogger(__name__)
@@ -27,7 +32,10 @@ _ENV_KEYS = {
     "telegram_chat_id": "TELEGRAM_CHAT_ID",
     "discord_webhook_url": "DISCORD_WEBHOOK_URL",
     "ai_external_api_key": "AI_EXTERNAL_API_KEY",
+    "ai_external_base_url": "AI_EXTERNAL_BASE_URL",
+    "ai_external_model": "AI_EXTERNAL_MODEL",
 }
+_DEFAULT_AI_MODEL = "gpt-4o-mini"
 _MASK = "********"
 
 
@@ -54,6 +62,8 @@ def read_environment_settings() -> EnvironmentSettingsOut:
         telegram_chat_id=_masked(values.get("TELEGRAM_CHAT_ID")),
         discord_webhook_url=_masked(values.get("DISCORD_WEBHOOK_URL")),
         ai_external_api_key=_masked(values.get("AI_EXTERNAL_API_KEY")),
+        ai_external_base_url=values.get("AI_EXTERNAL_BASE_URL") or DEFAULT_BASE_URL,
+        ai_external_model=values.get("AI_EXTERNAL_MODEL") or _DEFAULT_AI_MODEL,
         telegram_bot_token_configured=bool(values.get("TELEGRAM_BOT_TOKEN")),
         telegram_chat_id_configured=bool(values.get("TELEGRAM_CHAT_ID")),
         discord_webhook_url_configured=bool(values.get("DISCORD_WEBHOOK_URL")),
@@ -86,6 +96,11 @@ def save_environment_settings(
                 continue
             if "\n" in cleaned or "\r" in cleaned or "\x00" in cleaned:
                 raise ValueError(f"Valor inválido para {env_name}")
+            # Normaliza a URL base e garante um modelo padrão quando vazio.
+            if field_name == "ai_external_base_url":
+                cleaned = normalize_base_url(cleaned)
+            elif field_name == "ai_external_model":
+                cleaned = cleaned or _DEFAULT_AI_MODEL
             values_to_save[env_name] = cleaned
 
     clear_by_integration = {
@@ -152,6 +167,7 @@ def _request(
     *,
     headers: dict[str, str] | None = None,
     params: dict[str, str] | None = None,
+    json: dict[str, object] | None = None,
 ) -> requests.Response:
     try:
         return requests.request(
@@ -159,6 +175,7 @@ def _request(
             url,
             headers=headers,
             params=params,
+            json=json,
             timeout=(5, 12),
             allow_redirects=False,
         )
@@ -228,13 +245,43 @@ def test_environment_connection(
     api_key = payload.ai_external_api_key or current.get("AI_EXTERNAL_API_KEY", "")
     if not api_key:
         raise ValueError("Informe a chave da IA Externa para testar")
-    response = _request(
-        "GET",
-        "https://api.openai.com/v1/models",
-        headers={"Authorization": f"Bearer {api_key}"},
+    base_url = payload.ai_external_base_url or current.get(
+        "AI_EXTERNAL_BASE_URL", ""
     )
-    if response.status_code != 200:
-        raise RuntimeError("A API de IA Externa rejeitou a chave informada")
+    try:
+        normalized_base = normalize_base_url(base_url)
+    except ValueError as exc:
+        raise ValueError(str(exc)) from exc
+    model = (
+        payload.ai_external_model
+        or current.get("AI_EXTERNAL_MODEL", "")
+        or _DEFAULT_AI_MODEL
+    )
+    # Valida de fato chave/URL/modelo com uma requisição mínima de chat.
+    # A listagem "/models" não serve: em vários provedores (ex.: OpenRouter) ela
+    # é pública e responde 200 mesmo com uma chave inválida.
+    response = _request(
+        "POST",
+        f"{normalized_base}/chat/completions",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": model,
+            "messages": [{"role": "user", "content": "ping"}],
+            "max_tokens": 1,
+        },
+    )
+    if not 200 <= response.status_code < 300:
+        detail = provider_error_detail(response)
+        message = (
+            "A API de IA Externa rejeitou a requisição "
+            f"(HTTP {response.status_code})"
+        )
+        if detail:
+            message = f"{message}: {detail}"
+        raise RuntimeError(message)
     return NotificationTestResponse(
         ok=True,
         message="Conexão com a API de IA Externa validada.",

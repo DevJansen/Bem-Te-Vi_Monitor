@@ -324,6 +324,8 @@ export type EnvironmentSettings = {
   telegram_chat_id: string | null;
   discord_webhook_url: string | null;
   ai_external_api_key: string | null;
+  ai_external_base_url: string;
+  ai_external_model: string;
   telegram_bot_token_configured: boolean;
   telegram_chat_id_configured: boolean;
   discord_webhook_url_configured: boolean;
@@ -338,6 +340,8 @@ export type EnvironmentSettingsUpdate = {
   telegram_chat_id?: string;
   discord_webhook_url?: string;
   ai_external_api_key?: string;
+  ai_external_base_url?: string;
+  ai_external_model?: string;
   clear_telegram?: boolean;
   clear_discord?: boolean;
   clear_ai_external?: boolean;

@@ -37,6 +37,8 @@ type EnvironmentDraft = {
   telegramChatId: string;
   discordWebhookUrl: string;
   aiExternalApiKey: string;
+  aiExternalBaseUrl: string;
+  aiExternalModel: string;
   clearTelegram: boolean;
   clearDiscord: boolean;
   clearAiExternal: boolean;
@@ -47,6 +49,8 @@ const EMPTY_DRAFT: EnvironmentDraft = {
   telegramChatId: "",
   discordWebhookUrl: "",
   aiExternalApiKey: "",
+  aiExternalBaseUrl: "",
+  aiExternalModel: "",
   clearTelegram: false,
   clearDiscord: false,
   clearAiExternal: false,
@@ -90,6 +94,12 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
       ]);
       setSettings(data);
       setEnvironment(env);
+      // Pré-preenche o provedor de IA (URL base e modelo não são segredos).
+      setDraft((current) => ({
+        ...current,
+        aiExternalBaseUrl: env.ai_external_base_url,
+        aiExternalModel: env.ai_external_model,
+      }));
       onSettingsChange?.(data);
     } catch (err) {
       setError(getErrorMessage(err, "Falha ao carregar configurações"));
@@ -163,6 +173,12 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
     ...(draft.aiExternalApiKey.trim()
       ? { ai_external_api_key: draft.aiExternalApiKey.trim() }
       : {}),
+    ...(draft.aiExternalBaseUrl.trim()
+      ? { ai_external_base_url: draft.aiExternalBaseUrl.trim() }
+      : {}),
+    ...(draft.aiExternalModel.trim()
+      ? { ai_external_model: draft.aiExternalModel.trim() }
+      : {}),
     ...(draft.clearTelegram ? { clear_telegram: true } : {}),
     ...(draft.clearDiscord ? { clear_discord: true } : {}),
     ...(draft.clearAiExternal ? { clear_ai_external: true } : {}),
@@ -199,8 +215,16 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
       }
     } else if (integration === "discord" && draft.discordWebhookUrl.trim()) {
       credentials.discord_webhook_url = draft.discordWebhookUrl.trim();
-    } else if (integration === "ai_external" && draft.aiExternalApiKey.trim()) {
-      credentials.ai_external_api_key = draft.aiExternalApiKey.trim();
+    } else if (integration === "ai_external") {
+      if (draft.aiExternalApiKey.trim()) {
+        credentials.ai_external_api_key = draft.aiExternalApiKey.trim();
+      }
+      if (draft.aiExternalBaseUrl.trim()) {
+        credentials.ai_external_base_url = draft.aiExternalBaseUrl.trim();
+      }
+      if (draft.aiExternalModel.trim()) {
+        credentials.ai_external_model = draft.aiExternalModel.trim();
+      }
     }
     try {
       const result = await testEnvironmentConnection(integration, credentials);
@@ -361,7 +385,24 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
               onClearChange={(clearAiExternal) =>
                 setDraft({ ...draft, clearAiExternal })
               }
+              hint="Compatível com qualquer provedor OpenAI: OpenAI (https://api.openai.com/v1), OpenRouter (https://openrouter.ai/api/v1), Groq (https://api.groq.com/openai/v1), Ollama (http://localhost:11434/v1) ou Gemini (https://generativelanguage.googleapis.com/v1beta/openai)."
               fields={[
+                {
+                  label: "URL base da API",
+                  value: draft.aiExternalBaseUrl,
+                  placeholder: "https://api.openai.com/v1",
+                  secret: false,
+                  onChange: (aiExternalBaseUrl) =>
+                    setDraft({ ...draft, aiExternalBaseUrl }),
+                },
+                {
+                  label: "Modelo",
+                  value: draft.aiExternalModel,
+                  placeholder: "gpt-4o-mini",
+                  secret: false,
+                  onChange: (aiExternalModel) =>
+                    setDraft({ ...draft, aiExternalModel }),
+                },
                 {
                   label: "Chave da API",
                   value: draft.aiExternalApiKey,
@@ -690,6 +731,7 @@ function IntegrationCard({
   clearRequested,
   onClearChange,
   fields,
+  hint,
 }: {
   title: string;
   icon: ReactNode;
@@ -701,6 +743,7 @@ function IntegrationCard({
   clearRequested: boolean;
   onClearChange: (clear: boolean) => void;
   fields: EnvironmentFieldProps[];
+  hint?: string;
 }) {
   return (
     <div className="space-y-3 rounded-xl border border-dark-700 bg-dark-900/60 p-3">
@@ -719,6 +762,11 @@ function IntegrationCard({
           )}
         </span>
       </div>
+      {hint ? (
+        <p className="text-[11px] leading-relaxed text-[var(--color-text-muted)]">
+          {hint}
+        </p>
+      ) : null}
       {fields.map((field) => (
         <EnvironmentField key={field.label} {...field} />
       ))}

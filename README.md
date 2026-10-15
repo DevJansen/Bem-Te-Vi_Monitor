@@ -51,6 +51,7 @@ TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
 DISCORD_WEBHOOK_URL=
 AI_EXTERNAL_API_KEY=
+AI_EXTERNAL_BASE_URL=https://api.openai.com/v1
 AI_EXTERNAL_MODEL=gpt-4o-mini
 PORT=8000
 ```
@@ -83,7 +84,8 @@ O arquivo `back\.env.example` contém os nomes e os valores padrão. Copie-o par
 | `TELEGRAM_BOT_TOKEN` | Token do bot do Telegram | Obtenha um bot com o BotFather; trate como senha |
 | `TELEGRAM_CHAT_ID` | Destino dos alertas no Telegram | ID da conversa, grupo ou canal acessível pelo bot |
 | `DISCORD_WEBHOOK_URL` | Envio de alertas ao Discord | URL secreta de um webhook do seu servidor |
-| `AI_EXTERNAL_API_KEY` | Identificação opcional de espécies | Chave da API OpenAI; necessária somente para identificação externa |
+| `AI_EXTERNAL_API_KEY` | Identificação opcional de espécies | Chave do provedor de IA; necessária somente para identificação externa |
+| `AI_EXTERNAL_BASE_URL` | URL base do provedor de IA (compatível com OpenAI) | Padrão: `https://api.openai.com/v1`. Aceita OpenRouter, Groq, Ollama, Gemini etc. |
 | `AI_EXTERNAL_MODEL` | Modelo compatível com visão | Padrão: `gpt-4o-mini` |
 | `PORT` | Porta configurada na aplicação | Padrão: `8000`; os comandos de inicialização fornecidos usam a porta `8000` |
 | `YOLO_MODEL` | Arquivo/modelo de detecção | Padrão: `yolov8n.pt` |
@@ -97,10 +99,10 @@ O arquivo `back\.env.example` contém os nomes e os valores padrão. Copie-o par
 | `MEDIA_RETENTION_DAYS` | Retenção de mídia local | Padrão: `30`; mínimo: `1` |
 | `APP_DATA_DIR` | Diretório para banco, mídia e segredos de câmera | Opcional; padrão: `back\app-data` |
 
-O painel administra os quatro segredos de integração (Telegram, ID do chat, Discord
-e IA Externa). `AI_EXTERNAL_MODEL` e as demais opções avançadas continuam sendo
-ajustadas no arquivo `.env`; alterações manuais nesse arquivo exigem reiniciar o
-backend.
+O painel administra a integração de IA Externa por completo (chave, URL base e
+modelo), além dos segredos do Telegram e do Discord. As demais opções avançadas
+continuam sendo ajustadas no arquivo `.env`; alterações manuais nesse arquivo
+exigem reiniciar o backend.
 
 ### Onde obter as credenciais
 
@@ -109,10 +111,12 @@ backend.
   correspondente em `TELEGRAM_CHAT_ID`.
 - **Discord:** nas configurações do servidor/canal, crie um webhook em
   **Integrações → Webhooks** e guarde a URL completa em `DISCORD_WEBHOOK_URL`.
-- **IA externa:** crie uma chave de API na plataforma OpenAI e configure uso/
-  faturamento da API conforme necessário. Guarde-a em `AI_EXTERNAL_API_KEY`.
-  Escolha em `AI_EXTERNAL_MODEL` um modelo disponível para sua conta e com suporte
-  a imagens.
+- **IA externa:** use a chave do provedor de sua preferência. O AviaWatch aceita
+  qualquer API compatível com a de chat da OpenAI: a própria OpenAI, OpenRouter,
+  Groq, Ollama (local) ou o endpoint OpenAI-compatível do Gemini. Configure a
+  chave em `AI_EXTERNAL_API_KEY`, a URL em `AI_EXTERNAL_BASE_URL` e, em
+  `AI_EXTERNAL_MODEL`, um modelo do provedor com suporte a imagens. Também é
+  possível preencher tudo pela tela **Configurações → Variáveis de ambiente**.
 
 Tokens de bot, URL de webhook e chaves de API funcionam como senhas: qualquer pessoa
 que os obtenha pode usar a integração associada. Revogue e gere uma nova credencial
@@ -497,7 +501,7 @@ vídeo sem baixá-lo por inteiro.
 | Porta 8000 ou 5173 em uso | No PowerShell: `Get-NetTCPConnection -LocalPort 8000 -State Listen` e encerre o PID (`Stop-Process -Id <PID> -Force`). Depois rode `start.bat` de novo |
 | Front sem dados / 404 nas rotas | Confirme que a API em `:8000` é a do AviaWatch atual (`/docs` deve listar `/api/visits`, `/api/stats`, `/api/settings`). Outro processo antigo na porta 8000 causa 404 |
 | Front sem dados | Confirme http://127.0.0.1:8000/api/health e a janela do backend |
-| Identificação externa indisponível | Confira `AI_EXTERNAL_API_KEY`, o modelo com suporte a visão e o acesso de rede à API OpenAI |
+| Identificação externa indisponível | Confira `AI_EXTERNAL_API_KEY`, `AI_EXTERNAL_BASE_URL`, o modelo com suporte a visão e o acesso de rede ao provedor escolhido |
 | Importação de gravação rejeitada | Use MP4, AVI ou MKV com menos de 2 GB e associe o arquivo a uma câmera cadastrada |
 | Análise offline falhou | Confirme se o vídeo abre em outro player e se o modelo YOLO foi carregado; tente exportar novamente o arquivo do cartão |
 | Clipe não reproduz na Galeria | Os clipes novos usam H.264 (compatível com navegadores). Instale o `ffmpeg` e coloque-o no `PATH` para garantir a melhor compatibilidade. Clipes antigos em `mp4v` podem não abrir no player: use **Baixar clipe** |

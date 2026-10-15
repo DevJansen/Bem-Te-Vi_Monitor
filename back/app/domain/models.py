@@ -367,6 +367,9 @@ class EnvironmentSettingsOut(BaseModel):
     telegram_chat_id: str | None = None
     discord_webhook_url: str | None = None
     ai_external_api_key: str | None = None
+    # Provedor de IA compatível com a OpenAI (não são segredos).
+    ai_external_base_url: str = "https://api.openai.com/v1"
+    ai_external_model: str = "gpt-4o-mini"
     telegram_bot_token_configured: bool
     telegram_chat_id_configured: bool
     discord_webhook_url_configured: bool
@@ -381,6 +384,8 @@ class EnvironmentSettingsUpdate(BaseModel):
     telegram_chat_id: str | None = Field(default=None, max_length=128)
     discord_webhook_url: str | None = Field(default=None, max_length=2048)
     ai_external_api_key: str | None = Field(default=None, max_length=512)
+    ai_external_base_url: str | None = Field(default=None, max_length=2048)
+    ai_external_model: str | None = Field(default=None, max_length=128)
     clear_telegram: bool = False
     clear_discord: bool = False
     clear_ai_external: bool = False
@@ -392,6 +397,8 @@ class EnvironmentConnectionTest(BaseModel):
     telegram_chat_id: str | None = Field(default=None, max_length=128)
     discord_webhook_url: str | None = Field(default=None, max_length=2048)
     ai_external_api_key: str | None = Field(default=None, max_length=512)
+    ai_external_base_url: str | None = Field(default=None, max_length=2048)
+    ai_external_model: str | None = Field(default=None, max_length=128)
 
 
 class CurrentWeatherOut(BaseModel):
