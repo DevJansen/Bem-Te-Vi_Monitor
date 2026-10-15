@@ -2,3 +2,10 @@
 *venv/
 back/*env
 front/node_modules
+
+# Python: bytecode compilado
+__pycache__/
+*.py[cod]
+
+# Build do frontend (gerado por `npm run build`)
+front/dist/
