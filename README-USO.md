@@ -79,6 +79,8 @@ O menu lateral tem seis telas. Vamos explicar cada uma como se estivéssemos jun
 
 **Para que serve:** ver "como está o movimento" sem precisar abrir nada.
 
+![Tela Painel — clima, números do dia, transmissão ao vivo e ranking de espécies](docs/images/painel.png)
+
 ---
 
 ### 📷 2. Câmeras
@@ -91,6 +93,8 @@ Onde você **cadastra e cuida** das câmeras.
 - **Importar gravação** para analisar vídeos antigos (veja abaixo).
 
 **Para que serve:** dizer ao sistema *onde* olhar e *o que ignorar*.
+
+![Tela Câmeras — importar gravação e gerenciar câmeras](docs/images/cameras.png)
 
 #### 🟢 O que são "zonas de leitura"?
 
@@ -119,6 +123,8 @@ O **álbum de fotos** dos seus pássaros. Aqui você:
 
 **Para que serve:** rever, organizar e "etiquetar" os visitantes.
 
+![Tela Galeria — cartões de visitas com foto, clipe, associação ao catálogo e IA](docs/images/galeria.png)
+
 ---
 
 ### 📖 4. Minhas Aves
@@ -134,6 +140,8 @@ sua Lista de Vida e suas estatísticas.
 
 **Para que serve:** montar a "coleção" de aves que você já registrou.
 
+![Tela Minhas Aves — catálogo local de espécies](docs/images/minhas-aves.png)
+
 ---
 
 ### 📊 5. Estatísticas & Conquistas
@@ -146,6 +154,8 @@ O "modo jogador". Aqui você encontra:
 
 **Para que serve:** se divertir e aprender os hábitos dos seus visitantes.
 
+![Tela Estatísticas & Conquistas — hábitos de observação, frequência por horário e clima](docs/images/estatisticas.png)
+
 ---
 
 ### ⚙️ 6. Configurações
@@ -156,6 +166,8 @@ Onde você ajusta o comportamento. Tem quatro blocos:
 2. **Calibração e Ajustes** — o "tempero" da IA (veja abaixo).
 3. **Preferências da IA e alertas** — quando avisar, quanto gravar e se o reconhecimento de canto está ligado.
 4. **Exclusão e limpeza de dados** — apagar visitas antigas ou tudo.
+
+![Tela Configurações — calibração, perfis prontos e controles avançados](docs/images/configuracoes.png)
 
 ---
 
