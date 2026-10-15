@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import {
   CheckCircle2,
   Eye,
@@ -55,6 +55,84 @@ const EMPTY_DRAFT: EnvironmentDraft = {
   clearDiscord: false,
   clearAiExternal: false,
 };
+
+/**
+ * Provedores de IA pré-configurados (todos compatíveis com a API de chat da
+ * OpenAI). Ao escolher um provedor, a URL base é preenchida automaticamente e
+ * os modelos sugeridos mudam de acordo com a seleção.
+ */
+type AiProviderPreset = {
+  id: string;
+  label: string;
+  baseUrl: string;
+  defaultModel: string;
+  models: string[];
+  keyPlaceholder: string;
+};
+
+const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
+  {
+    id: "openai",
+    label: "OpenAI",
+    baseUrl: "https://api.openai.com/v1",
+    defaultModel: "gpt-4o-mini",
+    models: ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1"],
+    keyPlaceholder: "sk-...",
+  },
+  {
+    id: "openrouter",
+    label: "OpenRouter",
+    baseUrl: "https://openrouter.ai/api/v1",
+    defaultModel: "openai/gpt-4o-mini",
+    models: [
+      "openai/gpt-4o-mini",
+      "google/gemini-2.0-flash-001",
+      "anthropic/claude-3.5-sonnet",
+      "meta-llama/llama-3.2-90b-vision-instruct",
+    ],
+    keyPlaceholder: "sk-or-v1-...",
+  },
+  {
+    id: "groq",
+    label: "Groq",
+    baseUrl: "https://api.groq.com/openai/v1",
+    defaultModel: "meta-llama/llama-4-scout-17b-16e-instruct",
+    models: [
+      "meta-llama/llama-4-scout-17b-16e-instruct",
+      "meta-llama/llama-4-maverick-17b-128e-instruct",
+    ],
+    keyPlaceholder: "gsk_...",
+  },
+  {
+    id: "gemini",
+    label: "Google Gemini",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    defaultModel: "gemini-2.0-flash",
+    models: ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash"],
+    keyPlaceholder: "AIza...",
+  },
+  {
+    id: "ollama",
+    label: "Ollama (local)",
+    baseUrl: "http://localhost:11434/v1",
+    defaultModel: "llava",
+    models: ["llava", "llama3.2-vision", "minicpm-v", "qwen2.5vl"],
+    keyPlaceholder: "ollama",
+  },
+];
+
+const CUSTOM_AI_PROVIDER = "custom";
+
+/** Descobre qual provedor corresponde à URL base informada (ou null). */
+function matchAiProvider(baseUrl: string): AiProviderPreset | null {
+  const normalized = baseUrl.trim().replace(/\/+$/, "").toLowerCase();
+  return (
+    AI_PROVIDER_PRESETS.find(
+      (preset) =>
+        preset.baseUrl.replace(/\/+$/, "").toLowerCase() === normalized,
+    ) ?? null
+  );
+}
 
 type Props = {
   onSettingsChange?: (settings: AppSettings) => void;
@@ -273,6 +351,31 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
     }
   };
 
+  // Provedor de IA derivado da URL base (alimenta o seletor e as sugestões).
+  const aiProvider = matchAiProvider(draft.aiExternalBaseUrl);
+  const aiProviderId = aiProvider?.id ?? CUSTOM_AI_PROVIDER;
+  const aiModelSuggestions = aiProvider?.models ?? [];
+
+  const selectAiProvider = (providerId: string) => {
+    setDraft((current) => {
+      if (providerId === CUSTOM_AI_PROVIDER) {
+        // "Personalizado": libera a URL para digitação manual.
+        return { ...current, aiExternalBaseUrl: "" };
+      }
+      const preset = AI_PROVIDER_PRESETS.find((item) => item.id === providerId);
+      if (!preset) {
+        return current;
+      }
+      // Mantém o modelo atual quando ele ainda é válido para o novo provedor.
+      const keepModel = preset.models.includes(current.aiExternalModel.trim());
+      return {
+        ...current,
+        aiExternalBaseUrl: preset.baseUrl,
+        aiExternalModel: keepModel ? current.aiExternalModel : preset.defaultModel,
+      };
+    });
+  };
+
   if (loading && !settings) {
     return (
       <p className="text-sm text-[var(--color-text-muted)]">
@@ -385,12 +488,26 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
               onClearChange={(clearAiExternal) =>
                 setDraft({ ...draft, clearAiExternal })
               }
-              hint="Compatível com qualquer provedor OpenAI: OpenAI (https://api.openai.com/v1), OpenRouter (https://openrouter.ai/api/v1), Groq (https://api.groq.com/openai/v1), Ollama (http://localhost:11434/v1) ou Gemini (https://generativelanguage.googleapis.com/v1beta/openai)."
+              hint="Escolha o provedor: a URL base é preenchida automaticamente e o campo de modelo sugere opções. Todos usam a API de chat compatível com a OpenAI."
               fields={[
+                {
+                  label: "Provedor",
+                  value: aiProviderId,
+                  placeholder: "",
+                  secret: false,
+                  options: [
+                    ...AI_PROVIDER_PRESETS.map((preset) => ({
+                      value: preset.id,
+                      label: preset.label,
+                    })),
+                    { value: CUSTOM_AI_PROVIDER, label: "Personalizado…" },
+                  ],
+                  onChange: selectAiProvider,
+                },
                 {
                   label: "URL base da API",
                   value: draft.aiExternalBaseUrl,
-                  placeholder: "https://api.openai.com/v1",
+                  placeholder: aiProvider?.baseUrl ?? "https://api.openai.com/v1",
                   secret: false,
                   onChange: (aiExternalBaseUrl) =>
                     setDraft({ ...draft, aiExternalBaseUrl }),
@@ -398,8 +515,9 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
                 {
                   label: "Modelo",
                   value: draft.aiExternalModel,
-                  placeholder: "gpt-4o-mini",
+                  placeholder: aiProvider?.defaultModel ?? "nome do modelo",
                   secret: false,
+                  suggestions: aiModelSuggestions,
                   onChange: (aiExternalModel) =>
                     setDraft({ ...draft, aiExternalModel }),
                 },
@@ -408,7 +526,7 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
                   value: draft.aiExternalApiKey,
                   placeholder: environment.ai_external_api_key_configured
                     ? "Chave salva (••••••••)"
-                    : "sk-...",
+                    : aiProvider?.keyPlaceholder ?? "chave da API",
                   secret: true,
                   onChange: (aiExternalApiKey) =>
                     setDraft({ ...draft, aiExternalApiKey, clearAiExternal: false }),
@@ -683,6 +801,10 @@ type EnvironmentFieldProps = {
   placeholder: string;
   secret: boolean;
   onChange: (value: string) => void;
+  /** Opções fixas: quando presentes, o campo vira um <select>. */
+  options?: { value: string; label: string }[];
+  /** Sugestões: campo de texto livre com lista de sugestões (datalist). */
+  suggestions?: string[];
 };
 
 function EnvironmentField({
@@ -691,8 +813,31 @@ function EnvironmentField({
   placeholder,
   secret,
   onChange,
+  options,
+  suggestions,
 }: EnvironmentFieldProps) {
   const [visible, setVisible] = useState(false);
+  const listId = useId();
+
+  if (options) {
+    return (
+      <label className="block text-xs text-[var(--color-text-muted)]">
+        {label}
+        <select
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="mt-1 w-full rounded-lg border border-dark-700 bg-dark-900 px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-emerald-500/50"
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+
   return (
     <label className="block text-xs text-[var(--color-text-muted)]">
       {label}
@@ -703,8 +848,16 @@ function EnvironmentField({
           placeholder={placeholder}
           onChange={(event) => onChange(event.target.value)}
           autoComplete="off"
+          list={suggestions && suggestions.length > 0 ? listId : undefined}
           className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)]"
         />
+        {suggestions && suggestions.length > 0 ? (
+          <datalist id={listId}>
+            {suggestions.map((item) => (
+              <option key={item} value={item} />
+            ))}
+          </datalist>
+        ) : null}
         {secret ? (
           <button
             type="button"
