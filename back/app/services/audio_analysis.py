@@ -18,6 +18,7 @@ from app.infra.camera.crypto import decrypt_secret
 from app.infra.camera.streamer import CameraStreamer, StreamConfig
 from app.infra.database.audio_repository import AudioDetectionRepository
 from app.infra.database.repository import CameraRepository, SettingsRepository
+from app.services.audio_devices import resolve_audio_input_args
 from app.services.birdnet_runtime import available_runtime, ensure_tflite_runtime
 
 logger = logging.getLogger(__name__)
@@ -115,6 +116,19 @@ def _read_detections(
     ]
 
 
+def _is_non_bird_class(common_name: str, scientific_name: str) -> bool:
+    """Indica se a detecção pertence a uma classe não-ave do BirdNET.
+
+    O modelo global (6K) também reconhece classes como "Human vocal", "Noise",
+    "Engine", "Dog", "Siren" e alguns insetos. Nessas classes o nome científico
+    e o nome comum são idênticos (por exemplo, ``Dog_Dog``), enquanto as aves
+    usam binomial de Lineu (por exemplo,
+    ``Turdus rufiventris_Sabiá-laranjeira``). Como o AviaWatch é dedicado a
+    aves, essas classes são descartadas antes da persistência.
+    """
+    return scientific_name.strip().casefold() == common_name.strip().casefold()
+
+
 class AudioCameraWorker(threading.Thread):
     def __init__(
         self,
@@ -165,10 +179,27 @@ class AudioCameraWorker(threading.Thread):
         except ValueError:
             return MIN_CONFIDENCE
 
-    def _open_audio_stream(self) -> subprocess.Popen[bytes]:
+    def _audio_input_args(self) -> list[str]:
+        """Argumentos de entrada do ffmpeg conforme a fonte de áudio.
+
+        - Câmeras RTSP/ONVIF: captura o áudio do próprio stream.
+        - Câmeras USB: captura de um dispositivo de entrada do sistema
+          (microfone USB/webcam), definido em ``audio_input_device``.
+        """
         row = self._camera_repo.get(self.camera_id)
         if row is None or not row["enabled"]:
             raise RuntimeError("Câmera indisponível ou desativada.")
+
+        if row["source_type"] == SourceType.USB.value:
+            device = self._settings_repo.get("audio_input_device", "") or None
+            args = resolve_audio_input_args(device)
+            logger.info(
+                "Análise sonora: capturando áudio do dispositivo %s (câmera %s).",
+                device or "padrão",
+                row["name"],
+            )
+            return args
+
         config = StreamConfig(
             camera_id=row["id"],
             name=row["name"],
@@ -180,19 +211,22 @@ class AudioCameraWorker(threading.Thread):
         )
         target = CameraStreamer(config).resolve_capture_target()
         if not isinstance(target, str):
-            raise RuntimeError("A análise sonora exige uma câmera RTSP.")
+            raise RuntimeError(
+                "A análise sonora exige uma câmera RTSP, ONVIF ou um "
+                "dispositivo de áudio USB."
+            )
+        return ["-rtsp_transport", "tcp", "-i", target]
 
+    def _open_audio_stream(self) -> subprocess.Popen[bytes]:
+        input_args = self._audio_input_args()
         command = [
             shutil.which("ffmpeg") or "ffmpeg",
             "-hide_banner",
             "-loglevel",
             "error",
-            "-rtsp_transport",
-            "tcp",
             "-threads",
             "1",
-            "-i",
-            target,
+            *input_args,
             "-vn",
             "-ac",
             "1",
@@ -230,6 +264,14 @@ class AudioCameraWorker(threading.Thread):
             if not common_name or not scientific_name:
                 logger.warning(
                     "BirdNET returned an incomplete detection for camera %s",
+                    self.camera_id,
+                )
+                continue
+            if _is_non_bird_class(common_name, scientific_name):
+                # Ruídos e vozes humanas não interessam a um app de aves.
+                logger.debug(
+                    "BirdNET: classe não-ave ignorada (%s) camera=%s",
+                    common_name,
                     self.camera_id,
                 )
                 continue
@@ -346,22 +388,44 @@ class AudioAnalysisService(threading.Thread):
         with self._lock:
             self._worker_status[camera_id] = (state, message)
 
+    @staticmethod
+    def _worker_signature(row: dict[str, Any], audio_input_device: str) -> str:
+        """Assinatura que invalida o worker quando a fonte de áudio muda.
+
+        Para câmeras USB o dispositivo de entrada escolhido nas configurações
+        entra na assinatura, de modo que trocar o microfone reinicia o worker.
+        """
+        base = str(row.get("updated_at", ""))
+        if row["source_type"] == SourceType.USB.value:
+            return f"{base}|audio={audio_input_device}"
+        return base
+
     def _reconcile(self) -> None:
         enabled_value = self.settings_repo.get("audio_analysis_enabled", "false")
         enabled = enabled_value.lower() in {"1", "true", "yes", "on"}
         rows = self.camera_repo.list_all() if enabled else []
-        eligible = {
-            row["id"]: row
-            for row in rows
-            if row["enabled"] and row["source_type"] in {"rtsp", "onvif"}
-        }
+        # Câmeras RTSP/ONVIF capturam o áudio do próprio stream; câmeras USB usam
+        # um único dispositivo de entrada do sistema (microfone USB/webcam), então
+        # apenas a primeira delas é considerada para evitar disputa pelo aparelho.
+        eligible: dict[str, dict[str, Any]] = {}
+        usb_assigned = False
+        for row in rows:
+            if not row["enabled"]:
+                continue
+            source_type = row["source_type"]
+            if source_type in {"rtsp", "onvif"}:
+                eligible[row["id"]] = row
+            elif source_type == SourceType.USB.value and not usb_assigned:
+                eligible[row["id"]] = row
+                usb_assigned = True
+        audio_input_device = self.settings_repo.get("audio_input_device", "") or ""
         with self._lock:
             stale_ids = {
                 camera_id
                 for camera_id in self._workers
                 if camera_id not in eligible
                 or self._worker_signatures.get(camera_id)
-                != str(eligible[camera_id].get("updated_at", ""))
+                != self._worker_signature(eligible[camera_id], audio_input_device)
             }
             stale = [self._workers.pop(camera_id) for camera_id in stale_ids]
             for camera_id in stale_ids:
@@ -382,9 +446,14 @@ class AudioAnalysisService(threading.Thread):
                         row["name"],
                         self._set_worker_status,
                     )
+                    logger.info(
+                        "Análise sonora: iniciando worker para câmera %s (fonte=%s).",
+                        row["name"],
+                        row["source_type"],
+                    )
                     self._workers[camera_id] = next_worker
-                    self._worker_signatures[camera_id] = str(
-                        row.get("updated_at", "")
+                    self._worker_signatures[camera_id] = self._worker_signature(
+                        row, audio_input_device
                     )
                     self._worker_status[camera_id] = (
                         "starting",
@@ -436,7 +505,9 @@ class AudioAnalysisService(threading.Thread):
             return {
                 "enabled": True,
                 "status": "no_cameras",
-                "message": "Nenhuma câmera RTSP ou ONVIF habilitada para análise.",
+                "message": (
+                    "Nenhuma câmera RTSP/ONVIF ou USB habilitada para análise."
+                ),
                 "monitored_cameras": 0,
             }
 

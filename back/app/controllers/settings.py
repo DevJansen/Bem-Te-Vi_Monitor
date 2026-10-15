@@ -100,6 +100,7 @@ def _build_out() -> AppSettingsOut:
             1.0,
             max(0.70, _float("audio_confidence_threshold", 0.70)),
         ),
+        audio_input_device=(stored.get("audio_input_device") or "").strip(),
         notifications_enabled=_bool("notifications_enabled", True),
         min_confidence_notify=_float(
             "min_confidence_notify", settings.yolo_confidence
@@ -270,6 +271,8 @@ async def update_app_settings(payload: AppSettingsUpdate) -> AppSettingsOut:
                 "audio_confidence_threshold",
                 str(payload.audio_confidence_threshold),
             )
+        if payload.audio_input_device is not None:
+            repo.set("audio_input_device", payload.audio_input_device.strip())
         if payload.extra is not None:
             repo.set_json("extra_json", payload.extra)
         return _build_out()

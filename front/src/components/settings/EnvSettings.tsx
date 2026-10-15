@@ -5,6 +5,7 @@ import {
   EyeOff,
   LoaderCircle,
   MessageCircle,
+  RefreshCw,
   Send,
   ShieldAlert,
   Sparkles,
@@ -12,6 +13,7 @@ import {
 } from "lucide-react";
 import type {
   AppSettings,
+  AudioInputDevices,
   EnvironmentIntegration,
   EnvironmentSettings,
   EnvironmentSettingsUpdate,
@@ -21,6 +23,7 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import {
   deleteAllVisits,
   deleteOlderVisits,
+  fetchAudioInputDevices,
   fetchEnvironmentSettings,
   fetchSettings,
   getErrorMessage,
@@ -70,6 +73,8 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
     ok: boolean;
   } | null>(null);
   const [retentionDays, setRetentionDays] = useState(30);
+  const [audioDevices, setAudioDevices] = useState<AudioInputDevices | null>(null);
+  const [loadingDevices, setLoadingDevices] = useState(false);
   const [historyCleanup, setHistoryCleanup] = useState<
     { mode: "old"; days: number } | { mode: "all" } | null
   >(null);
@@ -97,6 +102,23 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
     void load();
   }, []);
 
+  // Lista os dispositivos de entrada de áudio quando a análise sonora está ativa.
+  const loadAudioDevices = async () => {
+    setLoadingDevices(true);
+    try {
+      setAudioDevices(await fetchAudioInputDevices());
+    } catch (err) {
+      setError(getErrorMessage(err, "Falha ao listar os dispositivos de áudio"));
+    } finally {
+      setLoadingDevices(false);
+    }
+  };
+
+  useEffect(() => {
+    if (settings?.audio_analysis_enabled) void loadAudioDevices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings?.audio_analysis_enabled]);
+
   useEffect(() => {
     if (!message) return;
     const timeout = window.setTimeout(() => setMessage(null), 4000);
@@ -113,6 +135,7 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
         notifications_enabled: settings.notifications_enabled,
         audio_analysis_enabled: settings.audio_analysis_enabled,
         audio_confidence_threshold: settings.audio_confidence_threshold,
+        audio_input_device: settings.audio_input_device,
         min_confidence_notify: settings.min_confidence_notify,
         pre_record_seconds: settings.pre_record_seconds,
         post_record_seconds: settings.post_record_seconds,
@@ -401,11 +424,66 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
                 Ativar detecção sonora com BirdNET
               </span>
               <span className="mt-1 block text-xs">
-                Analisa o áudio das câmeras RTSP/ONVIF habilitadas em segundo
-                plano. Requer FFmpeg e as dependências de bioacústica instaladas.
+                Analisa o áudio das câmeras RTSP/ONVIF e de microfones USB em
+                segundo plano. Requer FFmpeg e as dependências de bioacústica.
               </span>
             </span>
           </label>
+
+          {settings.audio_analysis_enabled ? (
+            <div className="sm:col-span-2">
+              <label
+                htmlFor="audio-input-device"
+                className="block text-xs font-medium text-[var(--color-text-muted)]"
+              >
+                Dispositivo de áudio (microfone USB/webcam)
+              </label>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <select
+                  id="audio-input-device"
+                  value={settings.audio_input_device}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      audio_input_device: e.target.value,
+                    })
+                  }
+                  className="min-w-56 flex-1 rounded-lg border border-dark-700 bg-dark-900 px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-emerald-500/50"
+                >
+                  <option value="">
+                    {audioDevices && audioDevices.devices.length > 0
+                      ? "Automático (primeiro dispositivo)"
+                      : "Nenhum dispositivo detectado"}
+                  </option>
+                  {(audioDevices?.devices ?? []).map((device) => (
+                    <option key={device.name} value={device.name}>
+                      {device.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => void loadAudioDevices()}
+                  disabled={loadingDevices}
+                  className="inline-flex items-center gap-2 rounded-lg border border-dark-700 px-3 py-2 text-xs font-medium text-[var(--color-text-muted)] transition hover:text-emerald-300 disabled:opacity-50"
+                >
+                  <RefreshCw
+                    className={`h-3.5 w-3.5 ${
+                      loadingDevices ? "animate-spin" : ""
+                    }`}
+                  />
+                  Atualizar lista
+                </button>
+              </div>
+              <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                Usado pelas câmeras USB. Câmeras RTSP/ONVIF capturam o áudio do
+                próprio stream.
+                {audioDevices
+                  ? ` Plataforma detectada: ${audioDevices.platform}.`
+                  : ""}
+              </p>
+            </div>
+          ) : null}
           <NumberField
             label="Confiança mínima do BirdNET (%)"
             value={Math.round(settings.audio_confidence_threshold * 100)}

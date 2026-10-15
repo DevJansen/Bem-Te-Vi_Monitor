@@ -6,6 +6,7 @@ import type {
   AnalyticsSummary,
   AudioAnalysisStatus,
   AudioDetection,
+  AudioInputDevices,
   BirdSpecies,
   BirdSpeciesCreatePayload,
   BirdVisit,
@@ -301,6 +302,12 @@ export async function fetchAudioAnalysisStatus(): Promise<AudioAnalysisStatus> {
   const { data } = await api.get<AudioAnalysisStatus>(
     "/audio-detections/status",
   );
+  return data;
+}
+
+/** Lista os dispositivos de entrada de áudio disponíveis no sistema. */
+export async function fetchAudioInputDevices(): Promise<AudioInputDevices> {
+  const { data } = await api.get<AudioInputDevices>("/audio-detections/devices");
   return data;
 }
 

@@ -236,6 +236,7 @@ export type AppSettings = {
   post_record_seconds: number;
   audio_analysis_enabled: boolean;
   audio_confidence_threshold: number;
+  audio_input_device: string;
   notifications_enabled: boolean;
   min_confidence_notify: number;
   extra: Record<string, unknown>;
@@ -249,6 +250,7 @@ export type AppSettingsUpdate = {
   post_record_seconds?: number;
   audio_analysis_enabled?: boolean;
   audio_confidence_threshold?: number;
+  audio_input_device?: string;
   extra?: Record<string, unknown>;
 };
 
@@ -291,6 +293,19 @@ export type AudioAnalysisStatus = {
   status: "disabled" | "starting" | "monitoring" | "no_cameras" | "error";
   message: string;
   monitored_cameras: number;
+};
+
+/** Dispositivo de entrada de áudio disponível no sistema. */
+export type AudioInputDevice = {
+  name: string;
+  identifier: string | null;
+};
+
+/** Lista de dispositivos de áudio para o seletor das configurações. */
+export type AudioInputDevices = {
+  platform: string;
+  devices: AudioInputDevice[];
+  selected: string;
 };
 
 export type HealthResponse = {

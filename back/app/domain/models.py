@@ -182,6 +182,9 @@ class AppSettingsOut(BaseModel):
     post_record_seconds: float
     audio_analysis_enabled: bool = False
     audio_confidence_threshold: float = Field(default=0.70, ge=0.70, le=1.0)
+    # Dispositivo de entrada de áudio (microfone USB/webcam). Vazio = primeiro
+    # dispositivo disponível no sistema.
+    audio_input_device: str = ""
     notifications_enabled: bool = True
     min_confidence_notify: float = 0.35
     extra: dict[str, Any] = Field(default_factory=dict)
@@ -198,7 +201,23 @@ class AppSettingsUpdate(BaseModel):
     audio_confidence_threshold: float | None = Field(
         default=None, ge=0.70, le=1.0
     )
+    audio_input_device: str | None = None
     extra: dict[str, Any] | None = None
+
+
+class AudioInputDeviceOut(BaseModel):
+    """Dispositivo de entrada de áudio disponível no sistema."""
+
+    name: str
+    identifier: str | None = None
+
+
+class AudioInputDevicesOut(BaseModel):
+    """Lista de dispositivos de áudio, para o seletor das configurações."""
+
+    platform: str
+    devices: list[AudioInputDeviceOut] = Field(default_factory=list)
+    selected: str = ""
 
 
 class CalibrationProfile(str, Enum):
