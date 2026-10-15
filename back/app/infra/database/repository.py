@@ -37,6 +37,20 @@ def _media_url(relative: str | None) -> str | None:
     return f"/captures/{normalized}"
 
 
+def _clip_url(relative: str | None) -> str | None:
+    """URL de streaming do clipe (endpoint dedicado com suporte a Range).
+
+    Os clipes ficam em `captures/clips/`; servimos apenas o nome do arquivo via
+    `/api/videos/<arquivo>`, que trata corretamente o player HTML5.
+    """
+    if not relative:
+        return None
+    name = Path(relative.replace("\\", "/")).name
+    if not name:
+        return None
+    return f"/api/videos/{name}"
+
+
 class CameraRepository:
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
@@ -436,7 +450,7 @@ class VisitRepository:
             dwell_seconds=float(row["dwell_seconds"]),
             clip_path=clip_path,
             thumbnail_path=thumb_path,
-            clip_url=_media_url(clip_path),
+            clip_url=_clip_url(clip_path),
             thumbnail_url=_media_url(thumb_path),
             bbox=bbox,
             zone_id=row.get("zone_id"),

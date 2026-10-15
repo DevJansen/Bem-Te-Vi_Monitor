@@ -257,7 +257,8 @@ Alterações nas zonas reiniciam o pipeline daquela câmera.
 ### Consultar visitas e pedir identificação externa
 
 - **Painel:** acompanhe streams, indicadores e estatísticas.
-- **Galeria:** consulte visitas, thumbnails e clipes e use a exportação CSV.
+- **Galeria:** consulte visitas e thumbnails, reproduza os clipes no player
+  embutido (clique na miniatura ou em **Reproduzir clipe**) e use a exportação CSV.
 - Em uma visita genérica/não identificada, clique em **🤖 Perguntar à IA Externa**.
   A Galeria mostra **Analisando ave...** durante a solicitação e atualiza o cartão
   com os nomes comum e científico retornados.
@@ -409,7 +410,8 @@ aviawatch/
 | GET | `/api/audio-detections?limit=30` | Detecções sonoras recentes, confiança e visita visual associada |
 | GET | `/api/audio-detections/status` | Estado da análise BirdNET e câmeras monitoradas |
 | GET | `/api/video-feed/{id}?boxes=true` | Stream MJPEG com caixas de detecção (use `boxes=false` para ocultá-las) |
-| GET | `/captures/...` | Clipes e thumbnails |
+| GET | `/api/videos/{arquivo}` | Streaming do clipe (MP4/H.264) com suporte a requisições `Range` |
+| GET | `/captures/...` | Thumbnails e demais mídias estáticas |
 
 A aba **Estatísticas & Conquistas** do painel mostra os hábitos de visita e a Life
 List. Uma espécie é desbloqueada quando uma visita é associada a ela no catálogo;
@@ -450,6 +452,15 @@ saídas temporárias da zona de até dez segundos são consideradas a mesma pres
 Snapshots, recortes e clipes vencidos são limpos diariamente conforme
 `MEDIA_RETENTION_DAYS`, sem remover registros do SQLite.
 
+Os clipes são gravados sempre em `.mp4`: o OpenCV grava os quadros
+(`avc1`/`H264` e, em último caso, `mp4v`) e, logo em seguida, o `ffmpeg` reencoda
+o resultado para **H.264** (`yuv420p`, `+faststart`) — o formato que qualquer
+navegador reproduz. Sem o `ffmpeg` no `PATH`, o arquivo do OpenCV é mantido (com
+aviso no log quando não for H.264). Arquivos inválidos ou corrompidos são
+descartados. A reprodução na Galeria usa o endpoint `/api/videos/{arquivo}`, que
+responde a requisições `Range` (status `206`) para permitir avançar e rebobinar o
+vídeo sem baixá-lo por inteiro.
+
 ---
 
 ## Solução de problemas
@@ -464,6 +475,7 @@ Snapshots, recortes e clipes vencidos são limpos diariamente conforme
 | Identificação externa indisponível | Confira `AI_EXTERNAL_API_KEY`, o modelo com suporte a visão e o acesso de rede à API OpenAI |
 | Importação de gravação rejeitada | Use MP4, AVI ou MKV com menos de 2 GB e associe o arquivo a uma câmera cadastrada |
 | Análise offline falhou | Confirme se o vídeo abre em outro player e se o modelo YOLO foi carregado; tente exportar novamente o arquivo do cartão |
+| Clipe não reproduz na Galeria | Os clipes novos usam H.264 (compatível com navegadores). Instale o `ffmpeg` e coloque-o no `PATH` para garantir a melhor compatibilidade. Clipes antigos em `mp4v` podem não abrir no player: use **Baixar clipe** |
 | Teste de conexão falha | Confirme token/URL e acesso à Internet; os testes não enviam mensagens e usam os valores digitados ou salvos |
 | Tela de variáveis retorna 403 | A configuração de segredos só aceita conexões locais; abra o painel local padrão em `127.0.0.1` |
 | YOLO / ultralytics lento na 1ª vez | Normal — baixa pesos e dependências na primeira instalação |

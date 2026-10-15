@@ -12,6 +12,7 @@ from app.controllers import (
     species,
     stats,
     video_feed,
+    videos,
     visits,
 )
 
@@ -26,5 +27,6 @@ api_router.include_router(settings.router)
 api_router.include_router(stats.router)
 api_router.include_router(analytics.router)
 api_router.include_router(video_feed.router)
+api_router.include_router(videos.router)
 
 __all__ = ["api_router"]

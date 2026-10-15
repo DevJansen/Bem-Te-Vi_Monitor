@@ -4,6 +4,7 @@ import {
   Download,
   Filter,
   LoaderCircle,
+  Play,
   Trash2,
 } from "lucide-react";
 import type { BirdSpecies, BirdVisit } from "@/types";
@@ -16,6 +17,7 @@ import {
 } from "@/services/api";
 import { formatDateTime, formatPercent, formatSpeciesLabel } from "@/utils/format";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { VideoPlayerModal } from "@/components/common/VideoPlayerModal";
 
 type Props = {
   visits: BirdVisit[];
@@ -53,6 +55,8 @@ export function GalleryGrid({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deletedVisitIds, setDeletedVisitIds] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<string | null>(null);
+  // Visita cujo clipe está aberto no player de vídeo (null = fechado).
+  const [playingVisit, setPlayingVisit] = useState<BirdVisit | null>(null);
 
   const currentVisits = useMemo(
     () =>
@@ -292,7 +296,7 @@ export function GalleryGrid({
                 key={visit.id}
                 className="overflow-hidden rounded-xl border border-dark-700 bg-dark-800"
               >
-                <div className="aspect-video bg-dark-900">
+                <div className="relative aspect-video bg-dark-900">
                   {thumb ? (
                     <img
                       src={thumb}
@@ -305,6 +309,18 @@ export function GalleryGrid({
                       Sem thumbnail
                     </div>
                   )}
+                  {clip ? (
+                    <button
+                      type="button"
+                      onClick={() => setPlayingVisit(visit)}
+                      aria-label={`Reproduzir clipe de ${formatSpeciesLabel(visit.species)}`}
+                      className="group absolute inset-0 flex items-center justify-center bg-black/0 transition hover:bg-black/40"
+                    >
+                      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-emerald-300 transition group-hover:scale-105 group-hover:bg-black/80">
+                        <Play className="h-5 w-5 translate-x-0.5 fill-current" />
+                      </span>
+                    </button>
+                  ) : null}
                 </div>
                 <div className="space-y-1 p-3">
                   <p className="font-medium text-[var(--color-text-primary)]">
@@ -374,14 +390,14 @@ export function GalleryGrid({
                     {visit.camera_name ?? visit.camera_id}
                   </p>
                   {clip ? (
-                    <a
-                      href={clip}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-block pt-1 text-xs font-medium text-emerald-400 hover:text-emerald-500"
+                    <button
+                      type="button"
+                      onClick={() => setPlayingVisit(visit)}
+                      className="mt-1 inline-flex items-center gap-1 pt-1 text-xs font-medium text-emerald-400 transition hover:text-emerald-500"
                     >
-                      Abrir clipe
-                    </a>
+                      <Play className="h-3.5 w-3.5 fill-current" />
+                      Reproduzir clipe
+                    </button>
                   ) : null}
                   <button
                     type="button"
@@ -423,6 +439,20 @@ export function GalleryGrid({
         busy={deleting}
         onCancel={() => setDeletingVisit(null)}
         onConfirm={() => void confirmDeleteVisit()}
+      />
+      <VideoPlayerModal
+        open={playingVisit !== null}
+        title={
+          playingVisit
+            ? `${formatSpeciesLabel(playingVisit.species)} · ${formatDateTime(playingVisit.detected_at)}`
+            : ""
+        }
+        src={
+          playingVisit
+            ? resolveMediaUrl(playingVisit.clip_url ?? playingVisit.clip_path)
+            : null
+        }
+        onClose={() => setPlayingVisit(null)}
       />
     </section>
   );
