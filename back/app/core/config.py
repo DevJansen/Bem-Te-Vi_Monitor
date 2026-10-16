@@ -88,6 +88,18 @@ class Settings(BaseModel):
     # Classes extras do COCO (ids separados por vírgula) quando a fauna noturna
     # está ligada. Padrão: 15 (cat) e 16 (dog).
     night_fauna_class_ids: str = "15,16"
+    # --- Análise offline de vídeos (cartão de memória) ---
+    # Limiar de confiança dedicado à análise offline: mais sensível que o da
+    # captura ao vivo (0.25) para encontrar aves distantes ou paradas.
+    offline_yolo_confidence: float = Field(default=0.25, ge=0.05, le=1.0)
+    # Passo de amostragem de quadros (1 = todos; 2 = um a cada dois). Valores
+    # maiores aceleram a análise em vídeos longos.
+    offline_frame_stride: int = Field(default=2, ge=1, le=10)
+    # Número máximo de clipes curtos gerados (um por ave distinta) para o botão
+    # "assistir ao trecho" na Galeria. Limita o custo de CPU/tempo.
+    offline_max_clips: int = Field(default=12, ge=0, le=100)
+    # Duração (segundos) do trecho salvo ao redor da melhor captura de cada ave.
+    offline_clip_seconds: float = Field(default=4.0, ge=1.0, le=20.0)
 
     @property
     def db_path(self) -> Path:
@@ -261,6 +273,19 @@ class Settings(BaseModel):
             .lower()
             in {"1", "true", "yes", "on", "sim"},
             night_fauna_class_ids=os.getenv("NIGHT_FAUNA_CLASS_IDS", "15,16"),
+            offline_yolo_confidence=min(
+                1.0,
+                max(0.05, float(os.getenv("OFFLINE_YOLO_CONFIDENCE", "0.25"))),
+            ),
+            offline_frame_stride=min(
+                10, max(1, int(os.getenv("OFFLINE_FRAME_STRIDE", "2")))
+            ),
+            offline_max_clips=min(
+                100, max(0, int(os.getenv("OFFLINE_MAX_CLIPS", "12")))
+            ),
+            offline_clip_seconds=min(
+                20.0, max(1.0, float(os.getenv("OFFLINE_CLIP_SECONDS", "4.0")))
+            ),
         )
 
 

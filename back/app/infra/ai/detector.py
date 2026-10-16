@@ -162,21 +162,41 @@ class BirdDetector:
                 logger.exception("Falha ao carregar o modelo YOLO %s", self.model_name)
                 return False
 
-    def detect(self, frame: np.ndarray) -> list[Detection]:
+    def detect(
+        self,
+        frame: np.ndarray,
+        *,
+        confidence: float | None = None,
+        class_ids: Iterable[int] | None = None,
+    ) -> list[Detection]:
+        """Executa a inferência e devolve as detecções.
+
+        Os parâmetros opcionais permitem que a análise offline use um limiar
+        mais sensível e um conjunto de classes específico **sem** alterar o
+        estado do detector compartilhado com a captura ao vivo.
+        """
         if frame is None or frame.size == 0:
             return []
         with self._lock:
             if self._model is None:
                 if not self.load():
                     return []
+            threshold = clamp_confidence(
+                self.confidence if confidence is None else confidence
+            )
+            target_classes = (
+                sorted({int(value) for value in class_ids})
+                if class_ids
+                else sorted(self._class_ids)
+            )
             try:
                 results = self._model.predict(
                     source=frame,
                     # Aplica o limiar calibrado (com o piso de segurança da faixa).
-                    conf=clamp_confidence(self.confidence),
+                    conf=threshold,
                     # Filtro de classe: por padrão somente aves (COCO id 14);
                     # expandido para fauna noturna quando o usuário habilita.
-                    classes=sorted(self._class_ids),
+                    classes=target_classes,
                     verbose=False,
                 )
             except Exception:

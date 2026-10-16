@@ -117,6 +117,10 @@ O arquivo `back\.env.example` contém os nomes e os valores padrão. Copie-o par
 | `NIGHT_VISION_DENOISE` | Redução de ruído leve antes do realce | Padrão: `true` |
 | `NIGHT_FAUNA_ENABLED` | Expande a detecção para fauna noturna além de aves | Padrão: `false` |
 | `NIGHT_FAUNA_CLASS_IDS` | Classes extras do COCO quando a fauna noturna está ligada | Padrão: `15,16` (gato, cachorro) |
+| `OFFLINE_YOLO_CONFIDENCE` | Limiar de confiança dedicado à análise offline (mais sensível) | Padrão: `0.25`; faixa: `0.05` a `1.0` |
+| `OFFLINE_FRAME_STRIDE` | Passo de amostragem de quadros na análise offline | Padrão: `2` (um a cada dois quadros); faixa: `1` a `10` |
+| `OFFLINE_MAX_CLIPS` | Máximo de trechos curtos gerados por vídeo (um por ave) | Padrão: `12`; faixa: `0` a `100` |
+| `OFFLINE_CLIP_SECONDS` | Duração (s) do trecho salvo ao redor da melhor captura | Padrão: `4.0`; faixa: `1.0` a `20.0` |
 | `ALLOW_REMOTE_ACCESS` | Libera acesso à API fora do computador local | Padrão: `false` (somente loopback). Use `true` só com VPN/proxy autenticado |
 | `ALLOWED_HOSTS` | Hosts aceitos no cabeçalho `Host` | Padrão: `127.0.0.1,localhost` |
 
@@ -397,23 +401,37 @@ associar manualmente as detecções com as espécies conhecidas.
 ### Analisar vídeos gravados ou cartões de memória
 
 1. Copie a gravação do cartão de memória para o computador.
-2. Abra a aba **Câmeras** e, em **Importar gravação / cartão de memória**, escolha
-   a câmera à qual as visitas devem ser associadas.
-3. Selecione um arquivo `.mp4`, `.avi` ou `.mkv` de até 2 GB. É preciso cadastrar
-   uma câmera antes: as zonas dessa câmera são usadas para filtrar as detecções.
-4. Acompanhe o envio e depois o progresso da análise. O backend percorre os quadros
-   localmente com YOLOv8, aplica as zonas de inclusão/exclusão e registra uma visita
-   quando a presença atende ao tempo mínimo configurado para a zona.
-5. Ao concluir, a aplicação atualiza a Galeria e abre o histórico com as visitas e
-   thumbnails encontradas. O snapshot é extraído do quadro que confirmou a visita;
-   o vídeo importado temporariamente é apagado ao terminar.
+2. Abra a aba **Câmeras** e, na área **Análise de Cartão de Memória**, escolha a
+   câmera à qual as visitas devem ser associadas (as zonas dessa câmera filtram
+   as detecções).
+3. **Arraste e solte** um ou vários arquivos `.mp4`, `.avi`, `.mov` ou `.mkv`
+   (até 2 GB cada) na área pontilhada — ou clique para selecionar. É preciso
+   cadastrar uma câmera antes: as zonas dessa câmera são usadas para filtrar as
+   detecções.
+4. Acompanhe o envio e a análise. A **barra de progresso flutuante** mostra, em
+   tempo real, o percentual e o quadro processado (ex.: `65% — Processando
+   frame 450/1200…`) e **continua visível ao trocar de aba**, porque quem
+   processa é o backend, não o navegador.
+5. Ao concluir, aparece um cartão com selo de sucesso e a contagem exata (ex.:
+   **🐦 3 Pássaros Encontrados**), com miniaturas das capturas e o botão
+   **Ver na Galeria** para assistir aos trechos.
+
+A IA da análise offline é **mais sensível** que a captura ao vivo: usa um limiar
+de confiança dedicado (`OFFLINE_YOLO_CONFIDENCE`, padrão `0.25`) e agrupa as
+detecções em *aves distintas* por associação temporal (IoU + proximidade de
+centro). Assim, uma ave contínua conta **uma** vez, mesmo aparecendo em centenas
+de quadros, e aves diferentes no mesmo vídeo contam separadamente. Para cada ave
+distinta o sistema salva a melhor miniatura e o recorte ampliado, cria
+automaticamente uma visita na Galeria e gera um trecho curto
+(`OFFLINE_CLIP_SECONDS`) para o botão de reprodução.
 
 O horário de cada evento é estimado somando a posição temporal do quadro no vídeo
 à data de última modificação do arquivo, enviada pelo navegador. Essa data pode não
 corresponder ao horário original se o arquivo foi copiado sem preservar seus metadados.
 O endpoint aceita upload, não caminhos arbitrários do disco do computador que executa
-o backend. Uma análise em andamento e seu progresso ficam na memória do backend e não
-são restaurados se o serviço for reiniciado. A fila aceita até cinco análises
+o backend. O **estado de cada análise fica no backend** (`GET /api/offline/jobs`), então
+ele não se perde se o painel desconectar, recarregar ou trocar de aba; o histórico é
+mantido enquanto o serviço está em execução. A fila aceita até cinco análises
 aguardando ou em execução.
 
 ### Configurar e testar integrações pelo painel
@@ -512,8 +530,11 @@ aviawatch/
 | GET | `/api/species` | Listar o catálogo local de aves |
 | POST | `/api/species` | Cadastrar uma espécie (multipart: `common_name`, `scientific_name`, `description`, `reference_image` opcional) |
 | DELETE | `/api/species/{id}` | Excluir espécie e sua foto; preservar visitas sem associação |
-| POST | `/api/recordings/import` | Enviar MP4/AVI/MKV e iniciar análise offline (multipart: `file`, `camera_id`, `recorded_at`) |
-| GET | `/api/recordings/{analysis_id}` | Consultar status e progresso da análise em segundo plano |
+| POST | `/api/offline/upload` | Enviar MP4/AVI/MOV/MKV e iniciar a análise offline em background (multipart: `file`, `camera_id`, `recorded_at`) |
+| GET | `/api/offline/jobs` | Estado de todas as análises offline (em andamento e concluídas) com progresso, contagem de aves e detecções |
+| GET | `/api/offline/jobs/{job_id}` | Estado detalhado de uma análise offline |
+| DELETE | `/api/offline/jobs/{job_id}` | Remover do histórico uma análise já finalizada |
+| POST | `/api/offline/jobs/clear` | Limpar do histórico todas as análises finalizadas |
 | DELETE | `/api/events/{event_id}` | Excluir visita individual e sua mídia local associada |
 | DELETE | `/api/events?older_than_days=N` | Excluir visitas anteriores ao limite de dias informado |
 | DELETE | `/api/events/all` | Apagar todo o histórico e a mídia; exige confirmação `EXCLUIR TUDO` |
@@ -630,7 +651,7 @@ espaço.
 | Front sem dados / 404 nas rotas | Confirme que a API em `:8000` é a do AviaWatch atual (`/docs` deve listar `/api/visits`, `/api/stats`, `/api/settings`). Outro processo antigo na porta 8000 causa 404 |
 | Front sem dados | Confirme http://127.0.0.1:8000/api/health e a janela do backend |
 | Identificação externa indisponível | Confira `AI_EXTERNAL_API_KEY`, `AI_EXTERNAL_BASE_URL`, o modelo com suporte a visão e o acesso de rede ao provedor escolhido |
-| Importação de gravação rejeitada | Use MP4, AVI ou MKV com menos de 2 GB e associe o arquivo a uma câmera cadastrada |
+| Importação de gravação rejeitada | Use MP4, AVI, MOV ou MKV com menos de 2 GB e associe o arquivo a uma câmera cadastrada |
 | Análise offline falhou | Confirme se o vídeo abre em outro player e se o modelo YOLO foi carregado; tente exportar novamente o arquivo do cartão |
 | Clipe não reproduz na Galeria | Os clipes novos usam H.264 (compatível com navegadores). Instale o `ffmpeg` e coloque-o no `PATH` para garantir a melhor compatibilidade. Clipes antigos em `mp4v` podem não abrir no player: use **Baixar clipe** |
 | Teste de conexão falha | Confirme token/URL e acesso à Internet; os testes não enviam mensagens e usam os valores digitados ou salvos |

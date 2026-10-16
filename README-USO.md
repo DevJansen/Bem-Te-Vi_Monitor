@@ -92,7 +92,7 @@ Onde você **cadastra e cuida** das câmeras.
 - **Adicionar câmera:** escolha o tipo (webcam `USB`, ou câmera IP `RTSP`/`ONVIF`) e preencha o endereço e, se houver, usuário e senha.
 - **Ligar/desligar** cada câmera com um toque.
 - **Desenhar zonas** (veja abaixo).
-- **Importar gravação** para analisar vídeos antigos (veja abaixo).
+- **Análise de Cartão de Memória** para analisar vídeos antigos (veja abaixo).
 
 **Para que serve:** dizer ao sistema *onde* olhar e *o que ignorar*.
 
@@ -296,11 +296,17 @@ IA estiver bem certa (ou avisa até as duvidosas).
 
 Tem gravações antigas de uma câmera? Dá para analisar:
 
-1. Copie o vídeo (MP4, AVI ou MKV, até 2 GB) para o computador.
-2. Em **Câmeras → Importar gravação**, escolha a câmera e o arquivo.
-3. O sistema analisa o vídeo **no seu computador** (não envia nada para a internet) e cria
-   visitas e fotos automaticamente.
-4. As zonas que você desenhou naquela câmera são usadas para ignorar áreas indesejadas.
+1. Copie o vídeo (MP4, AVI, MOV ou MKV, até 2 GB) para o computador.
+2. Em **Câmeras → Análise de Cartão de Memória**, escolha a câmera e **arraste o
+   arquivo** para a área pontilhada (ou clique para selecionar). Pode soltar vários
+   de uma vez.
+3. O sistema analisa o vídeo **no seu computador** (não envia nada para a internet) e
+   cria visitas e fotos automaticamente. Uma **barrinha de progresso** mostra o andamento
+   e continua aparecendo mesmo se você trocar para a Galeria e voltar.
+4. Ao terminar, aparece um cartão dizendo quantos pássaros foram encontrados (ex.:
+   **🐦 3 Pássaros Encontrados**), com as melhores fotos. Clique em **Ver na Galeria**
+   para assistir aos trechos.
+5. As zonas que você desenhou naquela câmera são usadas para ignorar áreas indesejadas.
 
 ---
 

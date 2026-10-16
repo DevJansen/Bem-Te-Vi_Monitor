@@ -1,4 +1,16 @@
-"""Routes for importing and tracking offline video analyses."""
+"""Rotas da área de importação e análise offline de vídeos (cartão de memória).
+
+Endpoints:
+
+- ``POST /api/offline/upload`` — recebe o vídeo, guarda em disco e dispara a
+  análise em background, devolvendo o ``job_id`` imediatamente.
+- ``GET  /api/offline/jobs`` — lista o estado de todos os jobs (em andamento e
+  concluídos). É o que mantém a barra de progresso viva mesmo se o painel
+  desconectar ou trocar de aba.
+- ``GET  /api/offline/jobs/{job_id}`` — estado detalhado de um job.
+- ``DELETE /api/offline/jobs/{job_id}`` — remove um job finalizado do histórico.
+- ``POST /api/offline/jobs/clear`` — limpa todos os jobs finalizados.
+"""
 
 from __future__ import annotations
 
@@ -10,19 +22,20 @@ from pathlib import Path
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
 from app.core.config import get_settings
-from app.domain.models import RecordingAnalysisOut
+from app.domain.models import OfflineJobOut
 from app.infra.database.repository import CameraRepository
-from app.services.recording_analysis import (
+from app.services.offline_analysis import (
     ALLOWED_EXTENSIONS,
     MAX_RECORDING_BYTES,
-    get_recording_analysis_service,
+    get_offline_analysis_service,
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/recordings", tags=["recordings"])
+router = APIRouter(prefix="/api/offline", tags=["offline"])
 
 
 def _parse_recorded_at(value: str | None) -> datetime:
+    """Converte a data informada em um ``datetime`` UTC (ou usa 'agora')."""
     if not value:
         return datetime.now(timezone.utc)
     try:
@@ -38,17 +51,19 @@ def _parse_recorded_at(value: str | None) -> datetime:
 
 
 @router.post(
-    "/import",
-    response_model=RecordingAnalysisOut,
+    "/upload",
+    response_model=OfflineJobOut,
     status_code=status.HTTP_202_ACCEPTED,
 )
-async def import_recording(
+async def upload_offline_video(
     camera_id: str = Form(...),
     recorded_at: str | None = Form(default=None),
     file: UploadFile = File(...),
-) -> RecordingAnalysisOut:
+) -> OfflineJobOut:
+    """Recebe o vídeo e inicia a análise offline em background."""
     settings = get_settings()
-    if CameraRepository(settings.db_path).get(camera_id) is None:
+    camera = CameraRepository(settings.db_path).get(camera_id)
+    if camera is None:
         raise HTTPException(status_code=404, detail="A câmera selecionada não existe.")
 
     filename = Path((file.filename or "").replace("\\", "/")).name
@@ -56,8 +71,9 @@ async def import_recording(
     if extension not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=415,
-            detail="Formato não suportado. Envie um arquivo MP4, AVI ou MKV.",
+            detail="Formato não suportado. Envie um arquivo MP4, AVI, MOV ou MKV.",
         )
+
     source_datetime = _parse_recorded_at(recorded_at)
     import_dir = settings.app_data_dir / "imports"
     import_dir.mkdir(parents=True, exist_ok=True)
@@ -92,8 +108,9 @@ async def import_recording(
         raise HTTPException(status_code=400, detail="O arquivo de vídeo está vazio.")
 
     try:
-        return get_recording_analysis_service().submit(
+        return get_offline_analysis_service().submit(
             camera_id=camera_id,
+            camera_name=camera.get("name"),
             filename=filename,
             path=upload_path,
             recorded_at=source_datetime,
@@ -110,12 +127,35 @@ async def import_recording(
         ) from exc
 
 
-@router.get("/{analysis_id}", response_model=RecordingAnalysisOut)
-async def get_recording_analysis(analysis_id: str) -> RecordingAnalysisOut:
-    result = get_recording_analysis_service().get(analysis_id)
+@router.get("/jobs", response_model=list[OfflineJobOut])
+async def list_offline_jobs() -> list[OfflineJobOut]:
+    """Estado de todos os jobs, do mais recente ao mais antigo."""
+    return get_offline_analysis_service().list_jobs()
+
+
+@router.post("/jobs/clear")
+async def clear_finished_offline_jobs() -> dict[str, int]:
+    """Remove do histórico todos os jobs já finalizados."""
+    removed = get_offline_analysis_service().clear_finished()
+    return {"removed": removed}
+
+
+@router.get("/jobs/{job_id}", response_model=OfflineJobOut)
+async def get_offline_job(job_id: str) -> OfflineJobOut:
+    result = get_offline_analysis_service().get(job_id)
     if result is None:
         raise HTTPException(
             status_code=404,
-            detail="Análise não encontrada; o histórico é mantido enquanto o backend está em execução.",
+            detail="Análise não encontrada; o histórico é mantido enquanto o "
+            "backend está em execução.",
         )
     return result
+
+
+@router.delete("/jobs/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_offline_job(job_id: str) -> None:
+    if not get_offline_analysis_service().delete(job_id):
+        raise HTTPException(
+            status_code=409,
+            detail="Não é possível remover uma análise em andamento.",
+        )

@@ -7,7 +7,7 @@ from app.controllers import (
     audio_detections,
     cameras,
     events,
-    recordings,
+    offline,
     settings,
     species,
     stats,
@@ -23,7 +23,7 @@ api_router.include_router(events.router)
 api_router.include_router(cameras.router)
 api_router.include_router(visits.router)
 api_router.include_router(species.router)
-api_router.include_router(recordings.router)
+api_router.include_router(offline.router)
 api_router.include_router(settings.router)
 api_router.include_router(stats.router)
 api_router.include_router(analytics.router)

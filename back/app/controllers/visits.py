@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import FileResponse
 
 from app.core.config import get_settings
 from app.domain.models import VisitOut, VisitSpeciesAssignment
@@ -75,6 +77,38 @@ async def get_visit(visit_id: str) -> VisitOut:
     if row is None:
         raise HTTPException(status_code=404, detail="Visit not found")
     return VisitRepository.to_out(row)
+
+
+@router.get("/{visit_id}/crop")
+async def get_visit_crop(visit_id: str) -> FileResponse:
+    """Serve o recorte ampliado da ave de uma visita.
+
+    O caminho é reconstruído a partir do ``visit_id`` e validado contra a pasta
+    de recortes (``app-data/crops``), impedindo qualquer acesso fora dela
+    (proteção contra *path traversal*).
+    """
+    row = _repo().get(visit_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Visita não encontrada.")
+
+    crop_relative: str | None = None
+    try:
+        metadata = json.loads(row.get("metadata_json") or "{}")
+        if isinstance(metadata, dict):
+            crop_relative = metadata.get("crop_path")
+    except (TypeError, ValueError):
+        crop_relative = None
+
+    expected = Path("crops") / f"{visit_id}.jpg"
+    if crop_relative != expected.as_posix():
+        raise HTTPException(status_code=404, detail="Recorte não disponível.")
+
+    settings = get_settings()
+    crop_path = (settings.app_data_dir / expected).resolve()
+    if crop_path.parent != settings.crops_dir.resolve() or not crop_path.is_file():
+        raise HTTPException(status_code=404, detail="Recorte não disponível.")
+
+    return FileResponse(crop_path, media_type="image/jpeg")
 
 
 @router.post("/{visit_id}/identify-external", response_model=VisitOut)

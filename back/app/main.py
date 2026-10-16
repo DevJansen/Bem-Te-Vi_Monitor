@@ -44,7 +44,7 @@ async def lifespan(app: FastAPI):
     from app.infra.media.retention import MediaRetentionWorker
     from app.services.audio_analysis import get_audio_analysis_service
     from app.services.notification_service import get_notification_service
-    from app.services.recording_analysis import get_recording_analysis_service
+    from app.services.offline_analysis import get_offline_analysis_service
     from app.services.timelapse_service import TimelapseScheduler
 
     settings = get_settings()
@@ -129,7 +129,7 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("Notification service shutdown error")
     try:
-        get_recording_analysis_service().shutdown()
+        get_offline_analysis_service().shutdown()
     except Exception:
         logger.exception("Recording analysis shutdown error")
     try:

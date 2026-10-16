@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "@/app/App";
+import { OfflineAnalysisProvider } from "@/context/OfflineAnalysisContext";
 import "@/styles/globals.css";
 
 const rootElement = document.getElementById("root");
@@ -11,6 +12,10 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <App />
+    {/* O provedor fica acima das abas para que o progresso das análises de
+        vídeo sobreviva à navegação e a recarregamentos de tela. */}
+    <OfflineAnalysisProvider>
+      <App />
+    </OfflineAnalysisProvider>
   </StrictMode>,
 );

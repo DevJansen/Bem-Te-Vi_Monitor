@@ -418,14 +418,46 @@ class TimelapseGenerateResult(BaseModel):
     timelapse: TimelapseOut | None = None
 
 
-class RecordingAnalysisOut(BaseModel):
+class OfflineDetectionOut(BaseModel):
+    """Uma ave distinta identificada ao longo de um vídeo offline."""
+
+    id: str
+    # Instante (em segundos) dentro do vídeo em que a melhor captura ocorreu.
+    timestamp_seconds: float = Field(ge=0.0)
+    species: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    # Miniatura do quadro completo e recorte ampliado da ave (URLs servidas
+    # pela API local). Podem ser nulos se a gravação da imagem falhar.
+    thumbnail_url: str | None = None
+    crop_url: str | None = None
+    # Visita criada automaticamente na Galeria para esta ave.
+    visit_id: str | None = None
+
+
+class OfflineJobOut(BaseModel):
+    """Estado completo de um upload/análise offline (persistente no backend).
+
+    O status é mantido no servidor e sobrevive à desconexão do painel: o
+    front-end apenas consulta este recurso por *polling*.
+    """
+
     id: str
     camera_id: str
+    camera_name: str | None = None
     filename: str
-    status: Literal["queued", "processing", "completed", "failed"]
+    status: Literal["queued", "processing", "completed", "error"]
     progress: float = Field(ge=0.0, le=100.0)
-    visits_created: int = Field(ge=0)
+    frames_processed: int = Field(ge=0)
+    total_frames: int = Field(ge=0)
+    # Mensagem amigável do andamento (ex.: "Processando frame 450/1200…").
+    progress_message: str = ""
+    birds_detected_count: int = Field(ge=0)
+    detections: list[OfflineDetectionOut] = Field(default_factory=list)
+    # Resumo final (ex.: "Foram detectados 4 pássaros distintos ao longo do vídeo").
+    summary: str | None = None
     error: str | None = None
+    created_at: str
+    finished_at: str | None = None
 
 
 class HistoryDeletionOut(BaseModel):

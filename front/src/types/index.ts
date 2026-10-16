@@ -99,20 +99,36 @@ export type CameraUpdatePayload = {
   clear_credentials?: boolean;
 };
 
-export type RecordingAnalysisStatus =
-  | "queued"
-  | "processing"
-  | "completed"
-  | "failed";
+export type OfflineJobStatus = "queued" | "processing" | "completed" | "error";
 
-export type RecordingAnalysis = {
+/** Uma ave distinta identificada ao longo de um vídeo importado. */
+export type OfflineDetection = {
+  id: string;
+  timestamp_seconds: number;
+  species: string;
+  confidence: number;
+  thumbnail_url: string | null;
+  crop_url: string | null;
+  visit_id: string | null;
+};
+
+/** Estado completo de um upload/análise offline (persistido no backend). */
+export type OfflineJob = {
   id: string;
   camera_id: CameraId;
+  camera_name: string | null;
   filename: string;
-  status: RecordingAnalysisStatus;
+  status: OfflineJobStatus;
   progress: number;
-  visits_created: number;
+  frames_processed: number;
+  total_frames: number;
+  progress_message: string;
+  birds_detected_count: number;
+  detections: OfflineDetection[];
+  summary: string | null;
   error: string | null;
+  created_at: string;
+  finished_at: string | null;
 };
 
 export type BirdVisit = {

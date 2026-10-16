@@ -25,7 +25,7 @@ import type {
   LifeListSpecies,
   Metrics,
   NotificationChannel,
-  RecordingAnalysis,
+  OfflineJob,
   RoiSettings,
   RoiZone,
   Timelapse,
@@ -132,16 +132,16 @@ export async function deleteCamera(id: string): Promise<void> {
   await api.delete(`/cameras/${id}`);
 }
 
-export async function importRecording(
+export async function uploadOfflineVideo(
   file: File,
   cameraId: string,
   onUploadProgress: (percent: number) => void,
-): Promise<RecordingAnalysis> {
+): Promise<OfflineJob> {
   const form = new FormData();
   form.append("file", file);
   form.append("camera_id", cameraId);
   form.append("recorded_at", new Date(file.lastModified || Date.now()).toISOString());
-  const { data } = await api.post<RecordingAnalysis>("/recordings/import", form, {
+  const { data } = await api.post<OfflineJob>("/offline/upload", form, {
     timeout: 0,
     headers: { "Content-Type": "multipart/form-data" },
     onUploadProgress: (event) => {
@@ -153,9 +153,27 @@ export async function importRecording(
   return data;
 }
 
-export async function fetchRecordingAnalysis(id: string): Promise<RecordingAnalysis> {
-  const { data } = await api.get<RecordingAnalysis>(`/recordings/${id}`);
+/** Estado de todos os jobs de análise offline (em andamento e concluídos). */
+export async function fetchOfflineJobs(): Promise<OfflineJob[]> {
+  const { data } = await api.get<OfflineJob[]>("/offline/jobs");
   return data;
+}
+
+export async function fetchOfflineJob(id: string): Promise<OfflineJob> {
+  const { data } = await api.get<OfflineJob>(
+    `/offline/jobs/${encodeURIComponent(id)}`,
+  );
+  return data;
+}
+
+export async function deleteOfflineJob(id: string): Promise<void> {
+  await api.delete(`/offline/jobs/${encodeURIComponent(id)}`);
+}
+
+/** Limpa do histórico todos os jobs já finalizados. Retorna quantos saíram. */
+export async function clearFinishedOfflineJobs(): Promise<number> {
+  const { data } = await api.post<{ removed: number }>("/offline/jobs/clear");
+  return data.removed;
 }
 
 /* ——— Visitas ——— */

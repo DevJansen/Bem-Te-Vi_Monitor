@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { KPIBoard } from "@/components/dashboard/KPIBoard";
@@ -11,7 +11,9 @@ import { CameraGrid } from "@/components/cameras/CameraGrid";
 import { AddCameraModal } from "@/components/cameras/AddCameraModal";
 import { ZoneEditorModal } from "@/components/cameras/ZoneEditorModal";
 import { RoiEditorModal } from "@/components/cameras/RoiEditorModal";
-import { RecordingImport } from "@/components/cameras/RecordingImport";
+import { OfflineAnalysisScreen } from "@/components/offline/OfflineAnalysisScreen";
+import { OfflineProgressDock } from "@/components/offline/OfflineProgressDock";
+import { useOfflineAnalysis } from "@/context/OfflineAnalysisContext";
 import { GalleryPanel } from "@/components/gallery/GalleryPanel";
 import { EnvSettings } from "@/components/settings/EnvSettings";
 import { CalibrationPanel } from "@/components/settings/CalibrationPanel";
@@ -83,6 +85,22 @@ export function App() {
   const speciesQuery = usePolling(listSpecies, 60_000);
   const healthQuery = usePolling(fetchApiHealth, 12_000);
 
+  // Conclusões de análise offline (para atualizar Galeria e indicadores).
+  const { successes } = useOfflineAnalysis();
+  const handledSuccessRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const fresh = successes.filter(
+      (job) => !handledSuccessRef.current.has(job.id),
+    );
+    if (fresh.length === 0) return;
+    fresh.forEach((job) => handledSuccessRef.current.add(job.id));
+    // Atualiza a Galeria e os indicadores assim que um vídeo termina, sem
+    // trocar de aba: o usuário decide quando abrir a Galeria.
+    void Promise.all([visitsQuery.refresh(), metricsQuery.refresh()]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [successes]);
+
   const aiStatus: AiStatus = useMemo(() => {
     if (healthQuery.loading && !healthQuery.data) return "loading";
     if (healthQuery.error || !healthQuery.data) return "offline";
@@ -134,11 +152,6 @@ export function App() {
     } catch (err) {
       setActionError(getErrorMessage(err, "Falha ao remover câmera"));
     }
-  };
-
-  const handleRecordingCompleted = async () => {
-    await Promise.all([visitsQuery.refresh(), metricsQuery.refresh()]);
-    setTab("gallery");
   };
 
   const handleVisitDeleted = (visitId: string) => {
@@ -215,9 +228,9 @@ export function App() {
 
           {tab === "cameras" ? (
             <div>
-              <RecordingImport
+              <OfflineAnalysisScreen
                 cameras={camerasQuery.data ?? []}
-                onCompleted={() => void handleRecordingCompleted()}
+                onOpenGallery={() => setTab("gallery")}
               />
               <CameraGrid
                 cameras={camerasQuery.data ?? []}
@@ -291,6 +304,8 @@ export function App() {
         onClose={() => setRoiCamera(null)}
         onSaved={() => void camerasQuery.refresh()}
       />
+
+      <OfflineProgressDock onOpenGallery={() => setTab("gallery")} />
     </div>
   );
 }
