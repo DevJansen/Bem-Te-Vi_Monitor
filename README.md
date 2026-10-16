@@ -98,7 +98,7 @@ O arquivo `back\.env.example` contém os nomes e os valores padrão. Copie-o par
 | `MOTION_SENSITIVITY` | Sensibilidade de detecção de movimento inicial | Padrão: `0.5`; faixa: `0` a `1` |
 | `YOLO_BIRD_CLASS_ID` | Classe do COCO usada na inferência | Padrão: `14` (`bird`) |
 | `PRE_RECORD_SECONDS` | Duração anterior à detecção incluída no clipe | Padrão/mínimo: `3.0` |
-| `POST_RECORD_SECONDS` | Duração posterior à detecção | Padrão: `2.0` |
+| `POST_RECORD_SECONDS` | Duração posterior à detecção | Padrão: `3.0` (com o pré-roll, o clipe cobre ~6 s) |
 | `CAMERA_RECONNECT_DELAY_SEC` | Intervalo de reconexão da câmera | Padrão: `3.0` |
 | `MEDIA_RETENTION_DAYS` | Retenção de mídia local | Padrão: `30`; mínimo: `1` |
 | `APP_DATA_DIR` | Diretório para banco, mídia e segredos de câmera | Opcional; padrão: `back\app-data` |
@@ -121,6 +121,17 @@ O arquivo `back\.env.example` contém os nomes e os valores padrão. Copie-o par
 | `OFFLINE_FRAME_STRIDE` | Passo de amostragem de quadros na análise offline | Padrão: `2` (um a cada dois quadros); faixa: `1` a `10` |
 | `OFFLINE_MAX_CLIPS` | Máximo de trechos curtos gerados por vídeo (um por ave) | Padrão: `12`; faixa: `0` a `100` |
 | `OFFLINE_CLIP_SECONDS` | Duração (s) do trecho salvo ao redor da melhor captura | Padrão: `4.0`; faixa: `1.0` a `20.0` |
+| `BEST_FRAME_ENABLED` | Escolhe automaticamente o quadro mais nítido da janela de gravação | Padrão: `true` (`false` volta a usar o instante do gatilho) |
+| `BEST_FRAME_IDEAL_AREA_RATIO` | Proporção ideal da tela (0–1) que a ave deve ocupar no melhor quadro | Padrão: `0.08` |
+| `BEST_FRAME_SHARPNESS_SCALE` | Escala de normalização da nitidez (variância do Laplaciano) | Padrão: `120` |
+| `ENHANCEMENT_ENABLED` | Melhoria automática (CLAHE + redução de ruído) da foto oficial | Padrão: `true` |
+| `ENHANCEMENT_CLAHE_CLIP` | Intensidade do CLAHE na foto tratada | Padrão: `2.0`; faixa: `1.0` a `8.0` |
+| `ENHANCEMENT_CLAHE_GRID` | Grade do CLAHE (blocos por lado) na foto tratada | Padrão: `8`; faixa: `2` a `16` |
+| `ENHANCEMENT_DENOISE` | Redução de ruído leve (não-linear) na foto tratada | Padrão: `true` |
+| `ENHANCEMENT_DENOISE_STRENGTH` | Força da redução de ruído | Padrão: `5.0`; faixa: `0` a `20` |
+| `ENHANCEMENT_MAX_WIDTH` | Largura máxima (px) da foto tratada (limita o custo do denoise) | Padrão: `1280`; faixa: `320` a `4096` |
+| `ENHANCEMENT_MIN_WIDTH` | Largura mínima (px) da foto tratada (garante "alta definição") | Padrão: `720`; faixa: `0` a `4096` |
+| `ENHANCEMENT_JPEG_QUALITY` | Qualidade JPEG da foto tratada | Padrão: `95`; faixa: `50` a `100` |
 | `ALLOW_REMOTE_ACCESS` | Libera acesso à API fora do computador local | Padrão: `false` (somente loopback). Use `true` só com VPN/proxy autenticado |
 | `ALLOWED_HOSTS` | Hosts aceitos no cabeçalho `Host` | Padrão: `127.0.0.1,localhost` |
 
@@ -620,10 +631,11 @@ YOLO perde a detecção, o rastreio mantém a mesma caixa "em espera" pela janel
 `OBJECT_PERSISTENCE_TIME`, de modo que a visita não é reiniciada por uma perda
 momentânea. Em cenas sem aves rastreadas, a inferência só roda quando há
 movimento suficiente (`MOTION_SENSITIVITY`), com uma verificação periódica de
-segurança. A pré-gravação inclui os três segundos anteriores à detecção;
-saídas temporárias da zona de até dez segundos são consideradas a mesma presença.
-Snapshots, recortes e clipes vencidos são limpos diariamente conforme
-`MEDIA_RETENTION_DAYS`, sem remover registros do SQLite.
+segurança. A **pré-gravação** mantém em RAM, em um buffer circular
+(`collections.deque`, com trava de thread), os três segundos anteriores à
+detecção; saídas temporárias da zona de até dez segundos são consideradas a
+mesma presença. Snapshots, recortes e clipes vencidos são limpos diariamente
+conforme `MEDIA_RETENTION_DAYS`, sem remover registros do SQLite.
 
 Os clipes são gravados sempre em `.mp4`: o OpenCV grava os quadros
 (`avc1`/`H264` e, em último caso, `mp4v`) e, logo em seguida, o `ffmpeg` reencoda
@@ -633,6 +645,22 @@ aviso no log quando não for H.264). Arquivos inválidos ou corrompidos são
 descartados. A reprodução na Galeria usa o endpoint `/api/videos/{arquivo}`, que
 responde a requisições `Range` (status `206`) para permitir avançar e rebobinar o
 vídeo sem baixá-lo por inteiro.
+
+**Gravação inteligente (pré/pós-evento + melhor quadro).** Ao confirmar uma ave,
+o pipeline despeja os três segundos do buffer no clipe e continua gravando mais
+três (`POST_RECORD_SECONDS`), totalizando uma janela de ~6 s que começa *antes*
+do pouso. Durante a janela, o seletor de melhor quadro
+(`app/infra/ai/best_frame.py`) avalia cada detecção e guarda apenas a vencedora,
+combinando três sinais: **nitidez** (variância do Laplaciano no recorte da ave),
+**confiança** do YOLOv8 e **enquadramento** (proporção ideal da tela). Em
+seguida, o módulo de enhancement (`app/infra/ai/enhancement.py`) aplica **CLAHE**
+e **redução de ruído leve** (`fastNlMeansDenoisingColored`) nesse quadro e o salva
+como a **thumbnail oficial** em alta definição (`ENHANCEMENT_*`), além do recorte
+da ave. Essa foto alimenta a Galeria e o Álbum de Conquistas (Life List). Todo o
+pós-processamento (ffmpeg + enhancement) roda em um *thread pool* dedicado, fora
+do laço de captura, para não travar a leitura da câmera. A visita expõe no banco
+as notas do quadro escolhido (`best_frame_score`, `best_frame_sharpness`,
+`best_frame_area_ratio`, `best_frame_confidence`) e o selo `enhanced`.
 
 Os resumos do dia (time-lapse) ficam em `back\app-data\captures\timelapses\` e
 **não** são removidos pela política de retenção (`MEDIA_RETENTION_DAYS`); apague-os

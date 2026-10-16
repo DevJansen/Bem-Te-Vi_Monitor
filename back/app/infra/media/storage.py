@@ -33,12 +33,16 @@ def relative_to_captures(path: Path) -> str:
         return path.name
 
 
-def save_thumbnail(frame: np.ndarray, camera_id: str, visit_id: str) -> Path | None:
+def save_thumbnail(
+    frame: np.ndarray, camera_id: str, visit_id: str, *, quality: int = 85
+) -> Path | None:
     settings = get_settings()
     settings.ensure_directories()
     out = settings.thumbs_dir / f"{camera_id}_{visit_id}_{_stamp()}.jpg"
     try:
-        ok = cv2.imwrite(str(out), frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+        ok = cv2.imwrite(
+            str(out), frame, [int(cv2.IMWRITE_JPEG_QUALITY), int(quality)]
+        )
         if not ok:
             logger.error("Failed to write thumbnail %s", out)
             return None
@@ -52,6 +56,8 @@ def save_bird_crop(
     frame: np.ndarray,
     bbox: tuple[float, float, float, float],
     visit_id: str,
+    *,
+    quality: int = 85,
 ) -> str | None:
     """Salva o recorte da ave em app-data/crops e retorna seu caminho relativo."""
     settings = get_settings()
@@ -88,7 +94,7 @@ def save_bird_crop(
         if not cv2.imwrite(
             str(output_path),
             crop,
-            [int(cv2.IMWRITE_JPEG_QUALITY), 85],
+            [int(cv2.IMWRITE_JPEG_QUALITY), int(quality)],
         ):
             logger.error("Failed to write bird crop %s", output_path)
             return None

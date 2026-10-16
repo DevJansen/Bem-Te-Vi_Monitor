@@ -334,6 +334,14 @@ export function GalleryGrid({
                       Noturno
                     </span>
                   ) : null}
+                  {visit.metadata?.enhanced ? (
+                    <span
+                      className="absolute left-2 top-2 rounded-md bg-emerald-500/85 px-1.5 py-0.5 text-[10px] font-semibold text-white"
+                      title="Foto tratada automaticamente (alta definição)"
+                    >
+                      HD
+                    </span>
+                  ) : null}
                 </div>
                 <div className="space-y-1 p-3">
                   <p className="font-medium text-[var(--color-text-primary)]">

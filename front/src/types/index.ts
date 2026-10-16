@@ -158,6 +158,15 @@ export type BirdVisit = {
     identification_status?: string;
     /** Se a captura ocorreu com o realce de visão noturna ativo. */
     night_mode?: boolean;
+    /** Se a foto oficial passou pelo pipeline de melhoria (CLAHE + ruído). */
+    enhanced?: boolean;
+    /** Duração aproximada do clipe (s): pré + pós-evento. */
+    clip_seconds?: number;
+    /** Notas do quadro escolhido (nitidez, confiança e enquadramento). */
+    best_frame_score?: number;
+    best_frame_sharpness?: number;
+    best_frame_area_ratio?: number;
+    best_frame_confidence?: number;
     external_identification?: {
       scientific_name: string;
       common_name: string;

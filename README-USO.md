@@ -116,7 +116,8 @@ São a mesma ideia, mas em **retângulos** — mais rápidos de desenhar quando 
 
 O **álbum de fotos** dos seus pássaros. Aqui você:
 
-- vê a foto e a miniatura de cada visita;
+- vê a foto e a miniatura de cada visita (as fotos tratadas automaticamente
+  aparecem com o selo **HD**);
 - **assiste ao clipe** gravado (clique na imagem ou em "Reproduzir clipe");
 - **pergunta o nome** da ave clicando em **🤖 Perguntar à IA Externa** (se estiver configurada);
 - **associa a visita** a uma espécie do seu catálogo;
@@ -197,11 +198,27 @@ O AviaWatch usa uma inteligência artificial chamada **YOLOv8**, treinada para r
 objetos. Ele é ajustado para procurar apenas a classe **"pássaro"**. Quando detecta um, ele:
 
 1. marca uma caixa ao redor do pássaro;
-2. **inicia uma visita** e grava alguns segundos antes e depois (para você ver a chegada e a saída);
-3. guarda uma **foto** do melhor momento e um **clipe** curto em vídeo;
-4. **mantém o registro** mesmo se o pássaro ficar parado comendo por alguns segundos.
+2. **inicia uma visita** e grava cerca de **6 segundos** — 3 s antes da chegada +
+   3 s depois — para você ver o pássaro chegando, pousando e saindo;
+3. escolhe sozinho o **melhor quadro** do vídeo (o mais nítido, com o pássaro bem
+   enquadrado) e o **melhora automaticamente** (contraste + redução de ruído) antes
+   de salvar como a **foto oficial em alta definição**;
+4. guarda também um **clipe** curto em vídeo;
+5. **mantém o registro** mesmo se o pássaro ficar parado comendo por alguns segundos.
 
 Dá para ajustar o quanto a IA deve ser "confiante" para contar um pássaro (veja Calibração).
+
+### 📸 A foto automática (melhor quadro em HD)
+
+Você não precisa escolher o melhor momento: o AviaWatch faz isso por você. Entre os
+cerca de **6 segundos** de gravação de cada visita, ele analisa todos os quadros em
+que o pássaro aparece e fica com o **mais nítido** — evitando fotos borradas de asa
+em movimento — e ainda realça o contraste e reduz o ruído da imagem. Na Galeria,
+essas fotos ganham um selo **HD** e passam a ser a foto de destaque no seu
+**Álbum de Conquistas (Minhas Aves)**.
+
+**Para que serve:** conseguir aquela foto bonita e nítida do pássaro, sem ter de
+procurar o melhor instante manualmente.
 
 ### 🌙 Visão noturna e monitoramento 24 horas
 

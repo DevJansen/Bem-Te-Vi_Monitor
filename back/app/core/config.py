@@ -49,7 +49,7 @@ class Settings(BaseModel):
     # Classe do dataset COCO para "bird". Mantida em 14 como padrão.
     yolo_bird_class_id: int = Field(default=14, ge=0)
     pre_record_seconds: float = Field(default=3.0, ge=3.0, le=30.0)
-    post_record_seconds: float = 2.0
+    post_record_seconds: float = 3.0
     camera_reconnect_delay_sec: float = 3.0
     media_retention_days: int = Field(default=30, ge=1)
     # Localização do alimentador (latitude/longitude), usada pela integração
@@ -100,6 +100,27 @@ class Settings(BaseModel):
     offline_max_clips: int = Field(default=12, ge=0, le=100)
     # Duração (segundos) do trecho salvo ao redor da melhor captura de cada ave.
     offline_clip_seconds: float = Field(default=4.0, ge=1.0, le=20.0)
+    # --- Gravação inteligente: melhor quadro + melhoria da imagem ---
+    # Liga/desliga a escolha automática do quadro mais nítido da janela de
+    # gravação (3 s antes + 3 s depois). Quando desligado, a foto oficial volta
+    # a ser o quadro do instante do gatilho.
+    best_frame_enabled: bool = True
+    # Proporção ideal da tela (0-1) que a ave deve ocupar no melhor quadro.
+    best_frame_ideal_area_ratio: float = Field(default=0.08, ge=0.001, le=1.0)
+    # Escala usada para normalizar a variância do Laplaciano (nitidez) em (0, 1).
+    best_frame_sharpness_scale: float = Field(default=120.0, gt=0.0)
+    # Melhoria automática (CLAHE + redução de ruído) do quadro escolhido.
+    enhancement_enabled: bool = True
+    enhancement_clahe_clip: float = Field(default=2.0, ge=1.0, le=8.0)
+    enhancement_clahe_grid: int = Field(default=8, ge=2, le=16)
+    enhancement_denoise: bool = True
+    enhancement_denoise_strength: float = Field(default=5.0, ge=0.0, le=20.0)
+    # Faixa de largura (px) da foto tratada: limita o custo do denoise acima do
+    # máximo e garante "alta definição" abaixo do mínimo.
+    enhancement_max_width: int = Field(default=1280, ge=320, le=4096)
+    enhancement_min_width: int = Field(default=720, ge=0, le=4096)
+    # Qualidade JPEG da foto tratada (thumbnail oficial e recorte).
+    enhancement_jpeg_quality: int = Field(default=95, ge=50, le=100)
 
     @property
     def db_path(self) -> Path:
@@ -228,7 +249,7 @@ class Settings(BaseModel):
                 3.0,
                 float(os.getenv("PRE_RECORD_SECONDS", "3.0")),
             ),
-            post_record_seconds=float(os.getenv("POST_RECORD_SECONDS", "2.0")),
+            post_record_seconds=float(os.getenv("POST_RECORD_SECONDS", "3.0")),
             camera_reconnect_delay_sec=float(
                 os.getenv("CAMERA_RECONNECT_DELAY_SEC", "3.0")
             ),
@@ -285,6 +306,50 @@ class Settings(BaseModel):
             ),
             offline_clip_seconds=min(
                 20.0, max(1.0, float(os.getenv("OFFLINE_CLIP_SECONDS", "4.0")))
+            ),
+            best_frame_enabled=os.getenv("BEST_FRAME_ENABLED", "true")
+            .strip()
+            .lower()
+            not in {"0", "false", "no", "off", "não", "nao"},
+            best_frame_ideal_area_ratio=min(
+                1.0,
+                max(
+                    0.001,
+                    float(os.getenv("BEST_FRAME_IDEAL_AREA_RATIO", "0.08")),
+                ),
+            ),
+            best_frame_sharpness_scale=max(
+                1.0, float(os.getenv("BEST_FRAME_SHARPNESS_SCALE", "120"))
+            ),
+            enhancement_enabled=os.getenv("ENHANCEMENT_ENABLED", "true")
+            .strip()
+            .lower()
+            not in {"0", "false", "no", "off", "não", "nao"},
+            enhancement_clahe_clip=min(
+                8.0, max(1.0, float(os.getenv("ENHANCEMENT_CLAHE_CLIP", "2.0")))
+            ),
+            enhancement_clahe_grid=min(
+                16, max(2, int(os.getenv("ENHANCEMENT_CLAHE_GRID", "8")))
+            ),
+            enhancement_denoise=os.getenv("ENHANCEMENT_DENOISE", "true")
+            .strip()
+            .lower()
+            not in {"0", "false", "no", "off", "não", "nao"},
+            enhancement_denoise_strength=min(
+                20.0,
+                max(
+                    0.0,
+                    float(os.getenv("ENHANCEMENT_DENOISE_STRENGTH", "5.0")),
+                ),
+            ),
+            enhancement_max_width=min(
+                4096, max(320, int(os.getenv("ENHANCEMENT_MAX_WIDTH", "1280")))
+            ),
+            enhancement_min_width=min(
+                4096, max(0, int(os.getenv("ENHANCEMENT_MIN_WIDTH", "720")))
+            ),
+            enhancement_jpeg_quality=min(
+                100, max(50, int(os.getenv("ENHANCEMENT_JPEG_QUALITY", "95")))
             ),
         )
 
