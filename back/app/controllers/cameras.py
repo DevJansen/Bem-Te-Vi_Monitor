@@ -27,7 +27,11 @@ async def list_cameras() -> list[CameraOut]:
         manager = get_camera_manager()
         rows = _repo().list_all()
         return [
-            CameraRepository.to_out(row, status=manager.get_status(row["id"]))
+            CameraRepository.to_out(
+                row,
+                status=manager.get_status(row["id"]),
+                night_mode=manager.get_night_mode(row["id"]),
+            )
             for row in rows
         ]
     except Exception as exc:
@@ -41,7 +45,9 @@ async def get_camera(camera_id: str) -> CameraOut:
     if row is None:
         raise HTTPException(status_code=404, detail="Camera not found")
     return CameraRepository.to_out(
-        row, status=get_camera_manager().get_status(camera_id)
+        row,
+        status=get_camera_manager().get_status(camera_id),
+        night_mode=get_camera_manager().get_night_mode(camera_id),
     )
 
 

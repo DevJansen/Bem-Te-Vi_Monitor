@@ -52,6 +52,8 @@ class CameraStreamer:
     _fps: float = field(default=15.0, init=False)
     _opened_uri: str | None = field(default=None, init=False)
     _consecutive_failures: int = field(default=0, init=False)
+    # Indica se o pipeline está entregando quadros em visão noturna (IR/baixa luz).
+    _night_mode: bool = field(default=False, init=False)
 
     @property
     def status(self) -> StreamStatus:
@@ -60,6 +62,15 @@ class CameraStreamer:
     @property
     def last_error(self) -> str | None:
         return self._last_error
+
+    @property
+    def night_mode(self) -> bool:
+        """Se a câmera está com o realce de visão noturna ativo no momento."""
+        return self._night_mode
+
+    def set_night_mode(self, value: bool) -> None:
+        """Publica o estado de visão noturna (chamado pelo pipeline)."""
+        self._night_mode = bool(value)
 
     @property
     def fps(self) -> float:
@@ -250,4 +261,5 @@ class CameraStreamer:
             "fps": self.fps,
             "last_error": self._last_error,
             "source": self._opened_uri or self.config.source_uri,
+            "night_mode": self._night_mode,
         }

@@ -72,6 +72,8 @@ export type Camera = {
   enabled: boolean;
   zones: Zone[];
   status: CameraStatus | string;
+  /** Indica se a câmera está processando quadros em visão noturna (IR/baixa luz). */
+  night_mode?: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -138,6 +140,8 @@ export type BirdVisit = {
   metadata: {
     crop_path?: string | null;
     identification_status?: string;
+    /** Se a captura ocorreu com o realce de visão noturna ativo. */
+    night_mode?: boolean;
     external_identification?: {
       scientific_name: string;
       common_name: string;
@@ -279,10 +283,19 @@ export type AppSettingsUpdate = {
 
 export type CalibrationProfile = "stationary" | "fast_motion" | "custom";
 
+/** Modo da visão noturna (infravermelho / baixa luz). */
+export type NightVisionMode = "auto" | "on" | "off";
+
 export type Calibration = {
   yolo_confidence: number;
   object_persistence_time: number;
   motion_sensitivity: number;
+  /** Modo de realce para quadros escuros / infravermelho. */
+  night_vision_mode: NightVisionMode;
+  /** Luminância média (0-255) que separa "claro" de "escuro" no modo automático. */
+  night_vision_threshold: number;
+  /** Expansão opcional das classes detectadas (fauna noturna além de aves). */
+  night_fauna_enabled: boolean;
   profile: CalibrationProfile;
   recommended_profile: CalibrationProfile;
 };
@@ -292,6 +305,9 @@ export type CalibrationUpdate = {
   yolo_confidence?: number;
   object_persistence_time?: number;
   motion_sensitivity?: number;
+  night_vision_mode?: NightVisionMode;
+  night_vision_threshold?: number;
+  night_fauna_enabled?: boolean;
 };
 
 export type AudioDetection = {

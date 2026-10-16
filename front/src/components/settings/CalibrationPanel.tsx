@@ -4,12 +4,15 @@ import {
   CheckCircle2,
   Gauge,
   LoaderCircle,
+  Moon,
+  MoonStar,
+  PawPrint,
   RotateCcw,
   Sparkles,
   Timer,
   Zap,
 } from "lucide-react";
-import type { Calibration, CalibrationProfile } from "@/types";
+import type { Calibration, CalibrationProfile, NightVisionMode } from "@/types";
 import {
   fetchCalibration,
   getErrorMessage,
@@ -44,6 +47,9 @@ export function CalibrationPanel({ onCalibrationChange }: Props) {
   const [confidence, setConfidence] = useState(0.3);
   const [persistence, setPersistence] = useState(5);
   const [motion, setMotion] = useState(50);
+  const [nightMode, setNightMode] = useState<NightVisionMode>("auto");
+  const [nightThreshold, setNightThreshold] = useState(60);
+  const [nightFauna, setNightFauna] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -56,6 +62,9 @@ export function CalibrationPanel({ onCalibrationChange }: Props) {
       Math.min(PERSISTENCE_MAX, Math.max(PERSISTENCE_MIN, data.object_persistence_time)),
     );
     setMotion(Math.round(data.motion_sensitivity * 100));
+    setNightMode(data.night_vision_mode ?? "auto");
+    setNightThreshold(Math.round(data.night_vision_threshold ?? 60));
+    setNightFauna(Boolean(data.night_fauna_enabled));
     onCalibrationChange?.(data);
   };
 
@@ -112,6 +121,9 @@ export function CalibrationPanel({ onCalibrationChange }: Props) {
         yolo_confidence: confidence,
         object_persistence_time: persistence,
         motion_sensitivity: motion / 100,
+        night_vision_mode: nightMode,
+        night_vision_threshold: nightThreshold,
+        night_fauna_enabled: nightFauna,
       });
       applyLoaded(updated);
       setMessage("Calibração manual aplicada.");
@@ -166,6 +178,90 @@ export function CalibrationPanel({ onCalibrationChange }: Props) {
           disabled={saving}
           onClick={() => void selectProfile("fast_motion")}
         />
+      </div>
+
+      {/* ——— Visão noturna (infravermelho) e monitoramento 24h ——— */}
+      <div className="rounded-xl border border-dark-700 bg-dark-800 p-4 sm:p-5">
+        <div className="mb-1 flex items-center gap-2">
+          <Moon className="h-4 w-4 text-indigo-300" />
+          <h3 className="font-display text-sm font-semibold text-[var(--color-text-primary)]">
+            Visão Noturna (Infravermelho)
+          </h3>
+          <span className="ml-auto rounded-md bg-indigo-500/15 px-2 py-0.5 text-[11px] font-medium text-indigo-300">
+            {nightMode === "off" ? "Desligada" : "Monitoramento 24h"}
+          </span>
+        </div>
+        <p className="mb-4 text-xs leading-relaxed text-[var(--color-text-muted)]">
+          Realça o contraste (CLAHE) e reduz o ruído de imagens escuras ou em preto
+          e branco, ajudando a IA a enxergar formas no escuro. No modo automático, o
+          realce só entra quando a cena fica abaixo do limiar de luminosidade.
+        </p>
+
+        <div className="grid gap-2 sm:grid-cols-3">
+          <NightModeOption
+            icon={<MoonStar className="h-4 w-4" />}
+            title="Automático"
+            description="Realça apenas no escuro"
+            selected={nightMode === "auto"}
+            onClick={() => setNightMode("auto")}
+          />
+          <NightModeOption
+            icon={<Moon className="h-4 w-4" />}
+            title="Sempre ligada"
+            description="Realça em todos os quadros"
+            selected={nightMode === "on"}
+            onClick={() => setNightMode("on")}
+          />
+          <NightModeOption
+            icon={<Zap className="h-4 w-4" />}
+            title="Desligada"
+            description="Quadros originais"
+            selected={nightMode === "off"}
+            onClick={() => setNightMode("off")}
+          />
+        </div>
+
+        {nightMode === "auto" ? (
+          <div className="mt-5">
+            <SliderField
+              icon={<MoonStar className="h-4 w-4" />}
+              label="Limiar de luminosidade"
+              leftLabel="Só cenas muito escuras"
+              rightLabel="Realça mais cedo"
+              min={10}
+              max={140}
+              step={5}
+              value={nightThreshold}
+              onChange={setNightThreshold}
+              tooltip="Luminância média (0-255) que separa claro de escuro no modo automático. Valores maiores fazem o realce entrar mais cedo, útil em ambientes com pouca luz."
+              valueLabel={`${nightThreshold}`}
+            />
+          </div>
+        ) : null}
+
+        <label className="mt-5 flex items-start gap-3 rounded-lg border border-dark-700 bg-dark-900 p-3">
+          <input
+            type="checkbox"
+            checked={nightFauna}
+            onChange={(e) => setNightFauna(e.target.checked)}
+            className="mt-0.5 accent-indigo-400"
+          />
+          <span>
+            <span className="flex items-center gap-1.5 text-sm font-medium text-[var(--color-text-primary)]">
+              <PawPrint className="h-4 w-4 text-indigo-300" />
+              Monitorar fauna noturna (além de aves)
+            </span>
+            <span className="mt-1 block text-xs leading-relaxed text-[var(--color-text-muted)]">
+              Expande a detecção para animais comuns em quintais à noite, como gatos
+              e cachorros. Corujas já são aves e continuam sendo detectadas.
+            </span>
+          </span>
+        </label>
+
+        <p className="mt-4 border-t border-dark-700 pt-4 text-xs text-[var(--color-text-muted)]">
+          As alterações de visão noturna são aplicadas ao clicar em
+          <strong className="font-semibold text-[var(--color-text-primary)]"> Aplicar calibração</strong>.
+        </p>
       </div>
 
       {/* ——— Controles manuais avançados ——— */}
@@ -318,6 +414,43 @@ function ProfileCard({
           <CheckCircle2 className="h-3.5 w-3.5" /> Perfil ativo
         </span>
       ) : null}
+    </button>
+  );
+}
+
+function NightModeOption({
+  icon,
+  title,
+  description,
+  selected,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      className={`rounded-xl border p-3 text-left transition ${
+        selected
+          ? "border-indigo-500/60 bg-indigo-500/10 ring-1 ring-indigo-500/40"
+          : "border-dark-700 bg-dark-900 hover:border-indigo-500/30"
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        <span className={selected ? "text-indigo-300" : "text-[var(--color-text-muted)]"}>
+          {icon}
+        </span>
+        <span className="text-sm font-medium text-[var(--color-text-primary)]">
+          {title}
+        </span>
+      </div>
+      <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">{description}</p>
     </button>
   );
 }

@@ -1,16 +1,22 @@
-"""Desenho de bounding boxes de aves sobre frames OpenCV."""
+"""Desenho de bounding boxes de aves (e fauna noturna) sobre frames OpenCV."""
 
 from __future__ import annotations
 
 import cv2
 import numpy as np
 
-from app.infra.ai.detector import Detection
+from app.infra.ai.detector import Detection, translate_class_name
 
-# Verde esmeralda em BGR (conforme especificação)
+# Verde esmeralda em BGR (conforme especificação) para aves.
 EMERALD_BGR = (16, 200, 80)
+# Âmbar em BGR para fauna noturna (não-ave), destacando que não é um pássaro.
+FAUNA_BGR = (40, 170, 240)
 BOX_THICKNESS = 2
-LABEL_PT = "Pássaro"
+
+
+def _color_for(class_name: str) -> tuple[int, int, int]:
+    """Cor da caixa conforme a classe: ave (esmeralda) ou fauna (âmbar)."""
+    return EMERALD_BGR if str(class_name).strip().lower() == "bird" else FAUNA_BGR
 
 
 def draw_bird_detections(
@@ -22,7 +28,8 @@ def draw_bird_detections(
     """
     Retorna cópia do frame com retângulos e rótulos desenhados.
 
-    Rótulo: \"Pássaro: 87%\" com fundo preenchido acima da caixa.
+    Rótulo: \"Pássaro: 87%\" (ou o nome traduzido da classe) com fundo
+    preenchido acima da caixa.
     """
     if frame is None or frame.size == 0:
         return frame
@@ -34,6 +41,7 @@ def draw_bird_detections(
         if min_confidence is not None and det.confidence < min_confidence:
             continue
 
+        color = _color_for(det.class_name)
         x1, y1, x2, y2 = det.bbox
         x1_i = max(0, min(width - 1, int(round(x1))))
         y1_i = max(0, min(height - 1, int(round(y1))))
@@ -46,13 +54,13 @@ def draw_bird_detections(
             annotated,
             (x1_i, y1_i),
             (x2_i, y2_i),
-            EMERALD_BGR,
+            color,
             BOX_THICKNESS,
             lineType=cv2.LINE_AA,
         )
 
         pct = int(round(det.confidence * 100))
-        label = f"{LABEL_PT}: {pct}%"
+        label = f"{translate_class_name(det.class_name)}: {pct}%"
         font = cv2.FONT_HERSHEY_SIMPLEX
         font_scale = 0.55
         font_thickness = 1
@@ -69,7 +77,7 @@ def draw_bird_detections(
             annotated,
             (label_left, label_top),
             (label_right, label_bottom),
-            EMERALD_BGR,
+            color,
             thickness=-1,
         )
         text_y = label_bottom - pad - baseline
@@ -79,7 +87,7 @@ def draw_bird_detections(
             (label_left + pad, text_y),
             font,
             font_scale,
-            (10, 20, 14),  # texto escuro sobre fundo esmeralda
+            (10, 20, 14),  # texto escuro sobre fundo claro
             font_thickness,
             lineType=cv2.LINE_AA,
         )

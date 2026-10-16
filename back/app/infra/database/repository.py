@@ -182,7 +182,7 @@ class CameraRepository:
             return cursor.rowcount > 0
 
     @staticmethod
-    def to_out(row: dict[str, Any], status: str = "idle") -> CameraOut:
+    def to_out(row: dict[str, Any], status: str = "idle", night_mode: bool = False) -> CameraOut:
         try:
             zones_data = json.loads(row.get("zones_json") or '{"zones":[]}')
             zones = [ZoneConfig.model_validate(z) for z in zones_data.get("zones", [])]
@@ -198,6 +198,7 @@ class CameraRepository:
             enabled=bool(row["enabled"]),
             zones=zones,
             status=status,
+            night_mode=bool(night_mode),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )

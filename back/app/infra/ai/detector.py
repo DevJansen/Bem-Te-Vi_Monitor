@@ -3,14 +3,18 @@
 Ajustes de sensibilidade:
 - O limiar de confiança pode chegar a 0.05, permitindo detectar aves com menor
   grau de certeza visual (câmeras distantes, contraluz, pouca luz).
-- A inferência é restrita à classe de ave do COCO (id 14), o que remove o ruído
-  de fundo e evita contabilizar objetos que não são pássaros.
+- A inferência é restrita, por padrão, à classe de ave do COCO (id 14), o que
+  remove o ruído de fundo e evita contabilizar objetos que não são pássaros.
+- Opcionalmente (modo fauna noturna) a inferência pode ser expandida para
+  outras classes do COCO, como gatos e cachorros, para monitorar a fauna que
+  circula à noite no quintal.
 """
 
 from __future__ import annotations
 
 import logging
 import threading
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 import numpy as np
@@ -23,9 +27,35 @@ logger = logging.getLogger(__name__)
 BIRD_CLASS_ID = 14
 BIRD_CLASS_NAME = "bird"
 
+# Nomes amigáveis em pt-BR para as classes do COCO usadas no monitoramento.
+CLASS_LABELS_PT: dict[str, str] = {
+    "bird": "Pássaro",
+    "cat": "Gato",
+    "dog": "Cachorro",
+    "bear": "Urso",
+    "horse": "Cavalo",
+    "cow": "Vaca",
+    "sheep": "Ovelha",
+    "person": "Pessoa",
+}
+
 # Faixa aceita para o limiar de confiança do YOLO.
 CONFIDENCE_MIN = 0.05
 CONFIDENCE_MAX = 1.0
+
+
+def translate_class_name(name: str) -> str:
+    """Traduz o nome de classe do COCO (inglês) para um rótulo em pt-BR.
+
+    Classes desconhecidas caem no próprio nome capitalizado, para nunca
+    esconder uma detecção inesperada do usuário.
+    """
+    key = str(name or "").strip().lower()
+    if key in CLASS_LABELS_PT:
+        return CLASS_LABELS_PT[key]
+    cleaned = str(name or "").strip()
+    return cleaned[:1].upper() + cleaned[1:] if cleaned else CLASS_LABELS_PT["bird"]
+
 
 
 @dataclass
@@ -76,6 +106,9 @@ class BirdDetector:
             if bird_class_id is not None
             else settings.yolo_bird_class_id
         )
+        # Conjunto de classes aceitas na inferência. Por padrão apenas a ave;
+        # pode ser expandido em runtime (fauna noturna) via set_class_ids().
+        self._class_ids: set[int] = {self.bird_class_id}
         self._model = None
         self._lock = threading.RLock()
         self._load_error: str | None = None
@@ -89,9 +122,26 @@ class BirdDetector:
     def load_error(self) -> str | None:
         return self._load_error
 
+    @property
+    def class_ids(self) -> set[int]:
+        """Cópia das classes atualmente aceitas na inferência."""
+        with self._lock:
+            return set(self._class_ids)
+
     def set_confidence(self, value: float) -> None:
         """Atualiza o limiar de confiança em tempo real (thread-safe)."""
         self.confidence = clamp_confidence(value)
+
+    def set_class_ids(self, ids: Iterable[int]) -> None:
+        """Define as classes aceitas na inferência (thread-safe).
+
+        Se a lista vier vazia, mantém apenas a classe de ave para não deixar o
+        detector sem nenhum alvo.
+        """
+        cleaned = {int(value) for value in ids}
+        with self._lock:
+            self._class_ids = cleaned or {self.bird_class_id}
+
 
     def load(self, *, force: bool = False) -> bool:
         with self._lock:
@@ -124,8 +174,9 @@ class BirdDetector:
                     source=frame,
                     # Aplica o limiar calibrado (com o piso de segurança da faixa).
                     conf=clamp_confidence(self.confidence),
-                    # Filtro de classe: somente aves (COCO id 14).
-                    classes=[self.bird_class_id],
+                    # Filtro de classe: por padrão somente aves (COCO id 14);
+                    # expandido para fauna noturna quando o usuário habilita.
+                    classes=sorted(self._class_ids),
                     verbose=False,
                 )
             except Exception:

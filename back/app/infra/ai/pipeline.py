@@ -17,8 +17,14 @@ from app.core.config import get_settings
 from app.domain.models import RoiType, RoiZone, VisitOut, ZoneConfig, ZoneMode
 from app.infra.ai.annotate import draw_bird_detections
 from app.infra.ai.box_tracker import BoxTracker
-from app.infra.ai.detector import BirdDetector, Detection, get_bird_detector
+from app.infra.ai.detector import (
+    BirdDetector,
+    Detection,
+    get_bird_detector,
+    translate_class_name,
+)
 from app.infra.ai.motion import MotionDetector
+from app.infra.ai.night_vision import NightVisionProcessor
 from app.infra.ai.pre_record_buffer import PreRecordBuffer
 from app.infra.ai.species_classifier import SpeciesClassifier, get_default_species_classifier
 from app.infra.ai.zone_validator import ZoneValidator, point_in_polygon
@@ -67,6 +73,16 @@ class CameraPipeline(threading.Thread):
         self.zone_validator = ZoneValidator()
         # Portão de movimento inicial: evita rodar o YOLO em cenas paradas.
         self.motion = MotionDetector(sensitivity=self.settings.motion_sensitivity)
+        # Visão noturna: realce de contraste para quadros escuros / infravermelho.
+        self.night_vision = NightVisionProcessor(
+            mode=self.settings.night_vision_mode,
+            threshold=self.settings.night_vision_threshold,
+            clahe_clip=self.settings.night_vision_clahe_clip,
+            clahe_grid=self.settings.night_vision_clahe_grid,
+            denoise=self.settings.night_vision_denoise,
+        )
+        # Estado do quadro atual (atualizado a cada ciclo; lido ao registrar visita).
+        self._night_active = False
         self._configured_zones: list[ZoneConfig] = []
         # Zonas de interesse (ROI) retangulares: incluir (monitorar) ou excluir.
         self._roi_zones: list[RoiZone] = []
@@ -123,6 +139,20 @@ class CameraPipeline(threading.Thread):
         self.detector.set_confidence(calibration.yolo_confidence)
         tracker.retention_seconds = calibration.object_persistence_time
         self.motion.set_sensitivity(calibration.motion_sensitivity)
+        # Visão noturna: modo e limiar de luminância aplicados sem reiniciar.
+        self.night_vision.configure(
+            mode=calibration.night_vision_mode,
+            threshold=calibration.night_vision_threshold,
+        )
+        # Fauna noturna: expande (opcionalmente) as classes aceitas na inferência.
+        self._apply_detection_classes(calibration.night_fauna_enabled)
+
+    def _apply_detection_classes(self, fauna_enabled: bool) -> None:
+        """Define as classes aceitas pelo YOLO (ave sempre; fauna se habilitada)."""
+        class_ids = {self.detector.bird_class_id}
+        if fauna_enabled:
+            class_ids.update(self.settings.night_fauna_class_id_list())
+        self.detector.set_class_ids(class_ids)
 
     def _notify_enabled(self) -> bool:
         raw = self.settings_repo.get("notifications_enabled", "true")
@@ -253,8 +283,15 @@ class CameraPipeline(threading.Thread):
         fps: float,
     ) -> None:
         visit_id = str(uuid.uuid4())
-        species_pred = self.classifier.classify(frame, detection.bbox)
-        species = species_pred.species
+        # Aves passam pelo classificador de espécies; a fauna noturna (não-ave)
+        # usa diretamente o nome traduzido da classe detectada (ex.: "Gato").
+        if detection.class_id == self.detector.bird_class_id:
+            species_pred = self.classifier.classify(frame, detection.bbox)
+            species = species_pred.species
+            species_extras = species_pred.extras or {}
+        else:
+            species = translate_class_name(detection.class_name)
+            species_extras = {"fauna_noturna": True}
         conf = float(detection.confidence)
 
         thumb = save_thumbnail(frame, self.camera_id, visit_id)
@@ -274,7 +311,9 @@ class CameraPipeline(threading.Thread):
             "thumb": thumb,
             "crop_path": crop_path,
             "fps": fps,
-            "species_extras": species_pred.extras or {},
+            "species_extras": species_extras,
+            # Registra se a captura ocorreu com o realce de visão noturna ativo.
+            "night_mode": self._night_active,
         }
         self._post_frames_remaining = max(int(post_sec * fps), 0)
         self._post_collected = []
@@ -316,6 +355,7 @@ class CameraPipeline(threading.Thread):
                     "class_name": event["detection"].class_name,
                     "species_extras": event.get("species_extras") or {},
                     "crop_path": event.get("crop_path"),
+                    "night_mode": bool(event.get("night_mode")),
                 },
             )
         except Exception:
@@ -370,10 +410,18 @@ class CameraPipeline(threading.Thread):
                     time.sleep(1.0)
                     continue
 
-                ok, frame = streamer.read()
-                if not ok or frame is None:
+                ok, raw_frame = streamer.read()
+                if not ok or raw_frame is None:
                     streamer.reconnect()
                     continue
+
+                # Visão noturna: realça o contraste em quadros escuros/IR antes
+                # de qualquer uso (buffer, detecção, anotação e clipes). Em cenas
+                # claras (modo auto) o quadro original é devolvido sem custo.
+                night = self.night_vision.process(raw_frame)
+                frame = night.frame
+                self._night_active = night.applied
+                streamer.set_night_mode(night.applied)
 
                 fps = streamer.fps
                 self.buffer.configure(
@@ -399,7 +447,9 @@ class CameraPipeline(threading.Thread):
                     # Portão de movimento: roda o YOLO quando há movimento, quando
                     # já existe uma ave rastreada (não perdê-la se ficar imóvel) ou,
                     # por segurança, a cada `IDLE_INFER_MAX_SKIPS` ciclos parados.
-                    has_motion = self.motion.detect(frame)
+                    # O movimento é medido no quadro cru: o realce noturno amplia
+                    # o ruído e poderia gerar falsos positivos no portão.
+                    has_motion = self.motion.detect(raw_frame)
                     if (
                         has_motion
                         or tracker.has_tracks()

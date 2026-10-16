@@ -4,6 +4,7 @@ import {
   Download,
   Filter,
   LoaderCircle,
+  Moon,
   Play,
   Trash2,
 } from "lucide-react";
@@ -284,6 +285,8 @@ export function GalleryGrid({
             const clip = resolveMediaUrl(visit.clip_url ?? visit.clip_path);
             const alreadyExternallyIdentified =
               visit.metadata.identification_status === "Identificado por IA Externa";
+            // Captura registrada com o realce de visão noturna ativo.
+            const nightCapture = Boolean(visit.metadata?.night_mode);
             const genericSpecies = [
               "bird",
               "ave",
@@ -321,6 +324,15 @@ export function GalleryGrid({
                         <Play className="h-5 w-5 translate-x-0.5 fill-current" />
                       </span>
                     </button>
+                  ) : null}
+                  {nightCapture ? (
+                    <span
+                      className="absolute right-2 top-2 flex items-center gap-1 rounded-md bg-indigo-500/85 px-1.5 py-0.5 text-[10px] font-semibold text-white"
+                      title="Captura em visão noturna (infravermelho)"
+                    >
+                      <Moon className="h-3 w-3" />
+                      Noturno
+                    </span>
                   ) : null}
                 </div>
                 <div className="space-y-1 p-3">

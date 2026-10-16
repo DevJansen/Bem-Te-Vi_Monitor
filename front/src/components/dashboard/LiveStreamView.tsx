@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Box, Crosshair, Frame, Gauge, Trash2, VideoOff } from "lucide-react";
+import { Box, Crosshair, Frame, Gauge, Moon, Trash2, VideoOff } from "lucide-react";
 import type { Camera } from "@/types";
 import { videoFeedUrl } from "@/services/api";
 import { cn } from "@/utils/cn";
@@ -52,6 +52,8 @@ export function LiveStreamView({
   const selected = enabled.find((c) => c.id === selectedId) ?? null;
   const cameraStatus = String(selected?.status ?? "").toLowerCase();
   const cameraOffline = ["error", "stopped", "disabled"].includes(cameraStatus);
+  // Visão noturna ativa nesta câmera (informado pelo backend a cada polling).
+  const nightActive = Boolean(selected?.night_mode);
 
   const feedSrc = selected
     ? `${videoFeedUrl(selected.id, showBoxes)}&v=${streamVersion}`
@@ -263,6 +265,12 @@ export function LiveStreamView({
               onLoad={onImgLoad}
               onError={onImgError}
             />
+            {nightActive ? (
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(30,27,75,0.55))] mix-blend-multiply"
+              />
+            ) : null}
             <div className="absolute left-3 top-3 flex items-center gap-2 rounded-md bg-dark-900/80 px-2 py-1 text-xs backdrop-blur">
               <StatusDot
                 status={
@@ -287,10 +295,24 @@ export function LiveStreamView({
               >
                 {connectionLabel}
               </span>
+              {nightActive ? (
+                <span
+                  className="flex items-center gap-1 text-indigo-300"
+                  title="Visão noturna ativa"
+                >
+                  <Moon className="h-3.5 w-3.5" />
+                </span>
+              ) : null}
             </div>
             {showBoxes ? (
               <div className="absolute bottom-3 left-3 rounded-md bg-emerald-500/90 px-2 py-1 text-[10px] font-semibold text-dark-900">
                 YOLOv8 · caixas ativas
+              </div>
+            ) : null}
+            {nightActive ? (
+              <div className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-md bg-indigo-500/90 px-2 py-1 text-[10px] font-semibold text-white">
+                <Moon className="h-3 w-3" />
+                Visão noturna
               </div>
             ) : null}
           </>

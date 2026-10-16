@@ -62,6 +62,25 @@ class Settings(BaseModel):
     timelapse_minute: int = Field(default=55, ge=0, le=59)
     # Quantos dias anteriores sem resumo são reprocessados ao iniciar o app.
     timelapse_backfill_days: int = Field(default=7, ge=0, le=90)
+    # Visão noturna (infravermelho / baixa luz): realce de contraste (CLAHE) e
+    # redução de ruído antes da inferência, ajudando o YOLOv8 a identificar
+    # formas mesmo no escuro. Modo: "auto" (só quando o quadro está escuro),
+    # "on" (sempre) ou "off". Também aceita true/false no .env.
+    night_vision_mode: str = "auto"
+    # Luminância média (0-255) abaixo da qual o modo "auto" considera baixa luz.
+    night_vision_threshold: float = Field(default=60.0, ge=0.0, le=255.0)
+    # Intensidade do realce de contraste local (CLAHE).
+    night_vision_clahe_clip: float = Field(default=2.5, ge=1.0, le=8.0)
+    # Tamanho da grade do CLAHE (número de blocos por lado).
+    night_vision_clahe_grid: int = Field(default=8, ge=2, le=16)
+    # Redução de ruído leve (median blur) antes do realce.
+    night_vision_denoise: bool = True
+    # Expansão opcional das classes detectadas para além de aves (fauna noturna
+    # comum em quintais, como gatos e cachorros — classes do COCO).
+    night_fauna_enabled: bool = False
+    # Classes extras do COCO (ids separados por vírgula) quando a fauna noturna
+    # está ligada. Padrão: 15 (cat) e 16 (dog).
+    night_fauna_class_ids: str = "15,16"
 
     @property
     def db_path(self) -> Path:
@@ -103,6 +122,22 @@ class Settings(BaseModel):
     @property
     def discord_enabled(self) -> bool:
         return bool(self.discord_webhook_url)
+
+    def night_fauna_class_id_list(self) -> list[int]:
+        """Devolve os ids de classe extras (fauna noturna) como lista de inteiros.
+
+        Ignora entradas vazias ou inválidas; a lista pode vir vazia.
+        """
+        ids: list[int] = []
+        for part in str(self.night_fauna_class_ids).split(","):
+            cleaned = part.strip()
+            if not cleaned:
+                continue
+            try:
+                ids.append(int(cleaned))
+            except ValueError:
+                continue
+        return ids
 
     def ensure_directories(self) -> None:
         for path in (
@@ -183,6 +218,25 @@ class Settings(BaseModel):
             timelapse_backfill_days=min(
                 90, max(0, int(os.getenv("TIMELAPSE_BACKFILL_DAYS", "7")))
             ),
+            night_vision_mode=os.getenv("NIGHT_VISION_MODE", "auto"),
+            night_vision_threshold=min(
+                255.0, max(0.0, float(os.getenv("NIGHT_VISION_THRESHOLD", "60")))
+            ),
+            night_vision_clahe_clip=min(
+                8.0, max(1.0, float(os.getenv("NIGHT_VISION_CLAHE_CLIP", "2.5")))
+            ),
+            night_vision_clahe_grid=min(
+                16, max(2, int(os.getenv("NIGHT_VISION_CLAHE_GRID", "8")))
+            ),
+            night_vision_denoise=os.getenv("NIGHT_VISION_DENOISE", "true")
+            .strip()
+            .lower()
+            not in {"0", "false", "no", "off"},
+            night_fauna_enabled=os.getenv("NIGHT_FAUNA_ENABLED", "false")
+            .strip()
+            .lower()
+            in {"1", "true", "yes", "on", "sim"},
+            night_fauna_class_ids=os.getenv("NIGHT_FAUNA_CLASS_IDS", "15,16"),
         )
 
 

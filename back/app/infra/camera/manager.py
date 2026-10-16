@@ -42,6 +42,12 @@ class CameraManager:
                 return "idle"
             return streamer.status.value
 
+    def get_night_mode(self, camera_id: str) -> bool:
+        """Informa se a câmera está com o realce de visão noturna ativo."""
+        with self._lock:
+            streamer = self._streamers.get(camera_id)
+            return bool(streamer.night_mode) if streamer is not None else False
+
     def _row_to_config(self, row: dict[str, Any]) -> StreamConfig:
         return StreamConfig(
             camera_id=row["id"],

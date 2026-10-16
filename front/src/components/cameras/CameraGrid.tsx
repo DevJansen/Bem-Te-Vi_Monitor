@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Crosshair, Frame, Plus, Trash2, Wifi, WifiOff } from "lucide-react";
+import { Crosshair, Frame, Moon, Plus, Trash2, Wifi, WifiOff } from "lucide-react";
 import type { Camera } from "@/types";
 import { StatusDot } from "@/components/common/StatusDot";
 import { statusLabel } from "@/utils/format";
@@ -103,6 +103,12 @@ export function CameraGrid({
                     <Badge tone="muted">Sem credenciais</Badge>
                   )}
                   <Badge tone="muted">{camera.zones.length} zona(s)</Badge>
+                  {camera.night_mode ? (
+                    <Badge tone="night">
+                      <Moon className="mr-1 inline h-3 w-3" />
+                      Visão noturna
+                    </Badge>
+                  ) : null}
                 </div>
 
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-dark-700 pt-3">
@@ -156,7 +162,7 @@ function Badge({
   tone,
 }: {
   children: ReactNode;
-  tone: "ok" | "muted";
+  tone: "ok" | "muted" | "night";
 }) {
   return (
     <span
@@ -164,6 +170,7 @@ function Badge({
         "rounded-md px-2 py-0.5",
         tone === "ok" && "bg-emerald-500/15 text-emerald-400",
         tone === "muted" && "bg-dark-700 text-[var(--color-text-muted)]",
+        tone === "night" && "bg-indigo-500/15 text-indigo-300",
       )}
     >
       {children}

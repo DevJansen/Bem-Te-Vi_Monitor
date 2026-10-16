@@ -110,6 +110,13 @@ O arquivo `back\.env.example` contém os nomes e os valores padrão. Copie-o par
 | `TIMELAPSE_HOUR` | Hora local em que o resumo do dia é montado automaticamente | Padrão: `23` (0 a 23) |
 | `TIMELAPSE_MINUTE` | Minuto da hora acima | Padrão: `55` (0 a 59) |
 | `TIMELAPSE_BACKFILL_DAYS` | Quantos dias anteriores sem resumo são reprocessados ao iniciar | Padrão: `7` (0 a 90) |
+| `NIGHT_VISION_MODE` | Modo da visão noturna (infravermelho / baixa luz) | `auto` (padrão), `on` ou `off`; também aceita `true`/`false` |
+| `NIGHT_VISION_THRESHOLD` | Luminância média (0–255) que separa claro de escuro no modo `auto` | Padrão: `60` |
+| `NIGHT_VISION_CLAHE_CLIP` | Intensidade do realce de contraste local (CLAHE) | Padrão: `2.5`; faixa: `1.0` a `8.0` |
+| `NIGHT_VISION_CLAHE_GRID` | Tamanho da grade do CLAHE (blocos por lado) | Padrão: `8`; faixa: `2` a `16` |
+| `NIGHT_VISION_DENOISE` | Redução de ruído leve antes do realce | Padrão: `true` |
+| `NIGHT_FAUNA_ENABLED` | Expande a detecção para fauna noturna além de aves | Padrão: `false` |
+| `NIGHT_FAUNA_CLASS_IDS` | Classes extras do COCO quando a fauna noturna está ligada | Padrão: `15,16` (gato, cachorro) |
 
 O painel administra a integração de IA Externa por completo (chave, URL base e
 modelo), os segredos do Telegram e do Discord, e as preferências de alerta. A
@@ -336,6 +343,38 @@ banco. O player fica embutido na própria aba e usa o endpoint
 `/api/videos/timelapse/{arquivo}`, com suporte a `Range`. Sem o `ffmpeg` instalado,
 a geração fica indisponível (com aviso no log) e o restante do sistema segue normal.
 
+### Monitorar 24 horas com visão noturna (infravermelho)
+
+O AviaWatch continua enxergando no escuro. Quando a luminosidade cai (ou a
+câmera entra em modo infravermelho e passa a entregar imagens em preto e branco),
+o backend realça o contraste e reduz o ruído de cada quadro **antes** da
+inferência do YOLOv8, ajudando a IA a identificar formas mesmo à noite.
+
+- **Automático (recomendado):** o realce entra apenas quando a luminância média
+  do quadro fica abaixo do limiar configurado (`NIGHT_VISION_THRESHOLD`). De dia,
+  nada é alterado.
+- **Sempre ligada:** aplica o realce em todos os quadros — útil para câmeras IR
+  que não escurecem o suficiente.
+- **Desligada:** os quadros seguem originais para a detecção.
+
+O ajuste fica em **Configurações → Calibração e Ajustes → Visão Noturna
+(Infravermelho)**, com o modo, o limiar de luminosidade e a opção de **monitorar
+fauna noturna além de aves** (gatos, cachorros e outros animais do COCO). Corujas
+já são aves e continuam sendo detectadas normalmente. As mudanças são aplicadas em
+tempo de execução, sem reiniciar o backend.
+
+Onde você vê o status noturno:
+
+- **Painel → Transmissão ao vivo:** ícone de lua 🌙 e um filtro suave sobre o vídeo
+  enquanto o realce está ativo.
+- **Câmeras:** um selo **Visão noturna** no cartão da câmera.
+- **Galeria:** um selo **Noturno** nas capturas registradas com o realce ativo.
+
+Tecnicamente, o realce usa **CLAHE** (contraste local adaptativo) no canal de
+luminosidade e um **median blur** leve contra o ruído de sensor. O portão de
+movimento continua medindo o quadro **cru**, para que o realce não gere falsos
+positivos. O modo `auto` só gasta processamento quando a cena está escura.
+
 ### Manter o catálogo local de aves
 
 1. Abra **Minhas Aves** e escolha **Cadastrar Nova Ave**.
@@ -403,9 +442,11 @@ Na seção **Calibração e Ajustes** o usuário escolhe entre dois perfis pront
 **Passarinhos Parados / Alimentador** (recomendado) e **Alta Movimentação / Voo
 Rápido** — ou ajusta manualmente, com sliders explicativos, a *Sensibilidade da
 IA*, o *Tempo de permanência imóvel* (3–15 s) e a *Sensibilidade de movimento
-inicial*. Em **Preferências da IA e alertas** ficam os limites de notificação,
-gravação pré/pós-detecção e o liga/desliga de notificações. Tudo é aplicado em
-tempo de execução, sem reiniciar o backend.
+inicial*. A mesma tela traz a **Visão Noturna (Infravermelho)**: modo
+automático/sempre/desligado, o limiar de luminosidade e a opção de monitorar a
+fauna noturna além de aves. Em **Preferências da IA e alertas** ficam os limites de
+notificação, gravação pré/pós-detecção e o liga/desliga de notificações. Tudo é
+aplicado em tempo de execução, sem reiniciar o backend.
 
 ### Excluir visitas e limpar o histórico
 
@@ -456,7 +497,7 @@ aviawatch/
 | Método | Rota | Descrição |
 |--------|------|-----------|
 | GET | `/api/health` | Saúde da API |
-| GET/POST | `/api/cameras` | Listar / criar câmeras |
+| GET/POST | `/api/cameras` | Listar / criar câmeras (cada item inclui `night_mode`, se a visão noturna está ativa) |
 | GET/PUT/DELETE | `/api/cameras/{id}` | Detalhe / atualizar / remover |
 | GET/PUT | `/api/cameras/{id}/zones` | Carregar / salvar polígonos de inclusão e exclusão |
 | GET | `/api/settings/roi?camera_id={id}` | Ler as Zonas de Interesse (ROI) retangulares da câmera |
@@ -475,8 +516,8 @@ aviawatch/
 | DELETE | `/api/events?older_than_days=N` | Excluir visitas anteriores ao limite de dias informado |
 | DELETE | `/api/events/all` | Apagar todo o histórico e a mídia; exige confirmação `EXCLUIR TUDO` |
 | GET/PUT | `/api/settings` | Configurações persistidas (`notifications_enabled`, `notify_mode`, `min_confidence_notify`, …) |
-| GET | `/api/settings/calibration` | Calibração de sensibilidade ativa (confiança, permanência e movimento) |
-| POST | `/api/settings/calibration` | Atualizar a calibração e aplicar em tempo de execução (perfil ou valores) |
+| GET | `/api/settings/calibration` | Calibração ativa (confiança, permanência, movimento e visão noturna) |
+| POST | `/api/settings/calibration` | Atualizar a calibração (perfil, valores e visão noturna/fauna) e aplicar em tempo de execução |
 | POST | `/api/settings/test-notification` | Teste Telegram/Discord com as credenciais já salvas |
 | GET | `/api/settings/env` | Ler integrações com credenciais mascaradas |
 | POST | `/api/settings/env` | Salvar variáveis permitidas no `back/.env` e aplicá-las em runtime |
@@ -547,7 +588,11 @@ de referência também ficam em `back/app-data/`.
 
 O processamento YOLO roda a cada quatro quadros, usando fluxo óptico nos quadros
 intermediários e as zonas poligonais e as ROI retangulares como filtros espaciais.
-A inferência é restrita à classe `bird` do COCO (id `14`). Quando a ave para de se mover para se alimentar e o
+Por padrão, a inferência é restrita à classe `bird` do COCO (id `14`); quando a
+**fauna noturna** está habilitada, ela é expandida para as classes extras
+configuradas em `NIGHT_FAUNA_CLASS_IDS` (padrão: gato e cachorro). Antes da
+inferência, o módulo de **visão noturna** aplica CLAHE e redução de ruído nos
+quadros escuros/IR quando necessário (`NIGHT_VISION_MODE`). Quando a ave para de se mover para se alimentar e o
 YOLO perde a detecção, o rastreio mantém a mesma caixa "em espera" pela janela de
 `OBJECT_PERSISTENCE_TIME`, de modo que a visita não é reiniciada por uma perda
 momentânea. Em cenas sem aves rastreadas, a inferência só roda quando há

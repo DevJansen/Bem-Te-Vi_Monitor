@@ -29,6 +29,7 @@ quando você pede especificamente para uma inteligência artificial adivinhar o 
 | Função | O que acontece |
 |--------|----------------|
 | 📷 **Detecção de pássaros** | Reconhece um passarinho na câmera e inicia uma "visita" |
+| 🌙 **Visão noturna** | Realça imagens escuras/infravermelho e monitora 24 horas |
 | 🖼️ **Fotos e vídeos** | Guarda uma foto e um clipe curto de cada visita |
 | 🎞️ **Resumo do dia** | Junta os clipes do dia em um vídeo acelerado (time-lapse) |
 | 🔊 **Reconhecimento de canto** | Identifica o pássaro pelo som (opcional) |
@@ -180,7 +181,7 @@ Onde você ajusta o comportamento. Tem cinco blocos:
 
 1. **Alertas e Notificações** — liga/desliga os avisos e escolhe quando notificar (qualquer visita ou só espécies novas), com o token e o ID do chat do Telegram.
 2. **Variáveis do ambiente** — segredos e chaves (Discord, IA externa).
-3. **Calibração e Ajustes** — o "tempero" da IA (veja abaixo).
+3. **Calibração e Ajustes** — o "tempero" da IA e a **visão noturna** (veja abaixo).
 4. **Preferências da IA e alertas** — quanto gravar, o limiar de confiança e se o reconhecimento de canto está ligado.
 5. **Exclusão e limpeza de dados** — apagar visitas antigas ou tudo.
 
@@ -201,6 +202,29 @@ objetos. Ele é ajustado para procurar apenas a classe **"pássaro"**. Quando de
 4. **mantém o registro** mesmo se o pássaro ficar parado comendo por alguns segundos.
 
 Dá para ajustar o quanto a IA deve ser "confiante" para contar um pássaro (veja Calibração).
+
+### 🌙 Visão noturna e monitoramento 24 horas
+
+O AviaWatch também **enxerga no escuro**. Muitas câmeras têm visão infravermelha
+(ficam em preto e branco à noite); o sistema realça o contraste dessas imagens
+antes de procurar o pássaro, então ele continua detectando mesmo com pouca luz.
+
+Na tela **Configurações → Calibração e Ajustes**, na seção **Visão Noturna
+(Infravermelho)**, você escolhe:
+
+- **Automático (recomendado):** só realça quando está escuro — de dia nada muda;
+- **Sempre ligada:** realça em todos os momentos (bom para câmeras IR mais fracas);
+- **Desligada:** usa a imagem original;
+- **Monitorar fauna noturna:** além de aves, passa a detectar bichos comuns de quintal
+  à noite, como **gatos e cachorros**. Corujas já são aves e continuam sendo detectadas.
+
+Como você percebe que a visão noturna está ligada:
+
+- no **Painel**, sobre o vídeo ao vivo aparece um ícone de lua 🌙 e um leve filtro azulado;
+- na tela **Câmeras**, um selo **Visão noturna** no cartão da câmera;
+- na **Galeria**, um selo **Noturno** nas fotos tiradas à noite.
+
+**Para que serve:** não perder os bichos que só aparecem de madrugada.
 
 ### 🔊 Reconhecimento de canto (BirdNET)
 
@@ -296,6 +320,10 @@ Se quiser ajustar na mão, há três controles com explicação ao lado:
 - **Tempo de permanência imóvel** — quanto tempo a visita continua mesmo com o pássaro parado.
 - **Sensibilidade de movimento** — quanto movimento é preciso para a IA começar a procurar.
 
+A mesma tela traz a **Visão Noturna (Infravermelho)**, com o modo (automático,
+sempre ligada ou desligada), o limiar de luminosidade e a opção de monitorar a
+fauna noturna além de aves (veja 🌙 acima).
+
 **As mudanças são aplicadas na hora, sem reiniciar nada.**
 
 ---
@@ -313,6 +341,11 @@ Não automaticamente. Ele detecta e registra. Para saber o nome, você pode (a) 
 
 **Posso usar uma câmera IP / câmera de segurança?**
 Sim, via RTSP ou ONVIF. Basta informar o endereço e as credenciais.
+
+**Funciona de noite, com a câmera em preto e branco (infravermelho)?**
+Sim. O AviaWatch realça o contraste dessas imagens escuras e continua detectando. Na tela
+**Configurações** você ainda pode ligar a **Visão Noturna** e até monitorar a fauna noturna
+(gatos, cachorros) além de aves.
 
 **Apaguei sem querer. Como recuperei?**
 Se o arquivo estiver na Lixeira do computador, você pode restaurá-lo. Se excluiu dentro do AviaWatch, o registro e os arquivos locais são removidos.

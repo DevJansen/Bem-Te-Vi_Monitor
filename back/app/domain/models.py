@@ -129,6 +129,8 @@ class CameraOut(BaseModel):
     enabled: bool
     zones: list[ZoneConfig] = Field(default_factory=list)
     status: str = "idle"
+    # Indica se a câmera está processando quadros em visão noturna (IR/baixa luz).
+    night_mode: bool = False
     created_at: str
     updated_at: str
 
@@ -223,6 +225,36 @@ class AudioInputDevicesOut(BaseModel):
     selected: str = ""
 
 
+class NightVisionMode(str, Enum):
+    """Modo de visão noturna (infravermelho / baixa luz).
+
+    - ``auto``: só aplica o realce quando o quadro está escuro.
+    - ``on``: aplica o realce sempre (câmeras IR que não escurecem o suficiente).
+    - ``off``: nunca aplica o realce.
+    """
+
+    AUTO = "auto"
+    ON = "on"
+    OFF = "off"
+
+    @classmethod
+    def normalize(cls, value: object) -> "NightVisionMode":
+        """Converte o valor recebido (texto do .env, enum, booleano) em modo válido.
+
+        Aceita ``auto``/``on``/``off`` e também ``true``/``false`` (e sinônimos),
+        para compatibilidade com a configuração ``NIGHT_VISION_MODE: true/false``.
+        Qualquer valor não reconhecido cai no modo automático.
+        """
+        if isinstance(value, cls):
+            return value
+        text = str(value or "").strip().lower()
+        if text in {"on", "true", "1", "yes", "sim", "sempre", "ligado"}:
+            return cls.ON
+        if text in {"off", "false", "0", "no", "não", "nao", "desligado"}:
+            return cls.OFF
+        return cls.AUTO
+
+
 class CalibrationProfile(str, Enum):
     """Perfis prontos de calibração, pensados para usuários não técnicos."""
 
@@ -240,6 +272,12 @@ class CalibrationOut(BaseModel):
     object_persistence_time: float = Field(ge=0.0, le=30.0)
     # Sensibilidade de detecção de movimento inicial (0 a 1).
     motion_sensitivity: float = Field(ge=0.0, le=1.0)
+    # Visão noturna: modo de realce para baixa luz / infravermelho.
+    night_vision_mode: NightVisionMode = NightVisionMode.AUTO
+    # Luminância média (0-255) que separa "claro" de "escuro" no modo automático.
+    night_vision_threshold: float = Field(default=60.0, ge=0.0, le=255.0)
+    # Expansão opcional das classes detectadas (fauna noturna além de aves).
+    night_fauna_enabled: bool = False
     # Perfil atualmente selecionado.
     profile: CalibrationProfile = CalibrationProfile.CUSTOM
     # Perfil sugerido como ponto de partida para o usuário.
@@ -253,6 +291,10 @@ class CalibrationUpdate(BaseModel):
     yolo_confidence: float | None = Field(default=None, ge=0.05, le=1.0)
     object_persistence_time: float | None = Field(default=None, ge=0.0, le=30.0)
     motion_sensitivity: float | None = Field(default=None, ge=0.0, le=1.0)
+    # Visão noturna (infravermelho / baixa luz) e fauna noturna.
+    night_vision_mode: NightVisionMode | None = None
+    night_vision_threshold: float | None = Field(default=None, ge=0.0, le=255.0)
+    night_fauna_enabled: bool | None = None
 
 
 class AudioDetectionOut(BaseModel):

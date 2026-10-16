@@ -24,6 +24,7 @@ from app.domain.models import (
     CalibrationOut,
     CalibrationProfile,
     CalibrationUpdate,
+    NightVisionMode,
 )
 
 logger = logging.getLogger(__name__)
@@ -106,6 +107,16 @@ class CalibrationService:
                 if override is not None:
                     values[field] = float(override)
 
+            # 2b) Visão noturna e fauna noturna (independentes do perfil numérico).
+            if payload.night_vision_mode is not None:
+                values["night_vision_mode"] = payload.night_vision_mode
+            if payload.night_vision_threshold is not None:
+                values["night_vision_threshold"] = float(
+                    payload.night_vision_threshold
+                )
+            if payload.night_fauna_enabled is not None:
+                values["night_fauna_enabled"] = bool(payload.night_fauna_enabled)
+
             # 3) Define o rótulo final do perfil.
             values["profile"] = self._resolve_profile(profile, values, payload)
 
@@ -117,17 +128,22 @@ class CalibrationService:
             values["motion_sensitivity"] = min(
                 1.0, max(0.0, float(values["motion_sensitivity"]))
             )
+            values["night_vision_threshold"] = min(
+                255.0, max(0.0, float(values.get("night_vision_threshold", 60.0)))
+            )
 
             updated = CalibrationOut(**values)
             self._write(updated)
             self._current = updated
             self._apply_runtime()
             logger.info(
-                "Calibração atualizada: perfil=%s conf=%.2f persistência=%.1fs movimento=%.2f",
+                "Calibração atualizada: perfil=%s conf=%.2f persistência=%.1fs movimento=%.2f noite=%s fauna=%s",
                 updated.profile.value,
                 updated.yolo_confidence,
                 updated.object_persistence_time,
                 updated.motion_sensitivity,
+                updated.night_vision_mode.value,
+                updated.night_fauna_enabled,
             )
             return updated.model_copy()
 
@@ -137,15 +153,26 @@ class CalibrationService:
         values: dict,
         payload: CalibrationUpdate,
     ) -> CalibrationProfile:
-        """Marca como 'custom' quando o usuário ajusta sliders além do perfil."""
-        if requested is None or requested == CalibrationProfile.CUSTOM:
+        """Marca como 'custom' quando o usuário ajusta sliders além do perfil.
+
+        Alterações apenas de visão noturna (sem tocar nos controles numéricos)
+        preservam o perfil atual, para não sinalizar um ajuste que não ocorreu.
+        """
+        numeric_overrides = {
+            field: getattr(payload, field)
+            for field in _NUMERIC_FIELDS
+            if getattr(payload, field) is not None
+        }
+        if requested == CalibrationProfile.CUSTOM:
             return CalibrationProfile.CUSTOM
+        if requested is None:
+            # Sem perfil informado: preserva o atual se não houve ajuste numérico.
+            return self._current.profile if not numeric_overrides else CalibrationProfile.CUSTOM
         preset = PROFILE_PRESETS.get(requested)
         if preset is None:
             return CalibrationProfile.CUSTOM
-        for field in _NUMERIC_FIELDS:
-            override = getattr(payload, field)
-            if override is not None and abs(float(override) - preset[field]) > 1e-9:
+        for field, override in numeric_overrides.items():
+            if abs(float(override) - preset[field]) > 1e-9:
                 return CalibrationProfile.CUSTOM
         return requested
 
@@ -160,6 +187,11 @@ class CalibrationService:
                 30.0, max(0.0, self._settings.object_persistence_time)
             ),
             motion_sensitivity=min(1.0, max(0.0, self._settings.motion_sensitivity)),
+            night_vision_mode=NightVisionMode.normalize(self._settings.night_vision_mode),
+            night_vision_threshold=min(
+                255.0, max(0.0, float(self._settings.night_vision_threshold))
+            ),
+            night_fauna_enabled=bool(self._settings.night_fauna_enabled),
             profile=CalibrationProfile.CUSTOM,
             recommended_profile=RECOMMENDED_PROFILE,
         )
