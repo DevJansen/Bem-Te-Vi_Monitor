@@ -58,6 +58,12 @@ class RoiZone(BaseModel):
 
     ``(x1, y1)`` é o canto superior esquerdo e ``(x2, y2)`` o canto inferior
     direito, sempre em relação ao quadro inteiro (largura/altura = 1.0).
+
+    ``role`` descreve a função da zona (ex.: ``feeder``/``drinker`` para
+    comedouro/bebedouro), permitindo a análise de comportamento (alimentando-se
+    x pousada) e a priorização de detecções. ``confidence`` sobrescreve o limiar
+    global do YOLO dentro desta zona — útil para deixar o comedouro mais
+    permissivo (aves pequenas/camufladas) sem afetar o resto da cena.
     """
 
     id: str = Field(default_factory=lambda: uuid.uuid4().hex)
@@ -67,6 +73,10 @@ class RoiZone(BaseModel):
     y1: float = Field(ge=0.0, le=1.0)
     x2: float = Field(ge=0.0, le=1.0)
     y2: float = Field(ge=0.0, le=1.0)
+    # Papel da zona: "feeder", "drinker", "perch", "other".
+    role: str = "other"
+    # Limiar de confiança específico da zona (None = usa o global).
+    confidence: float | None = Field(default=None, ge=0.05, le=1.0)
 
     @model_validator(mode="after")
     def _ordenar_cantos(self) -> "RoiZone":
@@ -168,6 +178,10 @@ class BirdSpeciesOut(BaseModel):
     reference_image_path: str | None = None
     reference_image_url: str | None = None
     created_at: str
+    # Status ecológico regional (avifauna do Sul do Brasil / SC).
+    ecological_status: str | None = None
+    ecological_status_label: str | None = None
+    ecological_badge: str | None = None
 
 
 class VisitSpeciesAssignment(BaseModel):
@@ -363,6 +377,10 @@ class LifeListSpeciesOut(BaseModel):
     rarity: str = "Não observada"
     best_photo_url: str | None = None
     badges: list[str] = Field(default_factory=list)
+    # Status ecológico regional (avifauna do Sul do Brasil / SC).
+    ecological_status: str | None = None
+    ecological_status_label: str | None = None
+    ecological_badge: str | None = None
 
 
 class AchievementOut(BaseModel):
@@ -375,6 +393,27 @@ class AchievementOut(BaseModel):
     target: int = Field(ge=1)
     progress: int = Field(ge=0)
     unlocked: bool
+
+
+class AnomalyOut(BaseModel):
+    """Anomalia acústico-visual (ex.: espécie reaparece após longo intervalo).
+
+    Permite a biólogos acompanhar eventos raros: uma espécie que não era
+    registrada há meses reaparecer de repente é um dado relevante de conservação.
+    """
+
+    id: str
+    # Tipo da anomalia: "species_return" (retorno de espécie ausente).
+    kind: str = "species_return"
+    created_at: str
+    species: str
+    scientific_name: str | None = None
+    # Dias desde o registro anterior (quando aplicável).
+    days_absent: int | None = None
+    message: str
+    visit_id: str | None = None
+    acknowledged: bool = False
+    details: dict[str, Any] = Field(default_factory=dict)
 
 
 class NotificationTestRequest(BaseModel):

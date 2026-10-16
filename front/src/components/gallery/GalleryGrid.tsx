@@ -299,6 +299,14 @@ export function GalleryGrid({
               "não identificada",
               "unidentified",
             ].includes(visit.species.trim().toLocaleLowerCase("pt-BR"));
+            // Inteligência biológica: status ecológico, bando e comportamento.
+            const ecologicalBadge = visit.metadata?.ecological?.badge;
+            const ecologicalStatus = visit.metadata?.ecological?.status;
+            const isRareSpecies = ecologicalStatus === "rara";
+            const individualsPeak = visit.metadata?.individuals_peak ?? 0;
+            const individualsSummary = visit.metadata?.individuals_summary;
+            const behaviorLabel = visit.metadata?.behavior_label;
+            const behaviorIcon = visit.metadata?.behavior_icon;
             return (
               <article
                 key={visit.id}
@@ -355,6 +363,40 @@ export function GalleryGrid({
                     <p className="text-xs italic text-[var(--color-text-muted)]">
                       {visit.assigned_species_scientific_name}
                     </p>
+                  ) : null}
+                  {ecologicalBadge || individualsPeak > 1 || behaviorLabel ? (
+                    <div className="flex flex-wrap items-center gap-1 pt-1">
+                      {ecologicalBadge ? (
+                        <span
+                          className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
+                            isRareSpecies
+                              ? "bg-amber-400/90 text-amber-950"
+                              : "bg-dark-700 text-[var(--color-text-primary)]"
+                          }`}
+                          title={`Status ecológico: ${visit.metadata?.ecological?.label ?? ""}`}
+                        >
+                          {ecologicalBadge}
+                        </span>
+                      ) : null}
+                      {individualsPeak > 1 ? (
+                        <span
+                          className="rounded-md bg-sky-500/85 px-1.5 py-0.5 text-[10px] font-semibold text-white"
+                          title={
+                            individualsSummary ?? `${individualsPeak} aves simultâneas`
+                          }
+                        >
+                          👥 {individualsPeak}
+                        </span>
+                      ) : null}
+                      {behaviorLabel ? (
+                        <span
+                          className="rounded-md bg-dark-700 px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-text-primary)]"
+                          title={`Comportamento: ${behaviorLabel}`}
+                        >
+                          {behaviorIcon} {behaviorLabel}
+                        </span>
+                      ) : null}
+                    </div>
                   ) : null}
                   <label className="block pt-1 text-xs text-[var(--color-text-muted)]">
                     Associar ao catálogo

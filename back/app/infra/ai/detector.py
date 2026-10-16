@@ -20,6 +20,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from app.core.config import get_settings
+from app.infra.ai.model_loader import ModeloOtimizado, carregar_modelo
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,9 @@ class Detection:
     confidence: float
     # Caixa no formato xyxy em pixels absolutos.
     bbox: tuple[float, float, float, float]
+    # Identificador estável do indivíduo atribuído pelo rastreador (BoxTracker).
+    # ``None`` quando o rastreio ainda não associou a detecção.
+    track_id: int | None = None
 
     @property
     def center(self) -> tuple[float, float]:
@@ -106,10 +110,17 @@ class BirdDetector:
             if bird_class_id is not None
             else settings.yolo_bird_class_id
         )
+        # --- Edge AI: aceleração da inferência ---
+        self.acceleration = settings.yolo_acceleration
+        self.device = settings.yolo_device
+        self.half = bool(settings.yolo_half)
+        self.imgsz = int(settings.yolo_imgsz)
+        self.tta = bool(settings.yolo_tta)
         # Conjunto de classes aceitas na inferência. Por padrão apenas a ave;
         # pode ser expandido em runtime (fauna noturna) via set_class_ids().
         self._class_ids: set[int] = {self.bird_class_id}
         self._model = None
+        self._otimizado: ModeloOtimizado | None = None
         self._lock = threading.RLock()
         self._load_error: str | None = None
         self._load_attempted = False
@@ -121,6 +132,16 @@ class BirdDetector:
     @property
     def load_error(self) -> str | None:
         return self._load_error
+
+    @property
+    def backend(self) -> str | None:
+        """Backend efetivo em uso (``tensorrt``/``onnx``/``pytorch``)."""
+        return self._otimizado.backend if self._otimizado else None
+
+    @property
+    def acceleration_notes(self) -> list[str]:
+        """Observações de aceleração (telemetria/diagnóstico)."""
+        return list(self._otimizado.observacoes) if self._otimizado else []
 
     @property
     def class_ids(self) -> set[int]:
@@ -151,11 +172,21 @@ class BirdDetector:
                 return False
             self._load_attempted = True
             try:
-                from ultralytics import YOLO
-
-                logger.info("Carregando modelo YOLO %s (inferência local)", self.model_name)
-                self._model = YOLO(self.model_name)
+                otimizado = carregar_modelo(
+                    self.model_name,
+                    aceleracao=self.acceleration,
+                    device=self.device,
+                    half=self.half,
+                    imgsz=self.imgsz,
+                )
+                self._otimizado = otimizado
+                self._model = otimizado.modelo
                 self._load_error = None
+                logger.info(
+                    "Modelo YOLO pronto (%s): %s",
+                    otimizado.backend,
+                    " | ".join(otimizado.observacoes),
+                )
                 return True
             except Exception as exc:
                 self._load_error = str(exc)
@@ -168,12 +199,17 @@ class BirdDetector:
         *,
         confidence: float | None = None,
         class_ids: Iterable[int] | None = None,
+        augment: bool | None = None,
     ) -> list[Detection]:
         """Executa a inferência e devolve as detecções.
 
         Os parâmetros opcionais permitem que a análise offline use um limiar
         mais sensível e um conjunto de classes específico **sem** alterar o
         estado do detector compartilhado com a captura ao vivo.
+
+        ``augment`` liga o Test-Time Augmentation leve (reforço de recall em
+        cenas difíceis: clima adverso, ave camuflada). Quando ``None``, usa a
+        configuração global (``YOLO_TTA``).
         """
         if frame is None or frame.size == 0:
             return []
@@ -189,6 +225,10 @@ class BirdDetector:
                 if class_ids
                 else sorted(self._class_ids)
             )
+            usar_augment = self.tta if augment is None else bool(augment)
+            predict_kwargs: dict[str, object] = (
+                self._otimizado.predict_kwargs() if self._otimizado else {}
+            )
             try:
                 results = self._model.predict(
                     source=frame,
@@ -197,7 +237,10 @@ class BirdDetector:
                     # Filtro de classe: por padrão somente aves (COCO id 14);
                     # expandido para fauna noturna quando o usuário habilita.
                     classes=target_classes,
+                    # Test-Time Augmentation leve quando solicitado.
+                    augment=usar_augment,
                     verbose=False,
+                    **predict_kwargs,
                 )
             except Exception:
                 logger.exception("Falha na inferência do YOLO")

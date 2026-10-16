@@ -220,6 +220,34 @@ essas fotos ganham um selo **HD** e passam a ser a foto de destaque no seu
 **Para que serve:** conseguir aquela foto bonita e nítida do pássaro, sem ter de
 procurar o melhor instante manualmente.
 
+### 🧠 A IA que conta bando, entende comportamento e conhece as espécies
+
+O "cérebro" do AviaWatch ficou bem mais esperto. Agora ele:
+
+- **conta quantos pássaros** estão no comedouro ao mesmo tempo. Se chegarem 3
+  cambacicas e 2 saíras juntas, ele registra isso e mostra um selo **👥 N** na foto;
+- **distingue o que o pássaro está fazendo**: 🍽️ *Alimentando-se* (bico no
+  comedouro), 🐦 *Pousada* (só descansando) ou ✈️ *Em movimento*;
+- **conhece as espécies da nossa região** e coloca um selo em cada uma:
+  🟢 Nativa, 🟡 Migratória, 🔵 Endêmica, ⭐ **Rara** ou 🟠 Exótica. Isso aparece em
+  **Minhas Aves**, no **Álbum** e na **Galeria** — ótimo para quem acompanha aves
+  raras e a conservação;
+- **fica mais atento em dias ruins de luz**: quando chove, fica nublado ou
+  escurece, ele automaticamente fica um pouquinho mais "desconfiado do contrário"
+  — ou seja, aceita detectar o pássaro mesmo com a imagem mais apagada, para não
+  perder o registro;
+- **avisa quando uma ave volta**: se uma espécie que você não via há **mais de 6
+  meses** aparecer de novo, o AviaWatch cria um **alerta de reaparecimento** (uma
+  "anomalia"), que pode ser visto na lista de anomalias da API/painel.
+
+**Para que serve:** transformar o AviaWatch num verdadeiro caderno de campo
+automático — não só "tem um pássaro", mas *quantos*, *fazendo o quê* e *que
+espécie* é, com foco em aves raras e migratórias.
+
+> **Dica:** o contraste extra do comedouro e o modo "só registrar quando estiver
+> comendo" são ajustes avançados. Por padrão, o sistema registra todas as visitas
+> (mesmo as de quem só pousa) para você não perder nada.
+
 ### 🌙 Visão noturna e monitoramento 24 horas
 
 O AviaWatch também **enxerga no escuro**. Muitas câmeras têm visão infravermelha

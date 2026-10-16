@@ -120,6 +120,32 @@ MIGRATIONS: list[tuple[int, str]] = [
             ON visits(weather_code);
         """,
     ),
+    (
+        5,
+        """
+        -- Status ecológico regional (avifauna do Sul do Brasil / SC) por espécie.
+        ALTER TABLE bird_species ADD COLUMN ecological_status TEXT;
+
+        -- Log de anomalias acústico-visuais (ex.: espécie ausente há meses).
+        CREATE TABLE IF NOT EXISTS anomaly_events (
+            id TEXT PRIMARY KEY,
+            kind TEXT NOT NULL DEFAULT 'species_return',
+            created_at TEXT NOT NULL,
+            species TEXT NOT NULL,
+            scientific_name TEXT,
+            days_absent INTEGER,
+            message TEXT NOT NULL DEFAULT '',
+            visit_id TEXT,
+            acknowledged INTEGER NOT NULL DEFAULT 0,
+            details_json TEXT NOT NULL DEFAULT '{}'
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_anomaly_events_created_at
+            ON anomaly_events(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_anomaly_events_species
+            ON anomaly_events(species);
+        """,
+    ),
 ]
 
 

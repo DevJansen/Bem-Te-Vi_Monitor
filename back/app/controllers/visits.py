@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 from app.core.config import get_settings
 from app.domain.models import VisitOut, VisitSpeciesAssignment
 from app.infra.database.repository import VisitRepository
+from app.services.anomaly_log import registrar_retorno_especie
 from app.services.external_species_identifier import (
     ExternalIdentificationError,
     identify_bird_image_file,
@@ -36,6 +37,16 @@ def assign_visit_species(
         raise HTTPException(status_code=404, detail="Espécie não encontrada.") from exc
     if row is None:
         raise HTTPException(status_code=404, detail="Visita não encontrada.")
+    # Log de anomalia: espécie reaparecendo após longo intervalo.
+    if payload.species_id:
+        nome = row.get("assigned_species_common_name") or row.get("species")
+        if nome:
+            registrar_retorno_especie(
+                species=str(nome),
+                scientific_name=row.get("assigned_species_scientific_name"),
+                visit_id=visit_id,
+                exclude_visit_id=visit_id,
+            )
     return VisitRepository.to_out(row)
 
 
@@ -214,4 +225,11 @@ def identify_visit_external(
     )
     if updated is None:
         raise HTTPException(status_code=404, detail="Visit not found")
+    # Log de anomalia: espécie reaparecendo após longo intervalo.
+    registrar_retorno_especie(
+        species=identification.common_name,
+        scientific_name=identification.scientific_name,
+        visit_id=visit_id,
+        exclude_visit_id=visit_id,
+    )
     return VisitRepository.to_out(updated)

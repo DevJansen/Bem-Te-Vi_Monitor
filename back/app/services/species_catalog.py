@@ -18,6 +18,7 @@ import uuid
 from pathlib import Path
 
 from app.core.config import get_settings
+from app.domain.avifauna_sul import classificar_status
 from app.infra.database.repository import BirdSpeciesRepository
 
 logger = logging.getLogger(__name__)
@@ -84,4 +85,8 @@ def find_or_create_species(
         description=description.strip(),
         reference_image_path=relative_path,
         species_id=species_id,
+        # Rótulo automático do status ecológico regional (avifauna do Sul).
+        ecological_status=classificar_status(
+            common_name=common_name, scientific_name=scientific_name
+        ).value,
     )

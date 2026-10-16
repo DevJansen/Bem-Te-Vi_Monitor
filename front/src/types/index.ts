@@ -169,6 +169,34 @@ export type BirdVisit = {
     best_frame_confidence?: number;
     /** Falso quando todos os quadros eram desfoque (fallback). */
     best_frame_sharpness_ok?: boolean;
+    /** Contagem de indivíduos/bandos da janela da visita. */
+    individuals_total?: number;
+    individuals_peak?: number;
+    individuals_by_species?: Record<string, number>;
+    individuals_by_class?: Record<string, number>;
+    /** Frase do bando no pico (ex.: "3 Cambacicas e 2 Saíras"). */
+    individuals_summary?: string;
+    /** Comportamento predominante: "feeding" | "perching" | "moving". */
+    behavior?: string;
+    behavior_label?: string;
+    behavior_icon?: string;
+    behavior_zone?: string | null;
+    /** Ajuste de sensibilidade aplicado pela IA conforme clima/horário. */
+    context_adjustment?: {
+      confidence: number;
+      tta: boolean;
+      adaptive_contrast: boolean;
+      reasons: string[];
+    };
+    /** Backend de inferência em uso (tensorrt | onnx | pytorch). */
+    inference_backend?: string;
+    /** Status ecológico regional (avifauna do Sul do Brasil / SC). */
+    ecological?: {
+      status: string;
+      label: string;
+      badge: string;
+      icon: string;
+    };
     external_identification?: {
       scientific_name: string;
       common_name: string;
@@ -187,6 +215,10 @@ export type BirdSpecies = {
   reference_image_path: string | null;
   reference_image_url: string | null;
   created_at: string;
+  /** Status ecológico regional (avifauna do Sul do Brasil / SC). */
+  ecological_status?: string | null;
+  ecological_status_label?: string | null;
+  ecological_badge?: string | null;
 };
 
 export type BirdSpeciesCreatePayload = {
@@ -244,6 +276,24 @@ export type LifeListSpecies = {
   rarity: RarityTier;
   best_photo_url: string | null;
   badges: string[];
+  /** Status ecológico regional (avifauna do Sul do Brasil / SC). */
+  ecological_status?: string | null;
+  ecological_status_label?: string | null;
+  ecological_badge?: string | null;
+};
+
+/** Anomalia acústico-visual (ex.: espécie que reaparece após meses ausente). */
+export type Anomaly = {
+  id: string;
+  kind: string;
+  created_at: string;
+  species: string;
+  scientific_name: string | null;
+  days_absent: number | null;
+  message: string;
+  visit_id: string | null;
+  acknowledged: boolean;
+  details: Record<string, unknown>;
 };
 
 /** Raridade da espécie no álbum, conforme o nº de avistagens. */

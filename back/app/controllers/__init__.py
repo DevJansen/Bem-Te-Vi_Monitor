@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from app.api import analytics
 from app.controllers import (
+    anomalies,
     audio_detections,
     cameras,
     events,
@@ -18,6 +19,7 @@ from app.controllers import (
 )
 
 api_router = APIRouter()
+api_router.include_router(anomalies.router)
 api_router.include_router(audio_detections.router)
 api_router.include_router(events.router)
 api_router.include_router(cameras.router)

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from app.domain.models import (
+    AnomalyOut,
     BirdSpeciesOut,
     CameraCreate,
     CameraOut,
@@ -361,6 +362,15 @@ class VisitRepository:
                 identification["image_source"] = image_source
             metadata["external_identification"] = identification
             metadata["identification_status"] = "Identificado por IA Externa"
+            # Status ecológico regional (rótulo automático para o painel).
+            try:
+                from app.domain.avifauna_sul import descrever
+
+                metadata["ecological"] = descrever(
+                    common_name=common_name, scientific_name=scientific_name
+                )
+            except Exception:
+                logger.debug("Falha ao rotular status ecológico", exc_info=True)
             conn.execute(
                 """
                 UPDATE visits
@@ -583,6 +593,7 @@ class BirdSpeciesRepository:
         description: str,
         reference_image_path: str | None,
         species_id: str | None = None,
+        ecological_status: str | None = None,
     ) -> dict[str, Any]:
         species_id = species_id or str(uuid.uuid4())
         created_at = _utc_now()
@@ -591,8 +602,8 @@ class BirdSpeciesRepository:
                 """
                 INSERT INTO bird_species (
                     id, common_name, scientific_name, description,
-                    reference_image_path, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    reference_image_path, created_at, ecological_status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     species_id,
@@ -601,11 +612,25 @@ class BirdSpeciesRepository:
                     description,
                     reference_image_path,
                     created_at,
+                    ecological_status,
                 ),
             )
         species = self.get(species_id)
         assert species is not None
         return species
+
+    def set_ecological_status(
+        self, species_id: str, status: str | None
+    ) -> dict[str, Any] | None:
+        """Atualiza o status ecológico regional de uma espécie."""
+        with db_session(self.db_path) as conn:
+            cursor = conn.execute(
+                "UPDATE bird_species SET ecological_status = ? WHERE id = ?",
+                (status, species_id),
+            )
+            if cursor.rowcount == 0:
+                return None
+        return self.get(species_id)
 
     def delete(self, species_id: str) -> dict[str, Any] | None:
         with db_session(self.db_path) as conn:
@@ -620,9 +645,23 @@ class BirdSpeciesRepository:
 
     @staticmethod
     def to_out(row: dict[str, Any]) -> BirdSpeciesOut:
+        from app.domain.avifauna_sul import classificar_status, descrever
+
         image_path = row.get("reference_image_path")
         image_url = (
             f"/reference-birds/{Path(image_path).name}" if image_path else None
+        )
+        # O status vem do banco quando já rotulado; senão, é inferido pela base
+        # regional (assim espécies antigas ganham o selo sem reprocessamento).
+        status_armazenado = row.get("ecological_status")
+        if not status_armazenado:
+            status_armazenado = classificar_status(
+                common_name=row.get("common_name"),
+                scientific_name=row.get("scientific_name"),
+            ).value
+        descricao_status = descrever(
+            common_name=row.get("common_name"),
+            scientific_name=row.get("scientific_name"),
         )
         return BirdSpeciesOut(
             id=row["id"],
@@ -632,6 +671,117 @@ class BirdSpeciesRepository:
             reference_image_path=image_path,
             reference_image_url=image_url,
             created_at=row["created_at"],
+            ecological_status=status_armazenado,
+            ecological_status_label=descricao_status["label"],
+            ecological_badge=descricao_status["badge"],
+        )
+
+
+class AnomalyRepository:
+    """Armazena e consulta anomalias acústico-visuais (log para biólogos)."""
+
+    def __init__(self, db_path: Path) -> None:
+        self.db_path = db_path
+
+    def create(
+        self,
+        *,
+        kind: str,
+        species: str,
+        scientific_name: str | None,
+        days_absent: int | None,
+        message: str,
+        visit_id: str | None,
+        details: dict[str, Any] | None = None,
+        anomaly_id: str | None = None,
+    ) -> dict[str, Any]:
+        anomaly_id = anomaly_id or str(uuid.uuid4())
+        created_at = _utc_now()
+        with db_session(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO anomaly_events (
+                    id, kind, created_at, species, scientific_name,
+                    days_absent, message, visit_id, acknowledged, details_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+                """,
+                (
+                    anomaly_id,
+                    kind,
+                    created_at,
+                    species,
+                    scientific_name,
+                    days_absent,
+                    message,
+                    visit_id,
+                    json.dumps(details or {}, ensure_ascii=False),
+                ),
+            )
+        return self.get(anomaly_id) or {}
+
+    def get(self, anomaly_id: str) -> dict[str, Any] | None:
+        with db_session(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT * FROM anomaly_events WHERE id = ?", (anomaly_id,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def list_recent(self, limit: int = 50, *, only_pending: bool = False) -> list[dict[str, Any]]:
+        with db_session(self.db_path) as conn:
+            sql = "SELECT * FROM anomaly_events"
+            if only_pending:
+                sql += " WHERE acknowledged = 0"
+            sql += " ORDER BY created_at DESC, id DESC LIMIT ?"
+            rows = conn.execute(sql, (int(limit),)).fetchall()
+            return [dict(row) for row in rows]
+
+    def count_pending(self) -> int:
+        with db_session(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) AS total FROM anomaly_events WHERE acknowledged = 0"
+            ).fetchone()
+            return int(row["total"]) if row else 0
+
+    def has_recent_for_species(self, species: str, since_iso: str) -> bool:
+        """Indica se já há anomalia recente para a espécie (evita spam)."""
+        with db_session(self.db_path) as conn:
+            row = conn.execute(
+                """
+                SELECT 1 FROM anomaly_events
+                WHERE species = ? COLLATE NOCASE AND created_at >= ?
+                LIMIT 1
+                """,
+                (species, since_iso),
+            ).fetchone()
+            return row is not None
+
+    def acknowledge(self, anomaly_id: str) -> dict[str, Any] | None:
+        with db_session(self.db_path) as conn:
+            cursor = conn.execute(
+                "UPDATE anomaly_events SET acknowledged = 1 WHERE id = ?",
+                (anomaly_id,),
+            )
+            if cursor.rowcount == 0:
+                return None
+        return self.get(anomaly_id)
+
+    @staticmethod
+    def to_out(row: dict[str, Any]) -> AnomalyOut:
+        try:
+            details = json.loads(row.get("details_json") or "{}")
+        except Exception:
+            details = {}
+        return AnomalyOut(
+            id=row["id"],
+            kind=row.get("kind") or "species_return",
+            created_at=row["created_at"],
+            species=row["species"],
+            scientific_name=row.get("scientific_name"),
+            days_absent=row.get("days_absent"),
+            message=row.get("message") or "",
+            visit_id=row.get("visit_id"),
+            acknowledged=bool(row.get("acknowledged")),
+            details=details,
         )
 
 

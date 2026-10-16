@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { KPIBoard } from "@/components/dashboard/KPIBoard";
+import { AnomalyAlertsPanel } from "@/components/dashboard/AnomalyAlertsPanel";
 import { LiveStreamView } from "@/components/dashboard/LiveStreamView";
 import { WeatherWidget } from "@/components/dashboard/WeatherWidget";
 import { VisitsChart } from "@/components/dashboard/VisitsChart";
@@ -208,6 +209,7 @@ export function App() {
           {tab === "dashboard" ? (
             <div className="space-y-4">
               <WeatherWidget />
+              <AnomalyAlertsPanel />
               <KPIBoard metrics={metricsQuery.data} loading={metricsQuery.loading} />
               <div className="grid gap-4 xl:grid-cols-3">
                 <div className="xl:col-span-2">

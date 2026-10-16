@@ -48,6 +48,26 @@ class Settings(BaseModel):
     motion_sensitivity: float = Field(default=0.5, ge=0.0, le=1.0)
     # Classe do dataset COCO para "bird". Mantida em 14 como padrão.
     yolo_bird_class_id: int = Field(default=14, ge=0)
+    # --- Edge AI: aceleração da inferência ---
+    # Backend preferido: "auto" (TensorRT > ONNX > PyTorch), "engine"/"tensorrt",
+    # "onnx" ou "pt". Em "auto", usa o artefato otimizado se existir ao lado do
+    # .pt; senão, cai no PyTorch (FP16 em GPU CUDA).
+    yolo_acceleration: str = "auto"
+    # Dispositivo de inferência: "auto" (GPU se houver, senão CPU), "cpu" ou
+    # "0"/"1"... (índice da GPU CUDA).
+    yolo_device: str = "auto"
+    # Usa FP16 no PyTorch quando houver GPU CUDA (quase 2x mais rápido, mínima
+    # perda de precisão). Ignorado em CPU e nos backends TRT/ONNX.
+    yolo_half: bool = False
+    # Tamanho de entrada da inferência (px). Menor = mais rápido; 640 é o padrão
+    # do YOLOv8. Para aves pequenas, 960/1280 aumentam o recall ao custo de tempo.
+    yolo_imgsz: int = Field(default=640, ge=160, le=1920)
+    # Test-Time Augmentation global (reforço de recall). Mais lento; o contexto
+    # sistêmico já o liga automaticamente em clima adverso.
+    yolo_tta: bool = False
+    # Filtro de contraste adaptativo (CLAHE) antes da inferência nas ROI: revela
+    # aves pequenas/camufladas no comedouro. Não afeta a imagem gravada.
+    roi_adaptive_contrast: bool = True
     pre_record_seconds: float = Field(default=3.0, ge=3.0, le=30.0)
     post_record_seconds: float = 3.0
     camera_reconnect_delay_sec: float = 3.0
@@ -133,6 +153,22 @@ class Settings(BaseModel):
     # e reduz acima do máximo (economia de disco).
     smart_crop_min_dimension: int = Field(default=640, ge=0, le=4096)
     smart_crop_max_dimension: int = Field(default=1024, ge=64, le=4096)
+    # --- IA ciente do contexto (clima/horário) ---
+    # Ajusta automaticamente a sensibilidade conforme o clima (chuva/nublado) e a
+    # baixa luz, sempre de forma conservadora (só torna mais permissivo).
+    adaptive_context_enabled: bool = True
+    # --- Análise de comportamento ---
+    # Quando ligado, só registra a visita se a ave estiver efetivamente se
+    # alimentando (bico no comedouro). Desligado por padrão para não perder
+    # visitas de aves que apenas pousam.
+    behavior_require_feeding: bool = False
+    # --- Log de anomalias acústico-visuais ---
+    anomaly_log_enabled: bool = True
+    # Intervalo (dias) sem registro a partir do qual o reaparecimento é anomalia.
+    # 180 dias = ~6 meses.
+    anomaly_species_gap_days: int = Field(default=180, ge=1, le=3650)
+    # Janela (dias) para não repetir a mesma anomalia de espécie (evita spam).
+    anomaly_cooldown_days: int = Field(default=30, ge=1, le=3650)
 
     @property
     def db_path(self) -> Path:
@@ -257,6 +293,21 @@ class Settings(BaseModel):
                 max(0.0, float(os.getenv("MOTION_SENSITIVITY", "0.5"))),
             ),
             yolo_bird_class_id=max(0, int(os.getenv("YOLO_BIRD_CLASS_ID", "14"))),
+            yolo_acceleration=os.getenv("YOLO_ACCELERATION", "auto"),
+            yolo_device=os.getenv("YOLO_DEVICE", "auto"),
+            yolo_half=os.getenv("YOLO_HALF", "false")
+            .strip()
+            .lower()
+            in {"1", "true", "yes", "on", "sim"},
+            yolo_imgsz=min(1920, max(160, int(os.getenv("YOLO_IMGSZ", "640")))),
+            yolo_tta=os.getenv("YOLO_TTA", "false")
+            .strip()
+            .lower()
+            in {"1", "true", "yes", "on", "sim"},
+            roi_adaptive_contrast=os.getenv("ROI_ADAPTIVE_CONTRAST", "true")
+            .strip()
+            .lower()
+            not in {"0", "false", "no", "off", "não", "nao"},
             pre_record_seconds=max(
                 3.0,
                 float(os.getenv("PRE_RECORD_SECONDS", "3.0")),
@@ -376,6 +427,24 @@ class Settings(BaseModel):
             smart_crop_max_dimension=min(
                 4096,
                 max(64, int(os.getenv("SMART_CROP_MAX_DIMENSION", "1024"))),
+            ),
+            adaptive_context_enabled=os.getenv("ADAPTIVE_CONTEXT_ENABLED", "true")
+            .strip()
+            .lower()
+            not in {"0", "false", "no", "off", "não", "nao"},
+            behavior_require_feeding=os.getenv("BEHAVIOR_REQUIRE_FEEDING", "false")
+            .strip()
+            .lower()
+            in {"1", "true", "yes", "on", "sim"},
+            anomaly_log_enabled=os.getenv("ANOMALY_LOG_ENABLED", "true")
+            .strip()
+            .lower()
+            not in {"0", "false", "no", "off", "não", "nao"},
+            anomaly_species_gap_days=min(
+                3650, max(1, int(os.getenv("ANOMALY_SPECIES_GAP_DAYS", "180")))
+            ),
+            anomaly_cooldown_days=min(
+                3650, max(1, int(os.getenv("ANOMALY_COOLDOWN_DAYS", "30")))
             ),
         )
 

@@ -1,6 +1,7 @@
 import axios, { type AxiosError } from "axios";
 import type {
   Achievement,
+  Anomaly,
   AppSettings,
   AppSettingsUpdate,
   AnalyticsSummary,
@@ -263,6 +264,33 @@ export async function createSpecies(
 
 export async function deleteSpecies(id: string): Promise<void> {
   await api.delete(`/species/${encodeURIComponent(id)}`);
+}
+
+/* ——— Log de anomalias acústico-visuais ——— */
+
+export async function listAnomalies(options?: {
+  limit?: number;
+  onlyPending?: boolean;
+}): Promise<Anomaly[]> {
+  const { data } = await api.get<Anomaly[]>("/anomalies", {
+    params: {
+      limit: options?.limit ?? 50,
+      only_pending: options?.onlyPending ?? false,
+    },
+  });
+  return data;
+}
+
+export async function fetchAnomaliesPendingCount(): Promise<number> {
+  const { data } = await api.get<{ pending: number }>("/anomalies/pending-count");
+  return data.pending;
+}
+
+export async function acknowledgeAnomaly(id: string): Promise<Anomaly> {
+  const { data } = await api.post<Anomaly>(
+    `/anomalies/${encodeURIComponent(id)}/acknowledge`,
+  );
+  return data;
 }
 
 /* ——— Métricas / Settings ——— */

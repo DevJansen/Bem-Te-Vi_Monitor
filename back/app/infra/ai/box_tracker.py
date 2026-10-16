@@ -15,7 +15,7 @@ Como funciona:
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import cv2
 import numpy as np
@@ -55,6 +55,8 @@ class _Track:
 
     detection: Detection
     last_seen: float
+    # Identificador estável do indivíduo (mantido enquanto a ave for rastreada).
+    track_id: int
     # Quantidade de sincronizações em que o YOLO não confirmou esta faixa.
     misses: int = 0
 
@@ -67,12 +69,27 @@ class BoxTracker:
       presente após a última detecção real (3 a 10 s cobrem bem aves imóveis).
     - iou_match_threshold: sobreposição mínima para associar uma nova detecção
       a uma faixa já existente (evita duplicar a mesma ave).
+
+    Cada faixa recebe um ``track_id`` estável, permitindo contar indivíduos
+    distintos (bandos) ao longo da visita.
     """
 
     retention_seconds: float = 5.0
     iou_match_threshold: float = DEFAULT_IOU_MATCH
     _gray: np.ndarray | None = field(default=None, init=False, repr=False)
     _tracks: list[_Track] = field(default_factory=list, init=False, repr=False)
+    _next_id: int = field(default=0, init=False, repr=False)
+    _seen_ids: set[int] = field(default_factory=set, init=False, repr=False)
+
+    def _novo_id(self) -> int:
+        self._next_id += 1
+        self._seen_ids.add(self._next_id)
+        return self._next_id
+
+    @staticmethod
+    def _com_track_id(detection: Detection, track_id: int) -> Detection:
+        """Cópia da detecção com o ``track_id`` atribuído."""
+        return replace(detection, track_id=track_id)
 
     # ------------------------------------------------------------------ #
     # Sincronização com o YOLO (quadros de inferência)
@@ -103,8 +120,20 @@ class BoxTracker:
                     best_index = index
             if best_index is not None:
                 matched.add(best_index)
+                # Reaproveita o identificador do indivíduo já rastreado.
+                track_id = self._tracks[best_index].track_id
+            else:
+                # Nova ave: cria um identificador inédito.
+                track_id = self._novo_id()
             # Faixa confirmada pelo YOLO: reinicia o relógio de retenção.
-            updated.append(_Track(detection=detection, last_seen=now, misses=0))
+            updated.append(
+                _Track(
+                    detection=self._com_track_id(detection, track_id),
+                    last_seen=now,
+                    track_id=track_id,
+                    misses=0,
+                )
+            )
 
         # 2) Faixas sem confirmação neste quadro permanecem "em espera".
         for index, track in enumerate(self._tracks):
@@ -141,6 +170,7 @@ class BoxTracker:
                 class_name=track.detection.class_name,
                 confidence=track.detection.confidence,
                 bbox=shifted,
+                track_id=track.track_id,
             )
 
         self._gray = gray
@@ -164,6 +194,14 @@ class BoxTracker:
     def has_tracks(self) -> bool:
         """Indica se existe alguma ave rastreada (mesmo que imóvel/em espera)."""
         return bool(self._tracks)
+
+    def active_ids(self) -> set[int]:
+        """Identificadores dos indivíduos presentes agora."""
+        return {track.track_id for track in self._tracks}
+
+    def seen_ids(self) -> set[int]:
+        """Todos os identificadores já vistos desde o início do rastreio."""
+        return set(self._seen_ids)
 
     @staticmethod
     def _to_gray(frame: np.ndarray) -> np.ndarray:

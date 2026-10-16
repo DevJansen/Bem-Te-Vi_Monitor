@@ -153,6 +153,25 @@ export function SpeciesCatalog({
                 <p className="text-sm italic text-emerald-300">
                   {item.scientific_name}
                 </p>
+                {item.ecological_badge ? (
+                  <span
+                    className={
+                      "inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold " +
+                      (item.ecological_status === "rara"
+                        ? "border-amber-400/40 bg-amber-400/15 text-amber-300"
+                        : item.ecological_status === "endemica"
+                          ? "border-sky-400/30 bg-sky-400/10 text-sky-300"
+                          : item.ecological_status === "migratoria"
+                            ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-300"
+                            : item.ecological_status === "exotica"
+                              ? "border-orange-400/30 bg-orange-400/10 text-orange-300"
+                              : "border-emerald-500/25 bg-emerald-500/10 text-emerald-300")
+                    }
+                    title={`Status ecológico regional: ${item.ecological_status_label ?? ""}`}
+                  >
+                    {item.ecological_badge}
+                  </span>
+                ) : null}
                 {item.description ? (
                   <p className="line-clamp-3 text-xs leading-relaxed text-[var(--color-text-muted)]">
                     {item.description}

@@ -14,8 +14,15 @@ import cv2
 import numpy as np
 
 from app.core.config import get_settings
+from app.domain.avifauna_sul import descrever
 from app.domain.models import RoiType, RoiZone, VisitOut, ZoneConfig, ZoneMode
 from app.infra.ai.annotate import draw_bird_detections
+from app.infra.ai.band_counting import ContadorIndividuos
+from app.infra.ai.behavior import (
+    Comportamento,
+    classificar_comportamento,
+    energia_movimento,
+)
 from app.infra.ai.best_frame import MelhorQuadro, SeletorMelhorQuadro
 from app.infra.ai.box_tracker import BoxTracker
 from app.infra.ai.detector import (
@@ -39,7 +46,9 @@ from app.infra.media.storage import (
     save_clip_mp4,
     save_thumbnail,
 )
+from app.services.anomaly_log import registrar_retorno_especie
 from app.services.calibration import get_calibration_service
+from app.services.system_context import ajustar_sensibilidade
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +103,22 @@ class CameraPipeline(threading.Thread):
         self._last_detections: list[Detection] = []
         # Seleção do melhor quadro da janela (nitidez + confiança + enquadramento).
         self._best_selector: SeletorMelhorQuadro | None = None
+        # --- Inteligência avançada (contagem, comportamento, contexto) ---
+        # Contador de indivíduos/bandos da janela de evento.
+        self._contador: ContadorIndividuos | None = None
+        # Cache de espécie por indivíduo rastreado (para contagem multi-espécie).
+        self._especies_por_track: dict[int, str] = {}
+        # Comportamento mais relevante observado na janela (feeding > perching).
+        self._comportamento_evento: Comportamento | None = None
+        # Quadro anterior em escala de cinza (energia de movimento do comportamento).
+        self._prev_gray: np.ndarray | None = None
+        # CLAHE reutilizável do filtro de contraste adaptativo (lazy).
+        self._clahe = None
+        # Categoria de clima em cache (evita consultar a Open-Meteo a cada quadro).
+        self._clima_categoria: str | None = None
+        self._clima_ts = 0.0
+        # Último ajuste contextual aplicado (registrado nos metadados da visita).
+        self._ultimo_ajuste = None
         # Executor dedicado ao pós-processamento (clipe + foto tratada). Rodar
         # fora do laço evita travar a leitura da câmera durante o ffmpeg e o
         # denoise da imagem.
@@ -178,9 +203,62 @@ class CameraPipeline(threading.Thread):
                 pass
         return self.settings.yolo_confidence
 
-    def _detect_in_zones(self, frame: np.ndarray) -> list[Detection]:
-        """Mascarar áreas inválidas antes do YOLO e filtrar detecções pelo centro."""
+    def _limiar_minimo(self, confianca_base: float) -> float:
+        """Menor limiar aplicável (base global ou o mais permissivo das ROI)."""
+        limiar = float(confianca_base)
+        for zona in self._roi_zones:
+            if zona.type == RoiType.INCLUDE and zona.confidence is not None:
+                limiar = min(limiar, float(zona.confidence))
+        return limiar
+
+    def _limiar_para_ponto(
+        self, x: float, y: float, confianca_base: float
+    ) -> float:
+        """Limiar de confiança que se aplica a um ponto normalizado.
+
+        Zonas de inclusão (ex.: comedouro) podem definir um limiar mais
+        permissivo para aves pequenas/camufladas; fora delas vale o global.
+        """
+        limiar = float(confianca_base)
+        for zona in self._roi_zones:
+            if zona.type != RoiType.INCLUDE or zona.confidence is None:
+                continue
+            if zona.contains(x, y):
+                limiar = min(limiar, float(zona.confidence))
+        return limiar
+
+    def _contraste_adaptativo(self, frame: np.ndarray) -> np.ndarray:
+        """CLAHE no canal de luminância (revela aves camufladas).
+
+        Aplicado **apenas** ao quadro de inferência — a imagem gravada permanece
+        original. Reaproveita uma instância de CLAHE para não realocar por quadro.
+        """
+        if self._clahe is None:
+            self._clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+        luminancia, a, b = cv2.split(lab)
+        luminancia = self._clahe.apply(luminancia)
+        return cv2.cvtColor(cv2.merge((luminancia, a, b)), cv2.COLOR_LAB2BGR)
+
+    def _detect_in_zones(
+        self,
+        frame: np.ndarray,
+        *,
+        tta: bool = False,
+        contraste: bool = False,
+        confianca_base: float | None = None,
+    ) -> list[Detection]:
+        """Mascarar áreas inválidas, realçar contraste e filtrar por limiar.
+
+        Sensibilidade dinâmica por ROI: o YOLO roda no limiar mais permissivo
+        disponível e cada detecção é validada contra o limiar da sua zona.
+        """
         height, width = frame.shape[:2]
+        base = (
+            float(self.detector.confidence)
+            if confianca_base is None
+            else float(confianca_base)
+        )
         inclusion_zones = [
             zone for zone in self._configured_zones if zone.mode == ZoneMode.INCLUDE
         ]
@@ -219,12 +297,106 @@ class CameraPipeline(threading.Thread):
             cv2.fillPoly(mask, [points], 0)
 
         masked_frame = cv2.bitwise_and(frame, frame, mask=mask)
-        detections = self.detector.detect(masked_frame)
-        return [
-            detection
-            for detection in detections
-            if self._is_detection_allowed(detection, width, height)
-        ]
+        # Contraste adaptativo: ligado pelo contexto (clima adverso) ou pela
+        # configuração, quando há ROI (comedouro/bebedouro) para revelar aves
+        # pequenas e camufladas.
+        usar_contraste = contraste or (
+            self.settings.roi_adaptive_contrast and bool(self._roi_zones)
+        )
+        infer_frame = (
+            self._contraste_adaptativo(masked_frame) if usar_contraste else masked_frame
+        )
+        # Roda no limiar mais permissivo; a validação fina é feita por detecção.
+        detections = self.detector.detect(
+            infer_frame, confidence=self._limiar_minimo(base), augment=tta
+        )
+        aceitas: list[Detection] = []
+        for detection in detections:
+            if not self._is_detection_allowed(detection, width, height):
+                continue
+            centro_x, centro_y = detection.normalized_center(width, height)
+            if detection.confidence + 1e-9 < self._limiar_para_ponto(
+                centro_x, centro_y, base
+            ):
+                continue
+            aceitas.append(detection)
+        return aceitas
+
+    def _categoria_clima(self) -> str | None:
+        """Categoria de clima atual, com cache (atualiza no máx. a cada 5 min)."""
+        agora = time.time()
+        if agora - self._clima_ts > 300.0:
+            self._clima_ts = agora
+            try:
+                from app.services.system_context import clima_atual_categoria
+
+                self._clima_categoria = clima_atual_categoria()
+            except Exception:
+                self._clima_categoria = None
+        return self._clima_categoria
+
+    def _especies_dos_tracks(
+        self, frame: np.ndarray, detections: list[Detection]
+    ) -> dict[int, str]:
+        """Mapeia cada indivíduo rastreado à sua espécie (cache por track_id).
+
+        Classifica uma vez por indivíduo (barato com o classificador padrão) e
+        reutiliza o resultado, permitindo a contagem multi-espécie do bando.
+        """
+        limite = 64  # teto de segurança para não pesar em cenas com muitas aves
+        for detection in detections:
+            if detection.track_id is None:
+                continue
+            if detection.track_id in self._especies_por_track:
+                continue
+            if len(self._especies_por_track) >= limite:
+                break
+            if detection.class_id == self.detector.bird_class_id:
+                try:
+                    pred = self.classifier.classify(frame, detection.bbox)
+                    self._especies_por_track[detection.track_id] = pred.species
+                except Exception:
+                    logger.exception("Falha ao classificar a espécie do indivíduo")
+            else:
+                self._especies_por_track[detection.track_id] = translate_class_name(
+                    detection.class_name
+                )
+        return self._especies_por_track
+
+    def _guardar_comportamento(self, comportamento: Comportamento) -> None:
+        """Retém o comportamento mais relevante observado na janela."""
+        prioridade = {"feeding": 3, "perching": 2, "moving": 1, "desconhecido": 0}
+        atual = self._comportamento_evento
+        if atual is None or prioridade.get(comportamento.tipo, 0) > prioridade.get(
+            atual.tipo, 0
+        ):
+            self._comportamento_evento = comportamento
+
+    def _observar_janela(
+        self, frame: np.ndarray, gray: np.ndarray, detections: list[Detection]
+    ) -> None:
+        """Alimenta a contagem de bandos e a análise de comportamento da janela."""
+        try:
+            especies = self._especies_dos_tracks(frame, detections)
+            if self._contador is not None:
+                self._contador.registrar(detections, especies)
+            altura, largura = frame.shape[:2]
+            energias: dict[int, float | None] = {}
+            for detection in detections:
+                if detection.track_id is not None:
+                    energias[detection.track_id] = energia_movimento(
+                        self._prev_gray, gray, detection.bbox
+                    )
+            comportamento = classificar_comportamento(
+                detections,
+                self._roi_zones,
+                largura=largura,
+                altura=altura,
+                energias=energias,
+            )
+            self._guardar_comportamento(comportamento)
+        except Exception:
+            logger.exception("Falha ao observar a janela do evento")
 
     def _is_detection_allowed(
         self, detection: Detection, width: int, height: int
@@ -336,7 +508,15 @@ class CameraPipeline(threading.Thread):
             "night_mode": self._night_active,
             "pre_seconds": float(pre_seconds),
             "post_seconds": post_sec,
+            # Contexto sistêmico aplicado à inferência (clima/horário).
+            "contexto": self._ultimo_ajuste,
         }
+        # Reinicia a inteligência da janela: contagem de bandos e comportamento.
+        self._contador = ContadorIndividuos()
+        self._especies_por_track = {}
+        if detection.track_id is not None and species:
+            self._especies_por_track[detection.track_id] = species
+        self._comportamento_evento = None
         self._post_frames_remaining = max(int(post_sec * fps), 0)
         self._post_collected = []
         if self._post_frames_remaining == 0:
@@ -348,6 +528,11 @@ class CameraPipeline(threading.Thread):
         self._pending_event = None
         selector = self._best_selector
         self._best_selector = None
+        contador = self._contador
+        self._contador = None
+        comportamento = self._comportamento_evento
+        self._comportamento_evento = None
+        self._especies_por_track = {}
         if event is None:
             return
 
@@ -358,12 +543,14 @@ class CameraPipeline(threading.Thread):
         # Durante o encerramento o executor pode estar fechado: nesse caso grava
         # de forma síncrona para não perder a última visita.
         if self._finalizer_closed:
-            self._persist_visit(event, frames, best)
+            self._persist_visit(event, frames, best, contador, comportamento)
             return
         try:
-            self._finalizer.submit(self._persist_visit, event, frames, best)
+            self._finalizer.submit(
+                self._persist_visit, event, frames, best, contador, comportamento
+            )
         except RuntimeError:
-            self._persist_visit(event, frames, best)
+            self._persist_visit(event, frames, best, contador, comportamento)
 
     def _enhance_frame(
         self, frame: np.ndarray, night_mode: bool
@@ -419,12 +606,28 @@ class CameraPipeline(threading.Thread):
         event: dict[str, Any],
         frames: list[np.ndarray],
         best: MelhorQuadro | None,
+        contador: ContadorIndividuos | None = None,
+        comportamento: Comportamento | None = None,
     ) -> None:
         """Grava o clipe, gera a foto tratada e registra a visita (worker).
 
         Executa fora do laço de captura. Isola falhas: um erro aqui não derruba
         o pipeline nem a próxima captura.
         """
+        # Portão de comportamento: quando exigido, só registra se a ave estiver
+        # efetivamente se alimentando (bico no comedouro/bebedouro).
+        if (
+            self.settings.behavior_require_feeding
+            and comportamento is not None
+            and comportamento.tipo != "feeding"
+        ):
+            logger.info(
+                "Visita descartada (comportamento=%s; exige alimentação) camera=%s",
+                comportamento.tipo,
+                self.camera_id,
+            )
+            return
+
         visit_id = event["visit_id"]
         clip_path = save_clip_mp4(frames, self.camera_id, visit_id, event["fps"])
         detected_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -509,6 +712,38 @@ class CameraPipeline(threading.Thread):
                 }
             )
 
+        # Contagem de indivíduos/bandos da janela (multi-espécie quando possível).
+        if contador is not None:
+            resumo_bandos = contador.resumo()
+            metadata["individuals_total"] = resumo_bandos["individuos_total"]
+            metadata["individuals_peak"] = resumo_bandos["pico_simultaneo"]
+            metadata["individuals_by_species"] = resumo_bandos["pico_por_especie"]
+            metadata["individuals_by_class"] = resumo_bandos["pico_por_classe"]
+            metadata["individuals_summary"] = resumo_bandos["descricao"]
+
+        # Comportamento predominante (alimentando-se × pousada × em movimento).
+        if comportamento is not None:
+            metadata.update(comportamento.as_metadata())
+
+        # Contexto sistêmico aplicado (clima/horário) — para auditoria.
+        contexto = event.get("contexto")
+        if contexto is not None:
+            metadata["context_adjustment"] = {
+                "confidence": round(float(contexto.confianca_efetiva), 4),
+                "tta": bool(contexto.tta),
+                "adaptive_contrast": bool(contexto.contraste_adaptativo),
+                "reasons": list(contexto.motivos),
+            }
+
+        # Aceleração em uso (telemetria de Edge AI).
+        if self.detector.backend:
+            metadata["inference_backend"] = self.detector.backend
+
+        # Status ecológico regional, quando a espécie já é conhecida na captura.
+        especie_evento = str(event.get("species") or "")
+        if especie_evento and especie_evento.lower() != "bird":
+            metadata["ecological"] = descrever(especie_evento)
+
         try:
             visit = self.visit_repo.create(
                 visit_id=visit_id,
@@ -526,6 +761,14 @@ class CameraPipeline(threading.Thread):
         except Exception:
             logger.exception("Failed to persist visit for camera %s", self.camera_id)
             return
+
+        # Log de anomalias: espécie que não aparecia há meses reapareceu.
+        if especie_evento and especie_evento.lower() != "bird":
+            registrar_retorno_especie(
+                species=especie_evento,
+                visit_id=visit_id,
+                exclude_visit_id=visit_id,
+            )
 
         visit_out = self.visit_repo.to_out(visit)
 
@@ -587,6 +830,9 @@ class CameraPipeline(threading.Thread):
                 frame = night.frame
                 self._night_active = night.applied
                 streamer.set_night_mode(night.applied)
+                # Escala de cinza do quadro atual (energia de movimento do
+                # comportamento); reaproveitada no fim do ciclo como "anterior".
+                gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
                 fps = streamer.fps
                 pre_seconds = float(
@@ -601,6 +847,14 @@ class CameraPipeline(threading.Thread):
                     # Relê a calibração do painel (em memória) a cada ciclo de
                     # inferência, para refletir ajustes quase em tempo real.
                     self._apply_calibration(tracker)
+                    # Contexto sistêmico: ajusta a sensibilidade ao clima/à luz.
+                    calibracao = get_calibration_service().current()
+                    ajuste = ajustar_sensibilidade(
+                        calibracao.yolo_confidence,
+                        categoria_clima=self._categoria_clima(),
+                        noite=self._night_active,
+                    )
+                    self._ultimo_ajuste = ajuste
                     # Portão de movimento: roda o YOLO quando há movimento, quando
                     # já existe uma ave rastreada (não perdê-la se ficar imóvel) ou,
                     # por segurança, a cada `IDLE_INFER_MAX_SKIPS` ciclos parados.
@@ -614,7 +868,15 @@ class CameraPipeline(threading.Thread):
                     ):
                         # Sincroniza as âncoras do YOLO; se vier vazio, o rastreio
                         # retém as caixas conhecidas pela janela de persistência.
-                        detections = tracker.sync(frame, self._detect_in_zones(frame))
+                        detections = tracker.sync(
+                            frame,
+                            self._detect_in_zones(
+                                frame,
+                                tta=ajuste.tta,
+                                contraste=ajuste.contraste_adaptativo,
+                                confianca_base=ajuste.confianca_efetiva,
+                            ),
+                        )
                         idle_inference_skips = 0
                     else:
                         idle_inference_skips += 1
@@ -671,6 +933,8 @@ class CameraPipeline(threading.Thread):
                 if self._pending_event is not None:
                     if self._best_selector is not None:
                         self._best_selector.considerar(frame, detections)
+                    # Contagem de bandos e análise de comportamento da janela.
+                    self._observar_janela(frame, gray_frame, detections)
                     if self._post_frames_remaining > 0:
                         self._post_collected.append(frame.copy())
                         self._post_frames_remaining -= 1
@@ -684,6 +948,8 @@ class CameraPipeline(threading.Thread):
                         min_confidence=self.detector.confidence,
                     )
                 )
+                # Guarda o cinza atual como referência do próximo quadro.
+                self._prev_gray = gray_frame
 
             except Exception:
                 logger.exception("Pipeline loop error camera=%s", self.camera_id)

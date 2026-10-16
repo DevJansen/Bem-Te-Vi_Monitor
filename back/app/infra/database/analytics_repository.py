@@ -8,6 +8,7 @@ from typing import Any
 
 from app.infra.database.connection import db_session
 from app.infra.database.repository import _media_url, _optional_float
+from app.domain.avifauna_sul import descrever
 from app.services.weather_service import category_for_label
 
 # Limiares de raridade (por número de avistagens da espécie no histórico local).
@@ -320,6 +321,10 @@ class AnalyticsRepository:
             )
             sightings = int(row["sightings_count"])
             rarity = _rarity_for_sightings(sightings)
+            status_ecologico = descrever(
+                common_name=row["common_name"],
+                scientific_name=row["scientific_name"],
+            )
             result.append(
                 {
                     "id": row["id"],
@@ -336,6 +341,10 @@ class AnalyticsRepository:
                     "rarity": rarity,
                     "best_photo_url": _media_url(row["best_photo_path"]),
                     "badges": _species_badges(sightings, rarity),
+                    # Status ecológico regional (base do Sul do Brasil / SC).
+                    "ecological_status": status_ecologico["status"],
+                    "ecological_status_label": status_ecologico["label"],
+                    "ecological_badge": status_ecologico["badge"],
                 }
             )
         return result

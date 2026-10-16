@@ -97,6 +97,12 @@ O arquivo `back\.env.example` contém os nomes e os valores padrão. Copie-o par
 | `OBJECT_PERSISTENCE_TIME` | Tempo (s) que o rastreio mantém a visita com a ave imóvel | Padrão: `5.0`; faixa: `0` a `30` |
 | `MOTION_SENSITIVITY` | Sensibilidade de detecção de movimento inicial | Padrão: `0.5`; faixa: `0` a `1` |
 | `YOLO_BIRD_CLASS_ID` | Classe do COCO usada na inferência | Padrão: `14` (`bird`) |
+| `YOLO_ACCELERATION` | Backend de inferência (Edge AI) | `auto` (padrão: TensorRT > ONNX > PyTorch), `engine`/`tensorrt`, `onnx` ou `pt` |
+| `YOLO_DEVICE` | Dispositivo de inferência | `auto` (padrão: GPU se houver, senão CPU), `cpu` ou `0`/`1`… (GPU) |
+| `YOLO_HALF` | FP16 no PyTorch em GPU CUDA | Padrão: `false`; ignorado em CPU/TRT/ONNX |
+| `YOLO_IMGSZ` | Tamanho de entrada da inferência (px) | Padrão: `640`; `960`/`1280` aumentam o recall de aves pequenas |
+| `YOLO_TTA` | Test-Time Augmentation global (reforço de recall) | Padrão: `false` (mais lento) |
+| `ROI_ADAPTIVE_CONTRAST` | Contraste adaptativo (CLAHE) antes da inferência nas ROI | Padrão: `true`; revela aves camufladas sem afetar a imagem gravada |
 | `PRE_RECORD_SECONDS` | Duração anterior à detecção incluída no clipe | Padrão/mínimo: `3.0` |
 | `POST_RECORD_SECONDS` | Duração posterior à detecção | Padrão: `3.0` (com o pré-roll, o clipe cobre ~6 s) |
 | `CAMERA_RECONNECT_DELAY_SEC` | Intervalo de reconexão da câmera | Padrão: `3.0` |
@@ -136,6 +142,11 @@ O arquivo `back\.env.example` contém os nomes e os valores padrão. Copie-o par
 | `SMART_CROP_MARGIN` | Margem de contexto ao redor da ave no recorte (fração da caixa) | Padrão: `0.25` |
 | `SMART_CROP_MIN_DIMENSION` | Dimensão mínima (px) do recorte da ave (amplia se menor) | Padrão: `640` |
 | `SMART_CROP_MAX_DIMENSION` | Dimensão máxima (px) do recorte da ave (reduz se maior) | Padrão: `1024` |
+| `ADAPTIVE_CONTEXT_ENABLED` | IA ciente do contexto: ajusta a sensibilidade por clima/horário | Padrão: `true` (só torna mais permissivo) |
+| `BEHAVIOR_REQUIRE_FEEDING` | Só registra a visita se a ave estiver se alimentando (bico no comedouro) | Padrão: `false` |
+| `ANOMALY_LOG_ENABLED` | Log de anomalias: alerta quando uma espécie reaparece após longo intervalo | Padrão: `true` |
+| `ANOMALY_SPECIES_GAP_DAYS` | Intervalo (dias) sem registro a partir do qual o retorno é anomalia | Padrão: `180` (~6 meses) |
+| `ANOMALY_COOLDOWN_DAYS` | Janela (dias) para não repetir a mesma anomalia de espécie | Padrão: `30` |
 | `ALLOW_REMOTE_ACCESS` | Libera acesso à API fora do computador local | Padrão: `false` (somente loopback). Use `true` só com VPN/proxy autenticado |
 | `ALLOWED_HOSTS` | Hosts aceitos no cabeçalho `Host` | Padrão: `127.0.0.1,localhost` |
 
@@ -401,6 +412,52 @@ luminosidade e um **median blur** leve contra o ruído de sensor. O portão de
 movimento continua medindo o quadro **cru**, para que o realce não gere falsos
 positivos. O modo `auto` só gasta processamento quando a cena está escura.
 
+### Motor de IA avançado (Edge AI + inteligência biológica)
+
+O motor local evoluiu de um simples "detector de presença" para um **assistente
+biológico autônomo**, rápido e sensível, pensado também para uso científico.
+
+**1. Velocidade e sensibilidade (Edge AI).** O YOLOv8 pode rodar acelerado por
+**TensorRT**, **ONNX** ou **FP16** em GPU, com queda automática para CPU quando
+não há aceleração disponível. Gere o artefato otimizado uma vez com:
+
+```bat
+cd back
+venv\Scripts\python.exe -m tools.exportar_modelo --formato onnx
+```
+
+Com `YOLO_ACCELERATION=auto`, o AviaWatch passa a usar o `.onnx`/`.engine`
+automaticamente. Ajuste `YOLO_DEVICE`, `YOLO_HALF`, `YOLO_IMGSZ` e `YOLO_TTA`
+conforme o hardware. A telemetria do backend informa o backend em uso.
+
+**2. Sensibilidade dinâmica por ROI.** Cada ROI retangular pode ter um **papel**
+(comedouro, bebedouro, poleiro) e um **limiar de confiança próprio**. No
+comedouro, o sistema usa um limiar mais permissivo (ex.: 0,22–0,28) e aplica um
+**filtro de contraste adaptativo (CLAHE)** antes da inferência, revelando aves
+pequenas e camufladas (saíras, cambacicas) sem afetar o resto da cena nem a
+imagem gravada.
+
+**3. Contagem de bandos (multi-espécie).** O rastreador atribui um **ID estável**
+a cada indivíduo. O sistema conta o **pico simultâneo** e o **total de
+indivíduos** da janela, registrando frases como *"3 Cambacicas e 2 Saíras
+presentes simultaneamente"*. A Galeria mostra o selo **👥 N** quando há bando.
+
+**4. Status ecológico regional.** Cada espécie é cruzada com uma base curada da
+**avifauna do Sul do Brasil / Santa Catarina** e recebe um selo: 🟢 Nativa,
+🟡 Migratória, 🔵 Endêmica, ⭐ Rara/Acidental, 🟠 Exótica. Os selos aparecem em
+**Minhas Aves**, no **Álbum** e na **Galeria**, apoiando monitoramento de
+conservação.
+
+**5. IA ciente do contexto.** O motor lê a calibração do usuário, respeita as
+zonas de exclusão e correlaciona o **clima** (Open-Meteo). Em chuva, nevoeiro ou
+céu encoberto, a visibilidade cai: o limiar é relaxado e o contraste adaptativo
+(TTA leve nos casos severos) entra em ação — sempre de forma conservadora, nunca
+acima do que o usuário configurou.
+
+**Extras.** Análise de comportamento (**alimentando-se** × **pousada** × **em
+movimento**) e **log de anomalias**: se uma espécie que não era registrada há
+mais de 6 meses reaparecer, um alerta é criado no painel (`GET /api/anomalies`).
+
 ### Manter o catálogo local de aves
 
 1. Abra **Minhas Aves** e escolha **Cadastrar Nova Ave**.
@@ -568,8 +625,11 @@ aviawatch/
 | GET | `/api/stats` | Métricas do painel |
 | GET | `/api/analytics/summary` | Visitas de hoje, últimos 7 dias e total; espécie líder, duração média e horário de pico |
 | GET | `/api/analytics/hourly-distribution` | Contagem histórica de visitas para cada hora do dia (00h–23h) |
-| GET | `/api/analytics/lifelist` | Espécies do catálogo, desbloqueio, primeiro registro, foto e número de avistagens |
+| GET | `/api/analytics/lifelist` | Espécies do catálogo, desbloqueio, primeiro registro, foto, avistagens e status ecológico |
 | GET | `/api/analytics/achievements` | Conquistas desbloqueadas e disponíveis |
+| GET | `/api/anomalies` | Log de anomalias acústico-visuais (ex.: espécie que reaparece após meses); aceita `limit` e `only_pending` |
+| GET | `/api/anomalies/pending-count` | Quantidade de anomalias ainda não reconhecidas (badge do painel) |
+| POST | `/api/anomalies/{id}/acknowledge` | Marca uma anomalia como reconhecida |
 | GET | `/api/analytics/weather-correlation` | Relação entre o clima (chuva/temperatura/vento) e as visitas |
 | GET | `/api/analytics/weather-insights` | Insights automáticos cruzando clima e hábitos: faixas de temperatura, chuva × seco, horário no frio × no calor e horário por espécie |
 | GET | `/api/analytics/timelapses` | Lista os resumos do dia (time-lapses) já gerados |
