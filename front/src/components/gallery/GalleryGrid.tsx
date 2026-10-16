@@ -300,8 +300,23 @@ export function GalleryGrid({
               "unidentified",
             ].includes(visit.species.trim().toLocaleLowerCase("pt-BR"));
             // Inteligência biológica: status ecológico, bando e comportamento.
-            const ecologicalBadge = visit.metadata?.ecological?.badge;
-            const ecologicalStatus = visit.metadata?.ecological?.status;
+            // O selo vem dos metadados da visita (IA na captura/identificação) ou,
+            // na falta, da espécie associada no catálogo local.
+            const catalogEntry = visit.species_id
+              ? catalogSpecies.find((item) => item.id === visit.species_id)
+              : undefined;
+            const ecologicalBadge =
+              visit.metadata?.ecological?.badge ??
+              catalogEntry?.ecological_badge ??
+              undefined;
+            const ecologicalStatus =
+              visit.metadata?.ecological?.status ??
+              catalogEntry?.ecological_status ??
+              undefined;
+            const ecologicalLabel =
+              visit.metadata?.ecological?.label ??
+              catalogEntry?.ecological_status_label ??
+              "";
             const isRareSpecies = ecologicalStatus === "rara";
             const individualsPeak = visit.metadata?.individuals_peak ?? 0;
             const individualsSummary = visit.metadata?.individuals_summary;
@@ -373,7 +388,7 @@ export function GalleryGrid({
                               ? "bg-amber-400/90 text-amber-950"
                               : "bg-dark-700 text-[var(--color-text-primary)]"
                           }`}
-                          title={`Status ecológico: ${visit.metadata?.ecological?.label ?? ""}`}
+                          title={`Status ecológico: ${ecologicalLabel}`}
                         >
                           {ecologicalBadge}
                         </span>
