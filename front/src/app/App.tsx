@@ -12,7 +12,7 @@ import { AddCameraModal } from "@/components/cameras/AddCameraModal";
 import { ZoneEditorModal } from "@/components/cameras/ZoneEditorModal";
 import { RoiEditorModal } from "@/components/cameras/RoiEditorModal";
 import { RecordingImport } from "@/components/cameras/RecordingImport";
-import { GalleryGrid } from "@/components/gallery/GalleryGrid";
+import { GalleryPanel } from "@/components/gallery/GalleryPanel";
 import { EnvSettings } from "@/components/settings/EnvSettings";
 import { CalibrationPanel } from "@/components/settings/CalibrationPanel";
 import { SpeciesCatalog } from "@/components/species/SpeciesCatalog";
@@ -234,7 +234,7 @@ export function App() {
           {tab === "gallery" ? (
             <div className="space-y-4">
               <AudioDetectionFeed />
-              <GalleryGrid
+              <GalleryPanel
                 visits={(visitsQuery.data ?? []).filter(
                   (visit) => !deletedVisitIds.has(visit.id),
                 )}

@@ -30,6 +30,7 @@ quando você pede especificamente para uma inteligência artificial adivinhar o 
 |--------|----------------|
 | 📷 **Detecção de pássaros** | Reconhece um passarinho na câmera e inicia uma "visita" |
 | 🖼️ **Fotos e vídeos** | Guarda uma foto e um clipe curto de cada visita |
+| 🎞️ **Resumo do dia** | Junta os clipes do dia em um vídeo acelerado (time-lapse) |
 | 🔊 **Reconhecimento de canto** | Identifica o pássaro pelo som (opcional) |
 | 🤖 **Identificação por IA** | Adivinha o nome da ave na foto (opcional, sob seu comando) |
 | 📊 **Estatísticas** | Mostra horários de pico, ranking e gráficos |
@@ -124,6 +125,19 @@ O **álbum de fotos** dos seus pássaros. Aqui você:
 **Para que serve:** rever, organizar e "etiquetar" os visitantes.
 
 ![Tela Galeria — cartões de visitas com foto, clipe, associação ao catálogo e IA](docs/images/galeria.png)
+
+#### 🎞️ Resumos do Dia (Time-Lapse)
+
+No topo da Galeria há duas abas: **Capturas** (as visitas individuais) e **Resumos
+do Dia (Time-Lapse)**. Na segunda, o AviaWatch junta os clipes de cada dia em **um
+único vídeo acelerado**, para você rever os melhores momentos em segundos.
+
+- o vídeo do dia já aparece pronto no player, com a data, a quantidade de clipes e a duração;
+- clique em **Gerar resumo de hoje** para montar (ou refazer) o vídeo na hora;
+- use **Baixar** para salvar o arquivo e **Excluir** para apagá-lo;
+- a montagem acontece sozinha ao fim do dia — você não precisa fazer nada.
+
+**Para que serve:** "passar o filme do dia" de forma rápida, sem assistir a cada gravação.
 
 ---
 

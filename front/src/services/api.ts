@@ -28,6 +28,8 @@ import type {
   RecordingAnalysis,
   RoiSettings,
   RoiZone,
+  Timelapse,
+  TimelapseGenerateResult,
   WeatherCorrelation,
   Zone,
 } from "@/types";
@@ -287,6 +289,37 @@ export async function fetchWeatherCorrelation(): Promise<WeatherCorrelation> {
     "/analytics/weather-correlation",
   );
   return data;
+}
+
+/* ——— Resumos do dia (time-lapse) ——— */
+
+/** Lista os resumos do dia (time-lapses) já gerados, do mais recente ao mais antigo. */
+export async function fetchTimelapses(): Promise<Timelapse[]> {
+  const { data } = await api.get<Timelapse[]>("/analytics/timelapses");
+  return data;
+}
+
+/**
+ * Gera sob demanda o resumo de um dia (padrão: hoje).
+ *
+ * `force` regera um resumo já existente. O timeout é desativado porque a
+ * montagem com FFmpeg pode demorar vários segundos.
+ */
+export async function generateTimelapse(
+  day?: string,
+  force = false,
+): Promise<TimelapseGenerateResult> {
+  const { data } = await api.post<TimelapseGenerateResult>(
+    "/analytics/timelapses/generate",
+    { day: day ?? null, force },
+    { timeout: 0 },
+  );
+  return data;
+}
+
+/** Remove um resumo do dia pelo nome do arquivo. */
+export async function deleteTimelapse(filename: string): Promise<void> {
+  await api.delete(`/analytics/timelapses/${encodeURIComponent(filename)}`);
 }
 
 export async function fetchAudioDetections(

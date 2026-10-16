@@ -227,6 +227,27 @@ export type Achievement = {
   unlocked: boolean;
 };
 
+/** Resumo do dia (time-lapse) gerado a partir dos clipes das visitas. */
+export type Timelapse = {
+  filename: string;
+  /** Dia de referência no formato `YYYY-MM-DD`. */
+  day: string;
+  /** URL de streaming pronta para o player. */
+  url: string;
+  size_bytes: number;
+  duration_seconds: number | null;
+  clips_count: number;
+  speed: number;
+  generated_at: string | null;
+};
+
+/** Resultado da geração sob demanda de um resumo do dia. */
+export type TimelapseGenerateResult = {
+  status: "generated" | "exists" | "empty" | "unavailable";
+  message: string;
+  timelapse: Timelapse | null;
+};
+
 export type AppSettings = {
   telegram_configured: boolean;
   discord_configured: boolean;

@@ -422,6 +422,27 @@ class VisitRepository:
             ).fetchall()
             return [dict(r) for r in rows]
 
+    def list_clip_paths_between(
+        self, start_utc: str, end_utc: str
+    ) -> list[str]:
+        """Caminhos dos clipes com visita no intervalo UTC ``[start, end)``.
+
+        Usado pela geração do time-lapse diário: só entram visitas que têm clipe
+        de vídeo associado. As datas são comparadas como texto no formato
+        ``YYYY-MM-DDTHH:MM:SSZ`` (mesmo padrão gravado pelo pipeline).
+        """
+        with db_session(self.db_path) as conn:
+            rows = conn.execute(
+                """
+                SELECT clip_path FROM visits
+                WHERE detected_at >= ? AND detected_at < ?
+                    AND clip_path IS NOT NULL
+                ORDER BY detected_at ASC
+                """,
+                (start_utc, end_utc),
+            ).fetchall()
+        return [row["clip_path"] for row in rows if row["clip_path"]]
+
     def count(self, *, camera_id: str | None = None) -> int:
         with db_session(self.db_path) as conn:
             if camera_id:

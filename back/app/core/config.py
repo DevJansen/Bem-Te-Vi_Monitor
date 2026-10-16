@@ -52,6 +52,16 @@ class Settings(BaseModel):
     # Intervalo (minutos) de atualização do cache local de clima. Evita
     # requisições excessivas à API pública da Open-Meteo.
     weather_cache_minutes: int = Field(default=30, ge=5, le=1440)
+    # Geração automática do time-lapse diário (resumo acelerado do dia).
+    # `timelapse_enabled` liga/desliga o agendador em segundo plano.
+    timelapse_enabled: bool = True
+    # Fator de aceleração aplicado aos clipes do dia (8 = 8x mais rápido).
+    timelapse_speed: float = Field(default=8.0, ge=1.0, le=60.0)
+    # Horário local (0-23h) em que o resumo do dia é gerado automaticamente.
+    timelapse_hour: int = Field(default=23, ge=0, le=23)
+    timelapse_minute: int = Field(default=55, ge=0, le=59)
+    # Quantos dias anteriores sem resumo são reprocessados ao iniciar o app.
+    timelapse_backfill_days: int = Field(default=7, ge=0, le=90)
 
     @property
     def db_path(self) -> Path:
@@ -72,6 +82,11 @@ class Settings(BaseModel):
     @property
     def crops_dir(self) -> Path:
         return self.app_data_dir / "crops"
+
+    @property
+    def timelapses_dir(self) -> Path:
+        """Pasta dos resumos do dia (time-lapses) em MP4."""
+        return self.captures_dir / "timelapses"
 
     @property
     def reference_birds_dir(self) -> Path:
@@ -96,6 +111,7 @@ class Settings(BaseModel):
             self.clips_dir,
             self.thumbs_dir,
             self.crops_dir,
+            self.timelapses_dir,
             self.reference_birds_dir,
             self.secrets_dir,
         ):
@@ -154,6 +170,18 @@ class Settings(BaseModel):
             ),
             weather_cache_minutes=max(
                 5, int(os.getenv("WEATHER_CACHE_MINUTES", "30"))
+            ),
+            timelapse_enabled=os.getenv("TIMELAPSE_ENABLED", "true").strip().lower()
+            not in {"0", "false", "no", "off"},
+            timelapse_speed=min(
+                60.0, max(1.0, float(os.getenv("TIMELAPSE_SPEED", "8.0")))
+            ),
+            timelapse_hour=min(23, max(0, int(os.getenv("TIMELAPSE_HOUR", "23")))),
+            timelapse_minute=min(
+                59, max(0, int(os.getenv("TIMELAPSE_MINUTE", "55")))
+            ),
+            timelapse_backfill_days=min(
+                90, max(0, int(os.getenv("TIMELAPSE_BACKFILL_DAYS", "7")))
             ),
         )
 

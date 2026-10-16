@@ -39,6 +39,7 @@ async def lifespan(app: FastAPI):
     from app.services.audio_analysis import get_audio_analysis_service
     from app.services.notification_service import get_notification_service
     from app.services.recording_analysis import get_recording_analysis_service
+    from app.services.timelapse_service import TimelapseScheduler
 
     settings = get_settings()
     settings.ensure_directories()
@@ -92,11 +93,18 @@ async def lifespan(app: FastAPI):
 
     retention_worker = MediaRetentionWorker(settings)
     retention_worker.start()
+    # Gera o resumo do dia (time-lapse) no fim do dia e recupera dias pendentes.
+    timelapse_scheduler = TimelapseScheduler()
+    timelapse_scheduler.start()
     app.state.settings = settings
     yield
 
     logger.info("Shutting down AviaWatch…")
     retention_worker.stop()
+    try:
+        timelapse_scheduler.stop()
+    except Exception:
+        logger.exception("Timelapse scheduler shutdown error")
     try:
         audio_analysis.stop()
         audio_analysis.join(timeout=10)

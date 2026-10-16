@@ -344,6 +344,38 @@ class NotificationTestResponse(BaseModel):
     message: str
 
 
+class TimelapseOut(BaseModel):
+    """Resumo do dia (time-lapse) disponível na galeria."""
+
+    filename: str
+    # Dia de referência no formato `YYYY-MM-DD`.
+    day: str
+    # URL de streaming pronta para o player (`/api/videos/timelapse/...`).
+    url: str
+    size_bytes: int = Field(ge=0)
+    duration_seconds: float | None = None
+    clips_count: int = Field(ge=0)
+    speed: float = Field(ge=1.0)
+    generated_at: str | None = None
+
+
+class TimelapseGenerateRequest(BaseModel):
+    """Pedido de geração sob demanda do resumo de um dia."""
+
+    # Dia no formato `YYYY-MM-DD`; quando ausente, usa o dia atual (UTC).
+    day: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    # `True` regenera mesmo que o resumo já exista.
+    force: bool = False
+
+
+class TimelapseGenerateResult(BaseModel):
+    """Resultado da geração sob demanda (usado pela interface)."""
+
+    status: Literal["generated", "exists", "empty", "unavailable"]
+    message: str
+    timelapse: TimelapseOut | None = None
+
+
 class RecordingAnalysisOut(BaseModel):
     id: str
     camera_id: str

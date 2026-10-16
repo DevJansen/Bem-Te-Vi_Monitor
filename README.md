@@ -105,6 +105,11 @@ O arquivo `back\.env.example` contém os nomes e os valores padrão. Copie-o par
 | `LATITUDE` | Latitude do alimentador (usada pela integração meteorológica) | Padrão: `-23.5505` (São Paulo/SP) |
 | `LONGITUDE` | Longitude do alimentador (usada pela integração meteorológica) | Padrão: `-46.6333` (São Paulo/SP) |
 | `WEATHER_CACHE_MINUTES` | Intervalo (min) de atualização do cache local de clima | Padrão: `30`; mínimo: `5` |
+| `TIMELAPSE_ENABLED` | Liga/desliga a geração automática do resumo do dia | Padrão: `true` (`false` desativa o agendador) |
+| `TIMELAPSE_SPEED` | Fator de aceleração dos clipes no time-lapse | Padrão: `8` (8× mais rápido); faixa: `1` a `60` |
+| `TIMELAPSE_HOUR` | Hora local em que o resumo do dia é montado automaticamente | Padrão: `23` (0 a 23) |
+| `TIMELAPSE_MINUTE` | Minuto da hora acima | Padrão: `55` (0 a 59) |
+| `TIMELAPSE_BACKFILL_DAYS` | Quantos dias anteriores sem resumo são reprocessados ao iniciar | Padrão: `7` (0 a 90) |
 
 O painel administra a integração de IA Externa por completo (chave, URL base e
 modelo), os segredos do Telegram e do Discord, e as preferências de alerta. A
@@ -305,6 +310,32 @@ sem reiniciar o backend.
 Se não houver recorte disponível ou chave configurada, a API informa o erro. Os
 recortes ficam em `back\app-data\crops\` e seguem a política de retenção de mídia.
 
+### Montar resumos do dia (time-lapse)
+
+O AviaWatch junta os clipes de um dia em um único vídeo acelerado — o **Resumo do
+Dia** — para rever os melhores momentos em segundos, sem assistir a cada gravação
+individual.
+
+- **Automático:** por padrão, ao fim do dia (23h55, ajustável em
+  `TIMELAPSE_HOUR`/`TIMELAPSE_MINUTE`), o backend monta
+  `back\app-data\captures\timelapses\timelapse_AAAA-MM-DD.mp4` a partir dos clipes
+  das visitas daquele dia.
+- **Sob demanda:** na aba **Galeria → Resumos do Dia (Time-Lapse)**, use **Gerar
+  resumo de hoje** para montar (ou regerar) o vídeo na hora.
+- **Recuperação:** ao iniciar, o backend reprocessa os últimos
+  `TIMELAPSE_BACKFILL_DAYS` dias que tenham clipes mas ainda não tenham resumo
+  (útil quando o computador ficou desligado).
+
+A montagem usa o `ffmpeg` via `subprocess`: os clipes são concatenados com o
+*demuxer* `concat` e acelerados pelo filtro `setpts` (fator `TIMELAPSE_SPEED`).
+Como as câmeras podem gravar em resoluções diferentes, os quadros são normalizados
+para 1280×720 (`scale`+`pad`) e recodificados em **H.264** (`yuv420p`,
+`+faststart`), garantindo um MP4 que o navegador reproduz. O dia é interpretado no
+**fuso local** do computador e convertido para o intervalo UTC na consulta ao
+banco. O player fica embutido na própria aba e usa o endpoint
+`/api/videos/timelapse/{arquivo}`, com suporte a `Range`. Sem o `ffmpeg` instalado,
+a geração fica indisponível (com aviso no log) e o restante do sistema segue normal.
+
 ### Manter o catálogo local de aves
 
 1. Abra **Minhas Aves** e escolha **Cadastrar Nova Ave**.
@@ -456,6 +487,9 @@ aviawatch/
 | GET | `/api/analytics/lifelist` | Espécies do catálogo, desbloqueio, primeiro registro, foto e número de avistagens |
 | GET | `/api/analytics/achievements` | Conquistas desbloqueadas e disponíveis |
 | GET | `/api/analytics/weather-correlation` | Relação entre o clima (chuva/temperatura/vento) e as visitas |
+| GET | `/api/analytics/timelapses` | Lista os resumos do dia (time-lapses) já gerados |
+| POST | `/api/analytics/timelapses/generate` | Gera sob demanda o resumo de um dia (`day` opcional; `force` regera) |
+| DELETE | `/api/analytics/timelapses/{arquivo}` | Remove um resumo do dia |
 | GET | `/api/audio-detections?limit=30` | Detecções sonoras recentes, confiança e visita visual associada |
 | GET | `/api/audio-detections/status` | Estado da análise BirdNET e câmeras monitoradas |
 | GET | `/api/audio-detections/devices` | Dispositivos de áudio de entrada disponíveis (microfones) |
@@ -463,6 +497,7 @@ aviawatch/
 | GET | `/api/video-feed/{id}/snapshot` | Foto atual da câmera |
 | GET | `/api/weather/current` | Clima atual no alimentador (temperatura, chuva e vento) |
 | GET | `/api/videos/{arquivo}` | Streaming do clipe (MP4/H.264) com suporte a requisições `Range` |
+| GET | `/api/videos/timelapse/{arquivo}` | Streaming do resumo do dia (time-lapse) com suporte a `Range` |
 | GET | `/captures/...` | Thumbnails e demais mídias estáticas |
 
 A aba **Estatísticas & Conquistas** do painel mostra os hábitos de visita e a Life
@@ -513,6 +548,11 @@ aviso no log quando não for H.264). Arquivos inválidos ou corrompidos são
 descartados. A reprodução na Galeria usa o endpoint `/api/videos/{arquivo}`, que
 responde a requisições `Range` (status `206`) para permitir avançar e rebobinar o
 vídeo sem baixá-lo por inteiro.
+
+Os resumos do dia (time-lapse) ficam em `back\app-data\captures\timelapses\` e
+**não** são removidos pela política de retenção (`MEDIA_RETENTION_DAYS`); apague-os
+manualmente pela aba **Galeria → Resumos do Dia (Time-Lapse)** se quiser liberar
+espaço.
 
 ---
 

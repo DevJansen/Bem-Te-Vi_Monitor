@@ -17,6 +17,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
 from app.core.config import get_settings
+from app.infra.media.timelapse import is_timelapse_filename
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/videos", tags=["videos"])
@@ -59,18 +60,38 @@ def _resolve_clip(filename: str) -> Path:
     return candidate
 
 
-@router.get("/{filename}")
-async def get_video(filename: str) -> FileResponse:
-    """Entrega o clipe de vídeo, suportando requisições parciais (Range)."""
-    path = _resolve_clip(filename)
+def _resolve_timelapse(filename: str) -> Path:
+    """Resolve o caminho de um resumo do dia dentro de `timelapses/`.
 
+    Valida o padrão do nome (``timelapse_YYYY-MM-DD.mp4``) e bloqueia path
+    traversal, do mesmo modo que `_resolve_clip`.
+    """
+    if not filename or filename != Path(filename).name:
+        raise HTTPException(status_code=400, detail="Nome de arquivo inválido")
+    if "/" in filename or "\\" in filename or filename in {".", ".."}:
+        raise HTTPException(status_code=400, detail="Nome de arquivo inválido")
+    if not is_timelapse_filename(filename):
+        raise HTTPException(
+            status_code=400,
+            detail="Nome de resumo inválido",
+        )
+
+    timelapses_dir = get_settings().timelapses_dir.resolve()
+    candidate = (timelapses_dir / filename).resolve()
+    if candidate.parent != timelapses_dir:
+        raise HTTPException(status_code=400, detail="Caminho inválido")
+    return candidate
+
+
+def _video_response(path: Path) -> FileResponse:
+    """Entrega um arquivo de vídeo com o MIME correto e suporte a `Range`."""
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Arquivo não encontrado")
 
     try:
         size = path.stat().st_size
     except OSError as exc:
-        logger.exception("Falha ao acessar o clipe %s", path)
+        logger.exception("Falha ao acessar o vídeo %s", path)
         raise HTTPException(
             status_code=500,
             detail="Não foi possível ler o arquivo de vídeo",
@@ -82,7 +103,7 @@ async def get_video(filename: str) -> FileResponse:
             detail="Arquivo de vídeo vazio ou corrompido",
         )
 
-    media_type = _MIME_BY_SUFFIX[path.suffix.lower()]
+    media_type = _MIME_BY_SUFFIX.get(path.suffix.lower(), "video/mp4")
     return FileResponse(
         str(path),
         media_type=media_type,
@@ -91,3 +112,15 @@ async def get_video(filename: str) -> FileResponse:
             "Cache-Control": "private, max-age=86400",
         },
     )
+
+
+@router.get("/timelapse/{filename}")
+async def get_timelapse_video(filename: str) -> FileResponse:
+    """Entrega o resumo do dia (time-lapse) com suporte a requisições parciais."""
+    return _video_response(_resolve_timelapse(filename))
+
+
+@router.get("/{filename}")
+async def get_video(filename: str) -> FileResponse:
+    """Entrega o clipe de vídeo, suportando requisições parciais (Range)."""
+    return _video_response(_resolve_clip(filename))

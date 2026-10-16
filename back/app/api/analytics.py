@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import date
 
 from fastapi import APIRouter, HTTPException
 
@@ -12,9 +13,13 @@ from app.domain.models import (
     AnalyticsSummaryOut,
     HourlyDistributionOut,
     LifeListSpeciesOut,
+    TimelapseGenerateRequest,
+    TimelapseGenerateResult,
+    TimelapseOut,
     WeatherCorrelationOut,
 )
 from app.infra.database.analytics_repository import AnalyticsRepository
+from app.services.timelapse_service import get_timelapse_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
@@ -95,3 +100,74 @@ def get_weather_correlation() -> WeatherCorrelationOut:
             status_code=500,
             detail="Não foi possível calcular a correlação climática.",
         ) from exc
+
+
+@router.get("/timelapses", response_model=list[TimelapseOut])
+def list_timelapses() -> list[TimelapseOut]:
+    """Resumos do dia (time-lapses) já gerados, do mais recente ao mais antigo."""
+    try:
+        return [
+            TimelapseOut(**item) for item in get_timelapse_service().list()
+        ]
+    except Exception as exc:
+        logger.exception("list_timelapses failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível listar os resumos do dia.",
+        ) from exc
+
+
+@router.post("/timelapses/generate", response_model=TimelapseGenerateResult)
+def generate_timelapse(
+    payload: TimelapseGenerateRequest,
+) -> TimelapseGenerateResult:
+    """Gera (sob demanda) o resumo de um dia a partir dos clipes gravados.
+
+    Quando ``day`` não é informado, usa o dia atual. O campo ``force`` permite
+    regerar um resumo que já existe.
+    """
+    if payload.day:
+        try:
+            day: date | None = date.fromisoformat(payload.day)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="Data inválida. Use o formato AAAA-MM-DD.",
+            ) from exc
+    else:
+        day = None
+
+    try:
+        result = get_timelapse_service().generate(day, force=payload.force)
+    except Exception as exc:
+        logger.exception("generate_timelapse failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível gerar o resumo do dia.",
+        ) from exc
+
+    timelapse = result.get("timelapse")
+    return TimelapseGenerateResult(
+        status=result["status"],
+        message=result["message"],
+        timelapse=TimelapseOut(**timelapse) if timelapse else None,
+    )
+
+
+@router.delete("/timelapses/{filename}")
+def delete_timelapse(filename: str) -> dict[str, bool]:
+    """Remove um resumo do dia pelo nome do arquivo."""
+    try:
+        removed = get_timelapse_service().delete(filename)
+    except Exception as exc:
+        logger.exception("delete_timelapse failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível remover o resumo do dia.",
+        ) from exc
+    if not removed:
+        raise HTTPException(
+            status_code=404,
+            detail="Resumo do dia não encontrado.",
+        )
+    return {"ok": True}
