@@ -239,6 +239,41 @@ class AnalyticsRepository:
             for hour in range(24)
         ]
 
+    def total_visits(self) -> int:
+        """Número total de visitas registradas (todas as colunas do histórico)."""
+        with db_session(self.db_path) as conn:
+            row = conn.execute("SELECT COUNT(*) AS c FROM visits").fetchone()
+        return int(row["c"]) if row else 0
+
+    def weather_visit_rows(self) -> list[dict[str, Any]]:
+        """Visitas que têm algum dado meteorológico registrado.
+
+        Traz apenas as colunas necessárias para os insights de clima e hábitos
+        (data/hora, temperatura, umidade, condição e espécie resolvida). A
+        agregação estatística fica em ``app.services.weather_insights``.
+        """
+        with db_session(self.db_path) as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                    v.detected_at,
+                    v.temperature,
+                    v.humidity,
+                    v.weather_code,
+                    COALESCE(
+                        bs.common_name,
+                        NULLIF(v.species, 'bird'),
+                        'Ave (genérica)'
+                    ) AS species_name,
+                    bs.scientific_name AS scientific_name
+                FROM visits v
+                LEFT JOIN bird_species bs ON bs.id = v.species_id
+                WHERE v.temperature IS NOT NULL OR v.weather_code IS NOT NULL
+                ORDER BY v.detected_at ASC
+                """
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def lifelist(self) -> list[dict[str, Any]]:
         with db_session(self.db_path) as conn:
             rows = conn.execute(

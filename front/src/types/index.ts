@@ -411,3 +411,88 @@ export type WeatherCorrelation = {
   by_category: WeatherConditionStat[];
   peak_hours: WeatherHourStat[];
 };
+
+/** Resumo de uma faixa de temperatura (visitas, espécies e horário médio). */
+export type TemperatureRangeInsight = {
+  label: string;
+  min_temperature: number | null;
+  max_temperature: number | null;
+  visits: number;
+  distinct_species: number;
+  active_days: number;
+  visits_per_day: number;
+  avg_hour: number | null;
+  avg_hour_label: string | null;
+  avg_temperature: number | null;
+  avg_humidity: number | null;
+  top_species: string | null;
+};
+
+/** Visitas agrupadas por categoria ampla de clima (com visitas por dia). */
+export type WeatherConditionInsight = {
+  condition: string;
+  icon: string;
+  visits: number;
+  distinct_species: number;
+  active_days: number;
+  visits_per_day: number;
+  avg_hour: number | null;
+  avg_hour_label: string | null;
+  avg_temperature: number | null;
+  avg_humidity: number | null;
+  top_species: string | null;
+};
+
+/** Período (mais frio / mais quente) com horário médio de aparecimento. */
+export type TemperaturePeriodInsight = {
+  period: string;
+  label: string;
+  visits: number;
+  distinct_species: number;
+  active_days: number;
+  visits_per_day: number;
+  avg_hour: number | null;
+  avg_hour_label: string | null;
+  avg_temperature: number | null;
+  avg_humidity: number | null;
+  top_species: string | null;
+};
+
+/** Mudança de horário de uma espécie entre condições frias e quentes. */
+export type SpeciesWeatherTiming = {
+  species: string;
+  scientific_name: string | null;
+  cold_avg_hour: number | null;
+  hot_avg_hour: number | null;
+  cold_visits: number;
+  hot_visits: number;
+  minutes_earlier: number | null;
+  direction: "earlier" | "later" | "similar" | string;
+  summary: string;
+};
+
+/** Card de resumo inteligente exibido no painel de insights. */
+export type InsightCard = {
+  id: string;
+  icon: string;
+  title: string;
+  description: string;
+  tone: "positive" | "info" | "warning" | "neutral" | string;
+};
+
+/** Insights avançados que cruzam visitas com clima e hábitos. */
+export type WeatherInsights = {
+  total_visits: number;
+  visits_with_weather: number;
+  cold_threshold_celsius: number | null;
+  temperature_ranges: TemperatureRangeInsight[];
+  best_temperature_range: TemperatureRangeInsight | null;
+  conditions: WeatherConditionInsight[];
+  rainy: WeatherConditionInsight | null;
+  dry: WeatherConditionInsight | null;
+  rainy_vs_dry_percent: number | null;
+  periods: TemperaturePeriodInsight[];
+  species_timing: SpeciesWeatherTiming[];
+  insights: InsightCard[];
+  generated_at: string;
+};

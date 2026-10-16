@@ -487,6 +487,7 @@ aviawatch/
 | GET | `/api/analytics/lifelist` | Espécies do catálogo, desbloqueio, primeiro registro, foto e número de avistagens |
 | GET | `/api/analytics/achievements` | Conquistas desbloqueadas e disponíveis |
 | GET | `/api/analytics/weather-correlation` | Relação entre o clima (chuva/temperatura/vento) e as visitas |
+| GET | `/api/analytics/weather-insights` | Insights automáticos cruzando clima e hábitos: faixas de temperatura, chuva × seco, horário no frio × no calor e horário por espécie |
 | GET | `/api/analytics/timelapses` | Lista os resumos do dia (time-lapses) já gerados |
 | POST | `/api/analytics/timelapses/generate` | Gera sob demanda o resumo de um dia (`day` opcional; `force` regera) |
 | DELETE | `/api/analytics/timelapses/{arquivo}` | Remove um resumo do dia |
@@ -503,6 +504,22 @@ aviawatch/
 A aba **Estatísticas & Conquistas** do painel mostra os hábitos de visita e a Life
 List. Uma espécie é desbloqueada quando uma visita é associada a ela no catálogo;
 o gráfico agrupa as visitas de todo o histórico por hora do dia.
+
+A seção **Insights Comportamentais & Clima** (`/api/analytics/weather-insights`)
+cruza cada visita com a temperatura, a umidade e a condição do tempo gravadas no
+momento da captura e monta, automaticamente:
+
+- **faixas de temperatura** (visitas, espécies diferentes, visitas/dia e horário
+  médio) — destaca a faixa que atrai mais espécies;
+- **chuva × tempo seco** — compara a média de visitas por dia em cada condição;
+- **horário no frio × no calor** — horário médio de aparecimento em cada regime
+  (o limiar frio/quente é a mediana das temperaturas dos dias observados);
+- **horário por espécie** — quanto cada espécie aparece mais cedo ou mais tarde
+  conforme a temperatura;
+- **cards de resumo inteligente** com frases prontas em pt-BR.
+
+O cálculo usa o **horário local** do computador e exige apenas visitas com dados de
+clima; quanto mais capturas, mais confiáveis ficam os insights.
 
 ### Bioacústica com BirdNET
 

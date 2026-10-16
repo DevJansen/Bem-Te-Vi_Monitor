@@ -27,6 +27,7 @@ import {
   fetchHourlyDistribution,
   fetchLifeList,
   fetchWeatherCorrelation,
+  fetchWeatherInsights,
   getErrorMessage,
 } from "@/services/api";
 import type {
@@ -35,11 +36,13 @@ import type {
   HourlyDistribution,
   LifeListSpecies,
   WeatherCorrelation,
+  WeatherInsights,
 } from "@/types";
 import { usePolling } from "@/hooks/usePolling";
 import { formatSpeciesLabel } from "@/utils/format";
 import { cn } from "@/utils/cn";
 import { WeatherCorrelationPanel } from "@/components/dashboard/WeatherCorrelationPanel";
+import { WeatherInsightsPanel } from "@/components/dashboard/WeatherInsightsPanel";
 import { LifeListAlbum } from "@/components/dashboard/LifeListAlbum";
 import { AchievementsGrid } from "@/components/dashboard/AchievementsGrid";
 
@@ -48,19 +51,29 @@ type AnalyticsData = {
   hourly: HourlyDistribution[];
   lifeList: LifeListSpecies[];
   weather: WeatherCorrelation;
+  weatherInsights: WeatherInsights;
   achievements: Achievement[];
 };
 
 async function loadAnalytics(): Promise<AnalyticsData> {
   try {
-    const [summary, hourly, lifeList, weather, achievements] = await Promise.all([
-      fetchAnalyticsSummary(),
-      fetchHourlyDistribution(),
-      fetchLifeList(),
-      fetchWeatherCorrelation(),
-      fetchAchievements(),
-    ]);
-    return { summary, hourly, lifeList, weather, achievements };
+    const [summary, hourly, lifeList, weather, weatherInsights, achievements] =
+      await Promise.all([
+        fetchAnalyticsSummary(),
+        fetchHourlyDistribution(),
+        fetchLifeList(),
+        fetchWeatherCorrelation(),
+        fetchWeatherInsights(),
+        fetchAchievements(),
+      ]);
+    return {
+      summary,
+      hourly,
+      lifeList,
+      weather,
+      weatherInsights,
+      achievements,
+    };
   } catch (error) {
     throw new Error(
       getErrorMessage(error, "Não foi possível carregar as estatísticas."),
@@ -275,6 +288,8 @@ export function AnalyticsDashboard() {
               </ResponsiveContainer>
             </div>
           </section>
+
+          <WeatherInsightsPanel data={data.weatherInsights} />
 
           <WeatherCorrelationPanel data={data.weather} />
 

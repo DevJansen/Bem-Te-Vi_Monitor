@@ -163,6 +163,8 @@ sua Lista de Vida e suas estatísticas.
 O "modo jogador". Aqui você encontra:
 
 - **gráficos e horários de pico** — quando os pássaros mais aparecem;
+- **Insights Comportamentais & Clima** — cards inteligentes e gráficos que cruzam o
+  tempo com os hábitos das aves (veja abaixo);
 - **Lista de Vida** — as espécies que você já desbloqueou, com foto e número de avistagens;
 - **Conquistas** — medalhas que você ganha ao atingir marcos (ex.: registrar a 10ª espécie).
 
@@ -231,6 +233,19 @@ e pergunta: *"Que espécie é essa?"* Ele responde com o nome comum e o científ
 
 O AviaWatch consulta o tempo no seu endereço (via Open-Meteo) e cruza com as visitas.
 Assim você descobre, por exemplo, se choveu mais no dia em que os pássaros sumiram.
+
+Na aba **Estatísticas**, a seção **Insights Comportamentais & Clima** mostra tudo isso
+de forma automática, em cards e gráficos fáceis de ler:
+
+- 🌡️ **Faixa de temperatura preferida** — qual temperatura atrai mais espécies
+  diferentes (com um gráfico interativo: alterne entre *Visitas*, *Espécies* e
+  *Visitas/dia*);
+- 🌧️ **Chuva × tempo seco** — se aparecem mais aves em dias de chuva ou de tempo firme;
+- ⏰ **Horário no frio × no calor** — a que horas as aves costumam aparecer em cada caso;
+- 🐦 **Horário por espécie** — quanto cada ave chega mais cedo ou mais tarde conforme
+  a temperatura (ex.: *"os beija-flores aparecem mais cedo quando está mais quente"*).
+
+Quanto mais dias de observação você tiver, mais espertos ficam os insights.
 
 ### 🔔 Alertas no Telegram e no Discord
 

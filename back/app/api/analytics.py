@@ -17,9 +17,11 @@ from app.domain.models import (
     TimelapseGenerateResult,
     TimelapseOut,
     WeatherCorrelationOut,
+    WeatherInsightsOut,
 )
 from app.infra.database.analytics_repository import AnalyticsRepository
 from app.services.timelapse_service import get_timelapse_service
+from app.services.weather_insights import build_weather_insights
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
@@ -99,6 +101,29 @@ def get_weather_correlation() -> WeatherCorrelationOut:
         raise HTTPException(
             status_code=500,
             detail="Não foi possível calcular a correlação climática.",
+        ) from exc
+
+
+@router.get("/weather-insights", response_model=WeatherInsightsOut)
+def get_weather_insights() -> WeatherInsightsOut:
+    """Insights avançados cruzando clima e hábitos das aves.
+
+    Combina temperatura, umidade e condição do tempo com o horário e a espécie
+    de cada visita para produzir faixas de temperatura, chuva x tempo seco,
+    horário médio no frio x no calor e cards de resumo inteligente.
+    """
+    repository = _repository()
+    try:
+        rows = repository.weather_visit_rows()
+        total = repository.total_visits()
+        return WeatherInsightsOut(
+            **build_weather_insights(rows, total_visits=total)
+        )
+    except Exception as exc:
+        logger.exception("get_weather_insights failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível calcular os insights de clima.",
         ) from exc
 
 

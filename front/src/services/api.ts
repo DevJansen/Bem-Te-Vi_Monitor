@@ -31,6 +31,7 @@ import type {
   Timelapse,
   TimelapseGenerateResult,
   WeatherCorrelation,
+  WeatherInsights,
   Zone,
 } from "@/types";
 
@@ -287,6 +288,14 @@ export async function fetchCurrentWeather(): Promise<CurrentWeather> {
 export async function fetchWeatherCorrelation(): Promise<WeatherCorrelation> {
   const { data } = await api.get<WeatherCorrelation>(
     "/analytics/weather-correlation",
+  );
+  return data;
+}
+
+/** Insights avançados cruzando clima e hábitos das aves. */
+export async function fetchWeatherInsights(): Promise<WeatherInsights> {
+  const { data } = await api.get<WeatherInsights>(
+    "/analytics/weather-insights",
   );
   return data;
 }

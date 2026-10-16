@@ -482,3 +482,100 @@ class WeatherCorrelationOut(BaseModel):
     by_condition: list[WeatherConditionStatOut] = Field(default_factory=list)
     by_category: list[WeatherConditionStatOut] = Field(default_factory=list)
     peak_hours: list[WeatherHourStatOut] = Field(default_factory=list)
+
+
+class TemperatureRangeInsightOut(BaseModel):
+    """Resumo de uma faixa de temperatura (visitas, espécies e horário médio)."""
+
+    label: str
+    min_temperature: float | None = None
+    max_temperature: float | None = None
+    visits: int = Field(ge=0)
+    distinct_species: int = Field(ge=0)
+    active_days: int = Field(ge=0)
+    visits_per_day: float = Field(ge=0.0)
+    avg_hour: float | None = None
+    avg_hour_label: str | None = None
+    avg_temperature: float | None = None
+    avg_humidity: float | None = None
+    top_species: str | None = None
+
+
+class WeatherConditionInsightOut(BaseModel):
+    """Visitas agrupadas por categoria ampla de clima (com visitas por dia)."""
+
+    condition: str
+    icon: str = "🌡️"
+    visits: int = Field(ge=0)
+    distinct_species: int = Field(ge=0)
+    active_days: int = Field(ge=0)
+    visits_per_day: float = Field(ge=0.0)
+    avg_hour: float | None = None
+    avg_hour_label: str | None = None
+    avg_temperature: float | None = None
+    avg_humidity: float | None = None
+    top_species: str | None = None
+
+
+class TemperaturePeriodInsightOut(BaseModel):
+    """Período (mais frio / mais quente) com horário médio de aparecimento."""
+
+    period: str
+    label: str
+    visits: int = Field(ge=0)
+    distinct_species: int = Field(ge=0)
+    active_days: int = Field(ge=0)
+    visits_per_day: float = Field(ge=0.0)
+    avg_hour: float | None = None
+    avg_hour_label: str | None = None
+    avg_temperature: float | None = None
+    avg_humidity: float | None = None
+    top_species: str | None = None
+
+
+class SpeciesWeatherTimingOut(BaseModel):
+    """Mudança de horário de uma espécie entre condições frias e quentes."""
+
+    species: str
+    scientific_name: str | None = None
+    cold_avg_hour: float | None = None
+    hot_avg_hour: float | None = None
+    cold_visits: int = Field(ge=0)
+    hot_visits: int = Field(ge=0)
+    minutes_earlier: float | None = None
+    # "earlier" (mais cedo no calor), "later" (mais tarde) ou "similar".
+    direction: str = "similar"
+    summary: str = ""
+
+
+class InsightCardOut(BaseModel):
+    """Card de resumo inteligente pronto para exibição no painel."""
+
+    id: str
+    icon: str = "💡"
+    title: str
+    description: str
+    # "positive", "info", "warning" ou "neutral" (orienta a cor do card).
+    tone: str = "info"
+
+
+class WeatherInsightsOut(BaseModel):
+    """Insights avançados que cruzam visitas com clima e hábitos."""
+
+    total_visits: int = Field(ge=0)
+    visits_with_weather: int = Field(ge=0)
+    cold_threshold_celsius: float | None = None
+    temperature_ranges: list[TemperatureRangeInsightOut] = Field(
+        default_factory=list
+    )
+    best_temperature_range: TemperatureRangeInsightOut | None = None
+    conditions: list[WeatherConditionInsightOut] = Field(default_factory=list)
+    rainy: WeatherConditionInsightOut | None = None
+    dry: WeatherConditionInsightOut | None = None
+    rainy_vs_dry_percent: float | None = None
+    periods: list[TemperaturePeriodInsightOut] = Field(default_factory=list)
+    species_timing: list[SpeciesWeatherTimingOut] = Field(default_factory=list)
+    insights: list[InsightCardOut] = Field(default_factory=list)
+    generated_at: str = Field(
+        default_factory=lambda: datetime.utcnow().isoformat() + "Z"
+    )
