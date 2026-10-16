@@ -1,10 +1,11 @@
-"""Async Telegram / Discord notifications — never block the video pipeline."""
+"""Notificações assíncronas por Telegram/Discord — nunca bloqueiam o pipeline."""
 
 from __future__ import annotations
 
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from pathlib import Path
 from queue import Empty, Full, Queue
 from typing import Any
@@ -13,16 +14,46 @@ import requests
 
 from app.core.config import Settings, get_settings
 from app.domain.models import VisitOut
+from app.services.notifier import get_telegram_notifier
 
 logger = logging.getLogger(__name__)
+
+# Rótulos usados quando o modelo não identifica a espécie de fato. Nesses casos
+# não faz sentido considerar "espécie nova" no modo de alerta por novas espécies.
+_GENERIC_SPECIES_LABELS = {
+    "bird",
+    "ave",
+    "aves",
+    "ave (genérica)",
+    "ave (generica)",
+    "unknown",
+    "desconhecida",
+    "desconhecido",
+}
+
+
+def _format_detected_at(value: str) -> str:
+    """Converte o ISO-8601 (UTC) da visita num horário local legível.
+
+    Nunca lança exceção: se o valor não for uma data válida, devolve o
+    texto original para não quebrar o envio do alerta.
+    """
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (ValueError, AttributeError, TypeError):
+        return value
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone().strftime("%d/%m/%Y %H:%M")
 
 
 class NotificationService:
     """
-    Fire-and-forget notification worker.
+    Worker de notificações "fire-and-forget".
 
-    Video threads only enqueue a payload; a background worker sends HTTP
-    requests. Failures are logged and never raised to callers.
+    As threads de vídeo apenas enfileiram a visita; um worker em segundo plano
+    envia as requisições HTTP. Falhas são registradas no log e nunca propagadas
+    para quem chamou.
     """
 
     def __init__(self, settings: Settings | None = None, max_queue: int = 200) -> None:
@@ -60,8 +91,15 @@ class NotificationService:
         self._executor.shutdown(wait=False, cancel_futures=True)
 
     def notify_visit(self, visit: VisitOut) -> None:
-        """Non-blocking enqueue. Drops silently if queue is full."""
+        """Enfileira a visita sem bloquear; descarta em silêncio se a fila encher.
+
+        Antes de enfileirar, decide se a visita merece alerta respeitando as
+        preferências do painel: notificações ligadas, confiança mínima e o modo
+        escolhido (qualquer visita ou apenas novas espécies).
+        """
         if not self.settings.telegram_enabled and not self.settings.discord_enabled:
+            return
+        if not self._should_notify(visit):
             return
         try:
             self._queue.put_nowait(visit)
@@ -69,6 +107,99 @@ class NotificationService:
             logger.warning("Notification queue full — dropping visit %s", visit.id)
         except Exception:
             logger.exception("Failed to enqueue notification")
+
+    def _should_notify(self, visit: VisitOut) -> bool:
+        """Decide se a visita deve gerar alerta, respeitando as preferências."""
+        if not self._notify_enabled():
+            return False
+        if visit.confidence < self._min_confidence_notify():
+            return False
+        if self._notify_mode() == "new_species" and not self._is_new_species(visit):
+            return False
+        return True
+
+    def _settings_repo(self):
+        """Repositório de configurações, criado sob demanda.
+
+        O import é tardio de propósito: ``app.infra.database.repository`` importa
+        ``app.services.weather_service`` e o pacote ``app.services`` importa este
+        módulo — importar no topo criaria um ciclo de importação.
+        """
+        from app.infra.database.repository import SettingsRepository
+
+        return SettingsRepository(self.settings.db_path)
+
+    def _species_repo(self):
+        """Repositório do catálogo de espécies, criado sob demanda (ver acima)."""
+        from app.infra.database.repository import BirdSpeciesRepository
+
+        return BirdSpeciesRepository(self.settings.db_path)
+
+    def _notify_enabled(self) -> bool:
+        raw = self._settings_repo().get("notifications_enabled", "true")
+        return str(raw).lower() in {"1", "true", "yes", "on"}
+
+    def _notify_mode(self) -> str:
+        """Modo de notificação: ``all`` (qualquer visita) ou ``new_species``."""
+        raw = self._settings_repo().get("notify_mode")
+        return raw if raw in {"all", "new_species"} else "all"
+
+    def _min_confidence_notify(self) -> float:
+        """Confiança mínima para alertar (padrão: a calibração do YOLO)."""
+        raw = self._settings_repo().get("min_confidence_notify")
+        if raw is not None:
+            try:
+                return float(raw)
+            except ValueError:
+                pass
+        return self.settings.yolo_confidence
+
+    def _is_new_species(self, visit: VisitOut) -> bool:
+        """Indica se a espécie da visita ainda não consta no catálogo local.
+
+        Considera nome comum, nome científico e o rótulo da detecção,
+        normalizados (minúsculas, sem espaços extras). Detecções genéricas
+        (ex.: "bird"/"ave genérica") não contam como espécie nova, pois o
+        modelo não identificou a espécie de fato.
+        """
+        labels = self._visit_species_labels(visit)
+        if not labels:
+            return False
+        known_names = self._known_species_names()
+        if not known_names:
+            # Catálogo vazio: qualquer espécie identificada é "nova".
+            return True
+        return not any(name in known_names for name in labels)
+
+    @staticmethod
+    def _visit_species_labels(visit: VisitOut) -> set[str]:
+        """Nomes de espécie úteis da visita, sem rótulos genéricos."""
+        raw = {
+            visit.assigned_species_common_name,
+            visit.assigned_species_scientific_name,
+            visit.species,
+        }
+        labels = {(value or "").strip().lower() for value in raw}
+        return {
+            label
+            for label in labels
+            if label and label not in _GENERIC_SPECIES_LABELS
+        }
+
+    def _known_species_names(self) -> set[str]:
+        """Nomes já cadastrados no catálogo local (minúsculas)."""
+        try:
+            rows = self._species_repo().list_all()
+        except Exception:
+            logger.exception("Failed to read species catalog")
+            return set()
+        names: set[str] = set()
+        for row in rows:
+            for key in ("common_name", "scientific_name"):
+                value = (row.get(key) or "").strip().lower()
+                if value:
+                    names.add(value)
+        return names
 
     def _run(self) -> None:
         while not self._stopped.is_set():
@@ -101,59 +232,42 @@ class NotificationService:
 
     @staticmethod
     def _format_message(visit: VisitOut) -> str:
+        """Monta a mensagem de alerta com espécie, horário e contexto da visita."""
         camera = visit.camera_name or visit.camera_id
+        # Prioriza o nome comum atribuído pelo usuário; senão, o rótulo da IA.
+        species = visit.assigned_species_common_name or visit.species
+        scientific = visit.assigned_species_scientific_name
+        if scientific and scientific.strip().lower() not in species.strip().lower():
+            species = f"{species} ({scientific})"
         return (
-            f"AviaWatch — visita detectada\n"
-            f"Espécie: {visit.species}\n"
+            "🐦 AviaWatch — visita detectada\n"
+            f"Espécie: {species}\n"
             f"Confiança: {visit.confidence:.0%}\n"
             f"Câmera: {camera}\n"
-            f"Zona: {visit.zone_id or '-'}\n"
             f"Permanência: {visit.dwell_seconds:.1f}s\n"
-            f"Quando: {visit.detected_at}"
+            f"Quando: {_format_detected_at(visit.detected_at)}"
         )
 
     def _resolve_local_image(self, visit: VisitOut) -> Path | None:
         rel = visit.thumbnail_path or visit.clip_path
         if not rel:
             return None
-        # Only local files under captures — never fetch remote URLs
+        # Apenas arquivos locais dentro de captures — nunca buscar URLs remotas.
         path = self.settings.captures_dir / rel.replace("\\", "/").lstrip("/")
         if path.exists() and path.is_file():
             return path
-        # thumbnail_path may already be relative like "thumbs/..."
+        # thumbnail_path pode vir apenas com o nome, ex.: "thumbs/...".
         alt = self.settings.captures_dir / Path(rel).name
         if alt.exists():
             return alt
         return None
 
     def _send_telegram(self, text: str, image_path: Path | None) -> None:
-        token = self.settings.telegram_bot_token
-        chat_id = self.settings.telegram_chat_id
-        timeout = 15
-
+        notifier = get_telegram_notifier()
         if image_path and image_path.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}:
-            url = f"https://api.telegram.org/bot{token}/sendPhoto"
-            with image_path.open("rb") as fh:
-                response = requests.post(
-                    url,
-                    data={"chat_id": chat_id, "caption": text[:1024]},
-                    files={"photo": fh},
-                    timeout=timeout,
-                )
+            notifier.send_photo(image_path, text)
         else:
-            url = f"https://api.telegram.org/bot{token}/sendMessage"
-            response = requests.post(
-                url,
-                json={"chat_id": chat_id, "text": text},
-                timeout=timeout,
-            )
-
-        if response.status_code >= 400:
-            logger.error(
-                "Telegram API error %s: %s",
-                response.status_code,
-                response.text[:300],
-            )
+            notifier.send_message(text)
 
     def _send_discord(self, text: str, image_path: Path | None) -> None:
         webhook = self.settings.discord_webhook_url

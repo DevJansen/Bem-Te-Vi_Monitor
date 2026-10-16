@@ -6,6 +6,7 @@ import ipaddress
 import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
@@ -31,6 +32,7 @@ from app.services.environment_settings import (
     test_environment_connection,
 )
 from app.services.notification_service import get_notification_service
+from app.services.notifier import get_telegram_notifier
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/settings", tags=["settings"])
@@ -74,6 +76,11 @@ def _build_out() -> AppSettingsOut:
         except ValueError:
             return default
 
+    def _notify_mode(store: dict[str, Any]) -> str:
+        """Modo de alerta: ``all`` (qualquer visita) ou ``new_species``."""
+        raw = store.get("notify_mode")
+        return raw if raw in {"all", "new_species"} else "all"
+
     extra_raw = stored.get("extra_json", "{}")
     try:
         extra = json.loads(extra_raw)
@@ -102,6 +109,7 @@ def _build_out() -> AppSettingsOut:
         ),
         audio_input_device=(stored.get("audio_input_device") or "").strip(),
         notifications_enabled=_bool("notifications_enabled", True),
+        notify_mode=_notify_mode(stored),
         min_confidence_notify=_float(
             "min_confidence_notify", settings.yolo_confidence
         ),
@@ -252,6 +260,8 @@ async def update_app_settings(payload: AppSettingsUpdate) -> AppSettingsOut:
             )
         if payload.min_confidence_notify is not None:
             repo.set("min_confidence_notify", str(payload.min_confidence_notify))
+        if payload.notify_mode is not None:
+            repo.set("notify_mode", payload.notify_mode.strip().lower())
         if payload.yolo_confidence is not None:
             # Encaminha para a calibração (fonte de verdade) e aplica em runtime.
             get_calibration_service().update(
@@ -294,16 +304,22 @@ async def test_notification(payload: NotificationTestRequest) -> NotificationTes
                 status_code=400,
                 detail="Telegram não configurado. Preencha TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID no .env",
             )
+        telegram = get_telegram_notifier()
+        ok, detail = telegram.test_connection()
+        if not ok:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Falha ao testar Telegram: {detail}",
+            )
         try:
             future = _test_pool.submit(
-                notifier._send_telegram,
+                telegram.send_message,
                 "AviaWatch — teste de notificação Telegram\nCanal local OK.",
-                None,
             )
             future.result(timeout=20)
             return NotificationTestResponse(
                 ok=True,
-                message="Mensagem de teste enviada ao Telegram.",
+                message=f"Mensagem de teste enviada ao Telegram. {detail}",
             )
         except Exception as exc:
             logger.exception("Telegram test failed")

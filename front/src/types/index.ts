@@ -238,12 +238,14 @@ export type AppSettings = {
   audio_confidence_threshold: number;
   audio_input_device: string;
   notifications_enabled: boolean;
+  notify_mode: string;
   min_confidence_notify: number;
   extra: Record<string, unknown>;
 };
 
 export type AppSettingsUpdate = {
   notifications_enabled?: boolean;
+  notify_mode?: string;
   min_confidence_notify?: number;
   yolo_confidence?: number;
   pre_record_seconds?: number;

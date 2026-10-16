@@ -186,12 +186,15 @@ class AppSettingsOut(BaseModel):
     # dispositivo disponível no sistema.
     audio_input_device: str = ""
     notifications_enabled: bool = True
+    # Modo de alerta: "all" (qualquer visita) ou "new_species" (só espécies novas).
+    notify_mode: str = "all"
     min_confidence_notify: float = 0.35
     extra: dict[str, Any] = Field(default_factory=dict)
 
 
 class AppSettingsUpdate(BaseModel):
     notifications_enabled: bool | None = None
+    notify_mode: str | None = Field(default=None, pattern="^(all|new_species)$")
     min_confidence_notify: float | None = Field(default=None, ge=0.0, le=1.0)
     # Mantido por compatibilidade: encaminhado para a calibração.
     yolo_confidence: float | None = Field(default=None, ge=0.05, le=1.0)

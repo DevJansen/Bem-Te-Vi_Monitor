@@ -146,6 +146,7 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingEnvironment, setSavingEnvironment] = useState(false);
+  const [savingAlerts, setSavingAlerts] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [testing, setTesting] = useState<EnvironmentIntegration | null>(null);
@@ -221,6 +222,7 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
     try {
       const updated = await updateSettings({
         notifications_enabled: settings.notifications_enabled,
+        notify_mode: settings.notify_mode,
         audio_analysis_enabled: settings.audio_analysis_enabled,
         audio_confidence_threshold: settings.audio_confidence_threshold,
         audio_input_device: settings.audio_input_device,
@@ -276,6 +278,35 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
       setError(getErrorMessage(err, "Falha ao salvar as variáveis de ambiente"));
     } finally {
       setSavingEnvironment(false);
+    }
+  };
+
+  // Salva a seção "Alertas e Notificações": credenciais do Telegram (token/chat)
+  // e as preferências (liga/desliga + modo de notificação) de uma só vez.
+  const saveAlerts = async () => {
+    if (!settings) return;
+    setSavingAlerts(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const credentials = buildEnvironmentPayload();
+      if (Object.keys(credentials).length > 0) {
+        const updatedEnv = await saveEnvironmentSettings(credentials);
+        setEnvironment(updatedEnv);
+        setDraft(EMPTY_DRAFT);
+        setTestResult(null);
+      }
+      const updated = await updateSettings({
+        notifications_enabled: settings.notifications_enabled,
+        notify_mode: settings.notify_mode,
+      });
+      setSettings(updated);
+      onSettingsChange?.(updated);
+      setMessage("Alertas salvos.");
+    } catch (err) {
+      setError(getErrorMessage(err, "Falha ao salvar os alertas"));
+    } finally {
+      setSavingAlerts(false);
     }
   };
 
@@ -404,6 +435,140 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
         </p>
       </div>
 
+      <div className="rounded-xl border border-dark-700 bg-dark-800 p-4 sm:p-5">
+        <div className="mb-4">
+          <h3 className="font-display text-sm font-semibold text-[var(--color-text-primary)]">
+            Alertas e Notificações
+          </h3>
+          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+            Receba um aviso no Telegram, com a foto do passarinho, quando ele
+            aparecer na câmera.
+          </p>
+        </div>
+
+        <div className="space-y-5">
+          <label className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
+            <input
+              type="checkbox"
+              checked={settings.notifications_enabled}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  notifications_enabled: e.target.checked,
+                })
+              }
+              className="accent-emerald-500"
+            />
+            Alertas habilitados
+          </label>
+
+          {settings.notifications_enabled ? (
+            <div className="space-y-4 rounded-lg border border-dark-700 bg-dark-900/60 p-4">
+              <div>
+                <label
+                  htmlFor="notify-mode"
+                  className="block text-xs font-medium text-[var(--color-text-muted)]"
+                >
+                  Quando notificar
+                </label>
+                <select
+                  id="notify-mode"
+                  value={settings.notify_mode}
+                  onChange={(e) =>
+                    setSettings({ ...settings, notify_mode: e.target.value })
+                  }
+                  className="mt-1 w-full rounded-lg border border-dark-700 bg-dark-900 px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-emerald-500/50"
+                >
+                  <option value="all">Qualquer visita</option>
+                  <option value="new_species">
+                    Apenas novas espécies (não estão na Life List)
+                  </option>
+                </select>
+                <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">
+                  {settings.notify_mode === "new_species"
+                    ? "Você só será avisado quando aparecer uma ave que ainda não consta no seu catálogo Minhas Aves."
+                    : "Você será avisado de toda visita detectada, inclusive de espécies já conhecidas."}
+                </p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block text-xs text-[var(--color-text-muted)]">
+                  Token do bot do Telegram
+                  <span className="mt-1 flex rounded-lg border border-dark-700 bg-dark-900 focus-within:border-emerald-500/50">
+                    <input
+                      type="password"
+                      value={draft.telegramBotToken}
+                      placeholder="123456:ABC..."
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          telegramBotToken: e.target.value,
+                          clearTelegram: false,
+                        })
+                      }
+                      autoComplete="off"
+                      className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)]"
+                    />
+                  </span>
+                </label>
+                <label className="block text-xs text-[var(--color-text-muted)]">
+                  ID do chat do Telegram
+                  <span className="mt-1 flex rounded-lg border border-dark-700 bg-dark-900 focus-within:border-emerald-500/50">
+                    <input
+                      type="text"
+                      value={draft.telegramChatId}
+                      placeholder="-1001234567890"
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          telegramChatId: e.target.value,
+                          clearTelegram: false,
+                        })
+                      }
+                      autoComplete="off"
+                      className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)]"
+                    />
+                  </span>
+                </label>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 border-t border-dark-700 pt-4">
+                <button
+                  type="button"
+                  onClick={() => void saveAlerts()}
+                  disabled={savingAlerts}
+                  className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-dark-900 transition hover:bg-emerald-400 disabled:opacity-60"
+                >
+                  {savingAlerts ? "Salvando…" : "Salvar alertas"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void runConnectionTest("telegram")}
+                  disabled={
+                    testing !== null ||
+                    (!draft.telegramBotToken.trim() &&
+                      !environment?.telegram_bot_token_configured)
+                  }
+                  className="inline-flex items-center gap-2 rounded-lg border border-dark-700 px-4 py-2 text-sm font-medium text-[var(--color-text-muted)] transition hover:text-emerald-300 disabled:opacity-60"
+                >
+                  <Send className="h-4 w-4" />
+                  {testing === "telegram" ? "Testando…" : "Testar Envio de Mensagem"}
+                </button>
+                {testResult?.integration === "telegram" ? (
+                  <p
+                    className={`text-xs ${
+                      testResult.ok ? "text-emerald-400" : "text-red-400"
+                    }`}
+                  >
+                    {testResult.message}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
       {environment ? (
         <div className="rounded-xl border border-dark-700 bg-dark-800 p-4 sm:p-5">
           <div className="mb-4">
@@ -416,41 +581,6 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
             </p>
           </div>
           <div className="grid gap-3 xl:grid-cols-3">
-            <IntegrationCard
-              title="Telegram"
-              icon={<Send className="h-4 w-4" />}
-              configured={environment.telegram_configured}
-              testing={testing === "telegram"}
-              hasInput={Boolean(draft.telegramBotToken.trim())}
-              result={testResult?.integration === "telegram" ? testResult : null}
-              onTest={() => void runConnectionTest("telegram")}
-              clearRequested={draft.clearTelegram}
-              onClearChange={(clearTelegram) =>
-                setDraft({ ...draft, clearTelegram })
-              }
-              fields={[
-                {
-                  label: "Token do bot",
-                  value: draft.telegramBotToken,
-                  placeholder: environment.telegram_bot_token_configured
-                    ? "Token salvo (••••••••)"
-                    : "123456:ABC...",
-                  secret: true,
-                  onChange: (telegramBotToken) =>
-                    setDraft({ ...draft, telegramBotToken, clearTelegram: false }),
-                },
-                {
-                  label: "ID do chat",
-                  value: draft.telegramChatId,
-                  placeholder: environment.telegram_chat_id_configured
-                    ? "ID salvo (••••••••)"
-                    : "-1001234567890",
-                  secret: false,
-                  onChange: (telegramChatId) =>
-                    setDraft({ ...draft, telegramChatId, clearTelegram: false }),
-                },
-              ]}
-            />
             <IntegrationCard
               title="Discord"
               icon={<MessageCircle className="h-4 w-4" />}
@@ -555,17 +685,6 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
           Preferências da IA e alertas
         </h3>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <label className="flex items-center gap-2 text-sm text-[var(--color-text-muted)] sm:col-span-2">
-            <input
-              type="checkbox"
-              checked={settings.notifications_enabled}
-              onChange={(e) =>
-                setSettings({ ...settings, notifications_enabled: e.target.checked })
-              }
-              className="accent-emerald-500"
-            />
-            Notificações habilitadas
-          </label>
           <label className="flex items-start gap-2 text-sm text-[var(--color-text-muted)] sm:col-span-2">
             <input
               type="checkbox"

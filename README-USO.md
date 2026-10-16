@@ -160,12 +160,13 @@ O "modo jogador". Aqui você encontra:
 
 ### ⚙️ 6. Configurações
 
-Onde você ajusta o comportamento. Tem quatro blocos:
+Onde você ajusta o comportamento. Tem cinco blocos:
 
-1. **Variáveis do ambiente** — segredos e chaves (Telegram, Discord, IA externa).
-2. **Calibração e Ajustes** — o "tempero" da IA (veja abaixo).
-3. **Preferências da IA e alertas** — quando avisar, quanto gravar e se o reconhecimento de canto está ligado.
-4. **Exclusão e limpeza de dados** — apagar visitas antigas ou tudo.
+1. **Alertas e Notificações** — liga/desliga os avisos e escolhe quando notificar (qualquer visita ou só espécies novas), com o token e o ID do chat do Telegram.
+2. **Variáveis do ambiente** — segredos e chaves (Discord, IA externa).
+3. **Calibração e Ajustes** — o "tempero" da IA (veja abaixo).
+4. **Preferências da IA e alertas** — quanto gravar, o limiar de confiança e se o reconhecimento de canto está ligado.
+5. **Exclusão e limpeza de dados** — apagar visitas antigas ou tudo.
 
 ![Tela Configurações — calibração, perfis prontos e controles avançados](docs/images/configuracoes.png)
 
@@ -219,10 +220,21 @@ Assim você descobre, por exemplo, se choveu mais no dia em que os pássaros sum
 
 ### 🔔 Alertas no Telegram e no Discord
 
-Se você quiser ser avisado, é possível mandar um alerta quando um pássaro aparece:
+Se você quiser ser avisado, é possível mandar um alerta quando um pássaro aparece.
+Na tela **Configurações** existe a seção **Alertas e Notificações**, com tudo num lugar só:
 
-- **Telegram:** você cria um bot (com o `@BotFather`) e cola o "token" e o ID da conversa.
-- **Discord:** você cria um "webhook" no seu servidor e cola o endereço.
+- **Alertas habilitados:** liga ou desliga o envio de avisos.
+- **Quando notificar:** escolha entre **Qualquer visita** (avisa sempre) ou **Apenas novas
+  espécies** (avisa só quando aparece uma ave que ainda não está no seu catálogo *Minhas Aves* —
+  ideal para quem quer descobrir espécies novas sem ser incomodado pelas já conhecidas).
+- **Token do bot do Telegram:** você cria um bot no Telegram (falando com o `@BotFather`) e cola
+  o "token" que ele entrega.
+- **ID do chat do Telegram:** o número da conversa/grupo que vai receber os avisos.
+- **Testar Envio de Mensagem:** envia um alerta de teste na hora e mostra se deu certo, sem
+  precisar esperar um pássaro aparecer.
+
+O alerta chega com o **nome da espécie**, o **horário** e a **foto** da visita.
+No **Discord**, em vez do bot, você cria um "webhook" no seu servidor e cola o endereço.
 
 Há também um **limiar de confiança** para notificar: você escolhe só receber alertas quando a
 IA estiver bem certa (ou avisa até as duvidosas).

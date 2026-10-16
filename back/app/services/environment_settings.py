@@ -24,6 +24,7 @@ from app.services.external_species_identifier import (
     provider_error_detail,
 )
 from app.services.notification_service import get_notification_service
+from app.services.notifier import TelegramNotifier
 
 logger = logging.getLogger(__name__)
 _env_lock = threading.RLock()
@@ -193,28 +194,31 @@ def test_environment_connection(
         chat_id = payload.telegram_chat_id or current.get("TELEGRAM_CHAT_ID", "")
         if not token:
             raise ValueError("Informe o token do bot do Telegram para testar")
-        response = _request(
-            "GET",
-            f"https://api.telegram.org/bot{token}/getMe",
-        )
-        if response.status_code != 200:
-            raise RuntimeError("O Telegram rejeitou o token informado")
-        try:
-            if not response.json().get("ok"):
-                raise RuntimeError("O Telegram rejeitou o token informado")
-        except (ValueError, AttributeError) as exc:
-            raise RuntimeError("Resposta inválida do Telegram") from exc
-        if chat_id:
-            chat_response = _request(
-                "GET",
-                f"https://api.telegram.org/bot{token}/getChat",
-                params={"chat_id": chat_id},
+
+        # Testa com as credenciais digitadas no painel (ou as salvas, se vazias).
+        telegram = TelegramNotifier(token=token, chat_id=chat_id)
+        ok, detail = telegram.test_connection()
+        if not ok:
+            raise RuntimeError(detail)
+
+        if not chat_id:
+            # Sem chat não há para quem enviar; valida apenas o token.
+            return NotificationTestResponse(
+                ok=True,
+                message=f"Conexão com o Telegram validada. {detail}",
             )
-            if chat_response.status_code != 200:
-                raise RuntimeError("O Telegram não reconheceu o chat informado")
+
+        if not telegram.send_message(
+            "AviaWatch — teste de alerta.\n"
+            "Se você recebeu esta mensagem, os alertas estão funcionando!"
+        ):
+            raise RuntimeError(
+                "O Telegram validou o bot, mas não aceitou a mensagem de teste. "
+                "Verifique o ID do chat e se o bot foi iniciado por você."
+            )
         return NotificationTestResponse(
             ok=True,
-            message="Conexão com o Telegram validada.",
+            message=f"Mensagem de teste enviada com sucesso. {detail}",
         )
 
     if payload.integration == "discord":

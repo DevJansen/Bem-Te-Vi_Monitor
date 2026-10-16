@@ -107,9 +107,11 @@ O arquivo `back\.env.example` contém os nomes e os valores padrão. Copie-o par
 | `WEATHER_CACHE_MINUTES` | Intervalo (min) de atualização do cache local de clima | Padrão: `30`; mínimo: `5` |
 
 O painel administra a integração de IA Externa por completo (chave, URL base e
-modelo), além dos segredos do Telegram e do Discord. As demais opções avançadas
-continuam sendo ajustadas no arquivo `.env`; alterações manuais nesse arquivo
-exigem reiniciar o backend.
+modelo), os segredos do Telegram e do Discord, e as preferências de alerta. A
+seção **Alertas e Notificações** permite ligar/desligar os avisos, escolher o modo
+(`all` ou `new_species`), informar token e chat do Telegram e disparar um teste de
+envio real. As demais opções avançadas continuam sendo ajustadas no arquivo `.env`;
+alterações manuais nesse arquivo exigem reiniciar o backend.
 
 ### Onde obter as credenciais
 
@@ -344,12 +346,14 @@ aguardando ou em execução.
 
 ### Configurar e testar integrações pelo painel
 
-1. Abra **Configurações → Variáveis de ambiente**.
+1. Abra **Configurações → Alertas e Notificações** (Telegram) ou
+   **Configurações → Variáveis de ambiente** (Discord e IA externa).
 2. Digite apenas os valores novos. Campo vazio mantém o valor salvo; o painel nunca
    recebe a credencial completa do backend. Para substituir uma chave, digite a nova.
    Use **Remover credenciais salvas** somente se quiser apagá-la.
-3. Use **Testar Conexão** para validar os dados. O teste não salva a alteração nem
-   envia uma mensagem de teste.
+3. Use **Testar Conexão** para validar os dados. O teste não salva a alteração.
+   No Telegram, **Testar Envio de Mensagem** valida o token (`getMe`) e envia uma
+   mensagem real de teste ao chat configurado, confirmando o caminho ponta a ponta.
 4. Clique em **Salvar Alterações**. O backend atualiza `back\.env` e recarrega as
    configurações em execução; um toast informa sucesso ou erro.
 
@@ -357,6 +361,12 @@ Por segurança, `GET /api/settings/env` devolve somente máscaras fixas e indica
 de configuração (`*_configured`), nunca os segredos nem seus sufixos. Os endpoints
 de leitura, gravação e teste são restritos a conexões locais. Não exponha o backend
 diretamente à rede ou à Internet.
+
+Na seção **Alertas e Notificações** ficam o liga/desliga dos alertas e o **modo de
+notificação**: `all` avisa a cada visita válida; `new_species` avisa apenas quando a
+espécie detectada ainda não consta no catálogo local (a *Life List*). A decisão de
+enviar considera ainda o limiar de confiança e o modo configurado, e nunca bloqueia
+o pipeline de vídeo — o envio é assíncrono (`NotificationService` + `notifier.py`).
 
 Na seção **Calibração e Ajustes** o usuário escolhe entre dois perfis prontos —
 **Passarinhos Parados / Alimentador** (recomendado) e **Alta Movimentação / Voo
@@ -396,7 +406,7 @@ aviawatch/
 │   │   ├── core/         # Configuração
 │   │   ├── domain/       # Modelos
 │   │   ├── infra/        # AI, câmera, DB, mídia
-│   │   ├── services/     # Notificações, áudio BirdNET, .env e identificação externa
+│   │   ├── services/     # Notificações (notifier/NotificationService), áudio BirdNET, .env e identificação externa
 │   │   └── main.py
 │   ├── app-data/         # Banco, capturas e segredos (local)
 │   ├── requirements.txt
@@ -433,13 +443,13 @@ aviawatch/
 | DELETE | `/api/events/{event_id}` | Excluir visita individual e sua mídia local associada |
 | DELETE | `/api/events?older_than_days=N` | Excluir visitas anteriores ao limite de dias informado |
 | DELETE | `/api/events/all` | Apagar todo o histórico e a mídia; exige confirmação `EXCLUIR TUDO` |
-| GET/PUT | `/api/settings` | Configurações persistidas |
+| GET/PUT | `/api/settings` | Configurações persistidas (`notifications_enabled`, `notify_mode`, `min_confidence_notify`, …) |
 | GET | `/api/settings/calibration` | Calibração de sensibilidade ativa (confiança, permanência e movimento) |
 | POST | `/api/settings/calibration` | Atualizar a calibração e aplicar em tempo de execução (perfil ou valores) |
-| POST | `/api/settings/test-notification` | Teste Telegram/Discord |
+| POST | `/api/settings/test-notification` | Teste Telegram/Discord com as credenciais já salvas |
 | GET | `/api/settings/env` | Ler integrações com credenciais mascaradas |
 | POST | `/api/settings/env` | Salvar variáveis permitidas no `back/.env` e aplicá-las em runtime |
-| POST | `/api/settings/env/test` | Testar credenciais digitadas sem salvá-las |
+| POST | `/api/settings/env/test` | Testar credenciais digitadas sem salvá-las (no Telegram envia uma mensagem real) |
 | GET | `/api/stats` | Métricas do painel |
 | GET | `/api/analytics/summary` | Visitas de hoje, últimos 7 dias e total; espécie líder, duração média e horário de pico |
 | GET | `/api/analytics/hourly-distribution` | Contagem histórica de visitas para cada hora do dia (00h–23h) |
@@ -477,7 +487,8 @@ O painel mostra o motivo quando algum pré-requisito não está disponível. A a
 
 Credenciais de câmera usam Fernet (chave em `back/app-data/secrets/`). Vídeos e imagens
 permanecem locais por padrão; somente a ação explícita de identificação transmite o
-recorte daquela visita à OpenAI. Telegram/Discord só recebem alertas se configurados.
+recorte daquela visita à OpenAI. Telegram/Discord só recebem alertas se configurados,
+respeitando o modo de notificação e o limiar de confiança escolhidos no painel.
 Os recortes ficam em `back/app-data/crops/`. O armazenamento é local, mas não substitui
 backup: proteja a pasta `back/app-data/` e o arquivo `back/.env`. O catálogo e as fotos
 de referência também ficam em `back/app-data/`.
