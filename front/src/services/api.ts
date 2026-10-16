@@ -213,9 +213,16 @@ export async function getVisit(id: string): Promise<BirdVisit> {
   return data;
 }
 
-export async function identifyVisitExternal(id: string): Promise<BirdVisit> {
+export async function identifyVisitExternal(
+  id: string,
+  options?: { addToCatalog?: boolean },
+): Promise<BirdVisit> {
   const { data } = await api.post<BirdVisit>(
-    `/visits/${id}/identify-external`,
+    `/visits/${encodeURIComponent(id)}/identify-external`,
+    undefined,
+    options?.addToCatalog
+      ? { params: { add_to_catalog: true } }
+      : undefined,
   );
   return data;
 }

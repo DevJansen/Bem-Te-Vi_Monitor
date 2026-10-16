@@ -317,6 +317,7 @@ class CameraPipeline(threading.Thread):
             SeletorMelhorQuadro(
                 escala_nitidez=self.settings.best_frame_sharpness_scale,
                 proporcao_ideal=self.settings.best_frame_ideal_area_ratio,
+                nitidez_minima=self.settings.best_frame_min_sharpness,
             )
             if self.settings.best_frame_enabled
             else None
@@ -460,14 +461,27 @@ class CameraPipeline(threading.Thread):
                     source_bbox, source_frame, enhanced_frame
                 )
                 crop_path = save_bird_crop(
-                    enhanced_frame, crop_bbox, visit_id, quality=quality
+                    enhanced_frame,
+                    crop_bbox,
+                    visit_id,
+                    quality=quality,
+                    margin=self.settings.smart_crop_margin,
+                    min_dimension=self.settings.smart_crop_min_dimension,
+                    max_dimension=self.settings.smart_crop_max_dimension,
                 )
             if thumb_rel is None:
                 # Reserva: nunca deixa a visita sem foto.
                 thumb = save_thumbnail(source_frame, self.camera_id, visit_id)
                 thumb_rel = relative_to_captures(thumb) if thumb else None
                 if crop_path is None:
-                    crop_path = save_bird_crop(source_frame, source_bbox, visit_id)
+                    crop_path = save_bird_crop(
+                        source_frame,
+                        source_bbox,
+                        visit_id,
+                        margin=self.settings.smart_crop_margin,
+                        min_dimension=self.settings.smart_crop_min_dimension,
+                        max_dimension=self.settings.smart_crop_max_dimension,
+                    )
 
         metadata: dict[str, Any] = {
             "class_name": event["detection"].class_name,
@@ -490,6 +504,8 @@ class CameraPipeline(threading.Thread):
                     "best_frame_sharpness": round(metricas.nitidez, 2),
                     "best_frame_area_ratio": round(metricas.proporcao_area, 5),
                     "best_frame_confidence": round(metricas.confianca, 4),
+                    # Falso só quando TODOS os quadros eram desfoque (fallback).
+                    "best_frame_sharpness_ok": bool(best.nitidez_aprovada),
                 }
             )
 

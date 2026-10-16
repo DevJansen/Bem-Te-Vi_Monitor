@@ -11,6 +11,7 @@ import base64
 import json
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from urllib.parse import urlparse
 
 import requests
@@ -182,3 +183,22 @@ def identify_bird_image(image_bytes: bytes) -> SpeciesIdentification:
         scientific_name=scientific_name,
         common_name=common_name,
     )
+
+
+def identify_bird_image_file(path: Path | str) -> SpeciesIdentification:
+    """Utilitário: envia uma imagem já tratada (arquivo) para a IA externa.
+
+    Pensado para reaproveitar a **foto otimizada** do pipeline de gravação — a
+    thumbnail oficial em alta definição ou o recorte tratado da ave — como
+    entrada da identificação ultra-específica (ex.: Google Gemini Vision via
+    endpoint compatível com a OpenAI). Lê o arquivo do disco e delega para
+    :func:`identify_bird_image`, mantendo o mesmo tratamento de erros seguro.
+    """
+    caminho = Path(path)
+    try:
+        image_bytes = caminho.read_bytes()
+    except OSError as exc:
+        raise ExternalIdentificationError(
+            "Não foi possível ler a imagem tratada da ave"
+        ) from exc
+    return identify_bird_image(image_bytes)

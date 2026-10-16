@@ -46,6 +46,11 @@ SIGMA_AREA_PADRAO = 0.10
 # Proporção mínima para a ave ser considerada "fotografável" (evita salvar um
 # recorte de poucos pixels, sem informação visual útil).
 PROPORCAO_MINIMA_PADRAO = 0.0008
+# Nitidez mínima (variância do Laplaciano) para aceitar um quadro. Abaixo disto
+# o quadro é tratado como desfoque de movimento e DESCARTADO — só entra na foto
+# final se nenhum quadro da janela passar no corte (aí usamos o melhor
+# disponível, para nunca deixar a visita sem imagem).
+NITIDEZ_MINIMA_PADRAO = 20.0
 
 
 @dataclass
@@ -70,6 +75,10 @@ class MelhorQuadro:
     class_id: int
     class_name: str
     metricas: MetricasQuadro
+    # Verdadeiro quando o quadro passou no corte de nitidez (não é desfoque de
+    # movimento). Falso apenas quando TODOS os quadros foram reprovados e este é
+    # o melhor disponível (fallback).
+    nitidez_aprovada: bool = True
 
 
 def recorte_da_caixa(
@@ -176,13 +185,19 @@ class SeletorMelhorQuadro:
         proporcao_ideal: float = PROPORCAO_IDEAL_PADRAO,
         sigma_area: float = SIGMA_AREA_PADRAO,
         proporcao_minima: float = PROPORCAO_MINIMA_PADRAO,
+        nitidez_minima: float = NITIDEZ_MINIMA_PADRAO,
     ) -> None:
         self.escala_nitidez = float(escala_nitidez)
         self.proporcao_ideal = float(proporcao_ideal)
         self.sigma_area = float(sigma_area)
         self.proporcao_minima = float(proporcao_minima)
-        self._melhor: MelhorQuadro | None = None
+        self.nitidez_minima = float(nitidez_minima)
+        # Duas trilhas: os quadros que passam no corte de nitidez e o melhor
+        # absoluto (fallback para nunca ficar sem foto).
+        self._melhor_aceito: MelhorQuadro | None = None
+        self._melhor_absoluto: MelhorQuadro | None = None
         self._candidatos = 0
+        self._descartados_por_nitidez = 0
 
     @property
     def candidatos(self) -> int:
@@ -190,8 +205,13 @@ class SeletorMelhorQuadro:
         return self._candidatos
 
     @property
+    def descartados_por_nitidez(self) -> int:
+        """Quadros rejeitados por desfoque de movimento (abaixo do limiar)."""
+        return self._descartados_por_nitidez
+
+    @property
     def tem_resultado(self) -> bool:
-        return self._melhor is not None
+        return self._melhor_aceito is not None or self._melhor_absoluto is not None
 
     def considerar(
         self, frame: np.ndarray, deteccoes: list[Detection] | None
@@ -212,18 +232,37 @@ class SeletorMelhorQuadro:
             if metricas.proporcao_area < self.proporcao_minima:
                 continue
             self._candidatos += 1
-            if self._melhor is None or metricas.escore > self._melhor.metricas.escore:
-                self._melhor = MelhorQuadro(
-                    # Cópia sob demanda: só materializamos o quadro quando ele
-                    # realmente vence, mantendo o uso de memória em um único
-                    # frame durante toda a janela.
-                    frame=frame.copy(),
-                    bbox=tuple(float(v) for v in detection.bbox),
-                    confianca=float(detection.confidence),
-                    class_id=int(detection.class_id),
-                    class_name=str(detection.class_name),
-                    metricas=metricas,
-                )
+            aprovado = metricas.nitidez >= self.nitidez_minima
+            if not aprovado:
+                self._descartados_por_nitidez += 1
+
+            supera_absoluto = (
+                self._melhor_absoluto is None
+                or metricas.escore > self._melhor_absoluto.metricas.escore
+            )
+            supera_aceito = aprovado and (
+                self._melhor_aceito is None
+                or metricas.escore > self._melhor_aceito.metricas.escore
+            )
+            if not (supera_absoluto or supera_aceito):
+                continue
+
+            # Cópia sob demanda: só materializamos o quadro quando ele realmente
+            # vence uma das trilhas, mantendo o uso de memória enxuto.
+            candidato = MelhorQuadro(
+                frame=frame.copy(),
+                bbox=tuple(float(v) for v in detection.bbox),
+                confianca=float(detection.confidence),
+                class_id=int(detection.class_id),
+                class_name=str(detection.class_name),
+                metricas=metricas,
+                nitidez_aprovada=aprovado,
+            )
+            if supera_absoluto:
+                self._melhor_absoluto = candidato
+            if supera_aceito:
+                self._melhor_aceito = candidato
 
     def resultado(self) -> MelhorQuadro | None:
-        return self._melhor
+        """Devolve o melhor quadro aprovado na nitidez ou, na falta, o absoluto."""
+        return self._melhor_aceito or self._melhor_absoluto

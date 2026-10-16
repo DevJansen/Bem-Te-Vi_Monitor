@@ -109,6 +109,10 @@ class Settings(BaseModel):
     best_frame_ideal_area_ratio: float = Field(default=0.08, ge=0.001, le=1.0)
     # Escala usada para normalizar a variância do Laplaciano (nitidez) em (0, 1).
     best_frame_sharpness_scale: float = Field(default=120.0, gt=0.0)
+    # Nitidez mínima (variância do Laplaciano) para aceitar o quadro. Abaixo
+    # disto o quadro é descartado como desfoque de movimento; se nenhum passar,
+    # usa-se o melhor disponível (fallback).
+    best_frame_min_sharpness: float = Field(default=20.0, ge=0.0)
     # Melhoria automática (CLAHE + redução de ruído) do quadro escolhido.
     enhancement_enabled: bool = True
     enhancement_clahe_clip: float = Field(default=2.0, ge=1.0, le=8.0)
@@ -121,6 +125,14 @@ class Settings(BaseModel):
     enhancement_min_width: int = Field(default=720, ge=0, le=4096)
     # Qualidade JPEG da foto tratada (thumbnail oficial e recorte).
     enhancement_jpeg_quality: int = Field(default=95, ge=50, le=100)
+    # --- Crop inteligente do recorte da ave ---
+    # Margem (fração do tamanho da caixa) adicionada ao redor da ave, para dar
+    # contexto sem cortar as pontas (penas, bico, patas).
+    smart_crop_margin: float = Field(default=0.25, ge=0.0, le=2.0)
+    # Dimensões (px) do recorte final: amplia abaixo do mínimo (alta definição)
+    # e reduz acima do máximo (economia de disco).
+    smart_crop_min_dimension: int = Field(default=640, ge=0, le=4096)
+    smart_crop_max_dimension: int = Field(default=1024, ge=64, le=4096)
 
     @property
     def db_path(self) -> Path:
@@ -321,6 +333,9 @@ class Settings(BaseModel):
             best_frame_sharpness_scale=max(
                 1.0, float(os.getenv("BEST_FRAME_SHARPNESS_SCALE", "120"))
             ),
+            best_frame_min_sharpness=max(
+                0.0, float(os.getenv("BEST_FRAME_MIN_SHARPNESS", "20"))
+            ),
             enhancement_enabled=os.getenv("ENHANCEMENT_ENABLED", "true")
             .strip()
             .lower()
@@ -350,6 +365,17 @@ class Settings(BaseModel):
             ),
             enhancement_jpeg_quality=min(
                 100, max(50, int(os.getenv("ENHANCEMENT_JPEG_QUALITY", "95")))
+            ),
+            smart_crop_margin=min(
+                2.0, max(0.0, float(os.getenv("SMART_CROP_MARGIN", "0.25")))
+            ),
+            smart_crop_min_dimension=min(
+                4096,
+                max(0, int(os.getenv("SMART_CROP_MIN_DIMENSION", "640"))),
+            ),
+            smart_crop_max_dimension=min(
+                4096,
+                max(64, int(os.getenv("SMART_CROP_MAX_DIMENSION", "1024"))),
             ),
         )
 

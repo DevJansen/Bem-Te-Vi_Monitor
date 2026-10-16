@@ -14,8 +14,9 @@ from app.domain.models import VisitOut, VisitSpeciesAssignment
 from app.infra.database.repository import VisitRepository
 from app.services.external_species_identifier import (
     ExternalIdentificationError,
-    identify_bird_image,
+    identify_bird_image_file,
 )
+from app.services.species_catalog import find_or_create_species
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/visits", tags=["visits"])
@@ -111,8 +112,50 @@ async def get_visit_crop(visit_id: str) -> FileResponse:
     return FileResponse(crop_path, media_type="image/jpeg")
 
 
+def _resolve_visit_image(row: dict) -> tuple[Path, str] | None:
+    """Escolhe a melhor imagem tratada disponível para a identificação externa.
+
+    Prefere o **recorte da ave** (close-up, já passou pelo enhancement) e, na
+    falta, a **thumbnail oficial** em alta definição. Os caminhos são validados
+    contra as pastas de mídia (proteção contra *path traversal*). Devolve o
+    caminho e um rótulo da origem (``recorte`` ou ``thumbnail``).
+    """
+    settings = get_settings()
+    visit_id = row["id"]
+
+    crops_dir = settings.crops_dir.resolve()
+    crop_path = (settings.crops_dir / f"{visit_id}.jpg").resolve()
+    if crop_path.parent == crops_dir and crop_path.is_file():
+        return crop_path, "recorte"
+
+    thumb_relative = row.get("thumbnail_path")
+    if thumb_relative:
+        candidate = (settings.captures_dir / thumb_relative).resolve()
+        thumbs_dir = settings.thumbs_dir.resolve()
+        try:
+            candidate.relative_to(thumbs_dir)
+        except ValueError:
+            return None
+        if candidate.is_file():
+            return candidate, "thumbnail"
+    return None
+
+
 @router.post("/{visit_id}/identify-external", response_model=VisitOut)
-def identify_visit_external(visit_id: str) -> VisitOut:
+def identify_visit_external(
+    visit_id: str,
+    add_to_catalog: bool = Query(
+        default=False,
+        description="Cadastra a espécie no Catálogo Local e associa a visita.",
+    ),
+) -> VisitOut:
+    """Identifica a espécie com a IA externa a partir da imagem **tratada**.
+
+    Usa preferencialmente o recorte tratado da ave (ou a thumbnail oficial em
+    alta definição) gerados pelo pipeline de gravação. Com ``add_to_catalog``,
+    a espécie identificada é cadastrada no Catálogo Local (Life List) e
+    associada automaticamente à visita.
+    """
     repository = _repo()
     row = repository.get(visit_id)
     if row is None:
@@ -129,43 +172,45 @@ def identify_visit_external(visit_id: str) -> VisitOut:
             detail="Configure AI_EXTERNAL_API_KEY para habilitar a identificação externa",
         )
 
-    crop_relative_path = visit.metadata.get("crop_path")
-    expected_relative_path = Path("crops") / f"{visit_id}.jpg"
-    if crop_relative_path != expected_relative_path.as_posix():
+    resolved = _resolve_visit_image(row)
+    if resolved is None:
         raise HTTPException(
             status_code=404,
-            detail="O recorte desta visita não está disponível para identificação",
+            detail="A imagem tratada desta visita não está disponível para identificação",
         )
-    crop_path = (settings.app_data_dir / expected_relative_path).resolve()
-    if crop_path.parent != settings.crops_dir.resolve() or not crop_path.is_file():
-        raise HTTPException(
-            status_code=404,
-            detail="O recorte desta visita não está disponível para identificação",
-        )
+    image_path, image_source = resolved
 
     try:
-        image_bytes = crop_path.read_bytes()
-    except OSError as exc:
-        logger.exception("Failed to read bird crop visit=%s", visit_id)
-        raise HTTPException(
-            status_code=500,
-            detail="Não foi possível ler o recorte da visita",
-        ) from exc
-
-    try:
-        identification = identify_bird_image(image_bytes)
+        identification = identify_bird_image_file(image_path)
     except ExternalIdentificationError as exc:
         logger.warning("External identification failed visit=%s: %s", visit_id, exc)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    species = (
-        f"{identification.common_name} ({identification.scientific_name})"
-    )
+    species = f"{identification.common_name} ({identification.scientific_name})"
+
+    # Cadastro automático no Catálogo Local / Life List (opcional). A imagem
+    # tratada vira a foto de referência da espécie, quando nova.
+    catalog_species_id: str | None = None
+    if add_to_catalog:
+        try:
+            species_row = find_or_create_species(
+                common_name=identification.common_name,
+                scientific_name=identification.scientific_name,
+                reference_image_source=image_path,
+            )
+            catalog_species_id = str(species_row["id"])
+        except Exception:
+            logger.exception(
+                "Falha ao cadastrar a espécie no catálogo visit=%s", visit_id
+            )
+
     updated = repository.update_external_identification(
         visit_id,
         species=species,
         scientific_name=identification.scientific_name,
         common_name=identification.common_name,
+        species_id=catalog_species_id,
+        image_source=image_source,
     )
     if updated is None:
         raise HTTPException(status_code=404, detail="Visit not found")

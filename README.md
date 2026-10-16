@@ -124,6 +124,7 @@ O arquivo `back\.env.example` contém os nomes e os valores padrão. Copie-o par
 | `BEST_FRAME_ENABLED` | Escolhe automaticamente o quadro mais nítido da janela de gravação | Padrão: `true` (`false` volta a usar o instante do gatilho) |
 | `BEST_FRAME_IDEAL_AREA_RATIO` | Proporção ideal da tela (0–1) que a ave deve ocupar no melhor quadro | Padrão: `0.08` |
 | `BEST_FRAME_SHARPNESS_SCALE` | Escala de normalização da nitidez (variância do Laplaciano) | Padrão: `120` |
+| `BEST_FRAME_MIN_SHARPNESS` | Nitidez mínima para aceitar o quadro (abaixo = desfoque, descartado) | Padrão: `20`; `0` desativa o corte |
 | `ENHANCEMENT_ENABLED` | Melhoria automática (CLAHE + redução de ruído) da foto oficial | Padrão: `true` |
 | `ENHANCEMENT_CLAHE_CLIP` | Intensidade do CLAHE na foto tratada | Padrão: `2.0`; faixa: `1.0` a `8.0` |
 | `ENHANCEMENT_CLAHE_GRID` | Grade do CLAHE (blocos por lado) na foto tratada | Padrão: `8`; faixa: `2` a `16` |
@@ -132,6 +133,9 @@ O arquivo `back\.env.example` contém os nomes e os valores padrão. Copie-o par
 | `ENHANCEMENT_MAX_WIDTH` | Largura máxima (px) da foto tratada (limita o custo do denoise) | Padrão: `1280`; faixa: `320` a `4096` |
 | `ENHANCEMENT_MIN_WIDTH` | Largura mínima (px) da foto tratada (garante "alta definição") | Padrão: `720`; faixa: `0` a `4096` |
 | `ENHANCEMENT_JPEG_QUALITY` | Qualidade JPEG da foto tratada | Padrão: `95`; faixa: `50` a `100` |
+| `SMART_CROP_MARGIN` | Margem de contexto ao redor da ave no recorte (fração da caixa) | Padrão: `0.25` |
+| `SMART_CROP_MIN_DIMENSION` | Dimensão mínima (px) do recorte da ave (amplia se menor) | Padrão: `640` |
+| `SMART_CROP_MAX_DIMENSION` | Dimensão máxima (px) do recorte da ave (reduz se maior) | Padrão: `1024` |
 | `ALLOW_REMOTE_ACCESS` | Libera acesso à API fora do computador local | Padrão: `false` (somente loopback). Use `true` só com VPN/proxy autenticado |
 | `ALLOWED_HOSTS` | Hosts aceitos no cabeçalho `Host` | Padrão: `127.0.0.1,localhost` |
 
@@ -327,12 +331,17 @@ sem reiniciar o backend.
 - Em uma visita genérica/não identificada, clique em **🤖 Perguntar à IA Externa**.
   A Galeria mostra **Analisando ave...** durante a solicitação e atualiza o cartão
   com os nomes comum e científico retornados.
-- A identificação é opcional e depende de `AI_EXTERNAL_API_KEY`. Somente ao clicar
-  nesse botão, o recorte local da ave é enviado por HTTPS à API OpenAI configurada
-  (`AI_EXTERNAL_MODEL`). A visita atualizada fica registrada no banco local.
-
-Se não houver recorte disponível ou chave configurada, a API informa o erro. Os
-recortes ficam em `back\app-data\crops\` e seguem a política de retenção de mídia.
+- A identificação usa a **imagem tratada** da visita — o recorte da ave ou a
+  thumbnail oficial em alta definição geradas pelo pipeline —, enviada por HTTPS
+  à API configurada (`AI_EXTERNAL_BASE_URL`, `AI_EXTERNAL_MODEL`). O provedor é
+  compatível com OpenAI e também com OpenRouter, Groq, Ollama e o endpoint
+  OpenAI-compatível do **Google Gemini**; basta definir `AI_EXTERNAL_API_KEY`.
+- Ao identificar, o AviaWatch **cadastra automaticamente a espécie no Catálogo
+  Local (Life List)** e associa a visita (a foto tratada vira a imagem de
+  referência da espécie), sem gerar duplicatas. Pela API, o parâmetro
+  `add_to_catalog=false` desativa esse cadastro automático.
+- Sem imagem tratada disponível ou chave configurada, a API informa o erro. Os
+  recortes ficam em `back\app-data\crops\` e seguem a política de retenção de mídia.
 
 ### Montar resumos do dia (time-lapse)
 
@@ -652,15 +661,21 @@ três (`POST_RECORD_SECONDS`), totalizando uma janela de ~6 s que começa *antes
 do pouso. Durante a janela, o seletor de melhor quadro
 (`app/infra/ai/best_frame.py`) avalia cada detecção e guarda apenas a vencedora,
 combinando três sinais: **nitidez** (variância do Laplaciano no recorte da ave),
-**confiança** do YOLOv8 e **enquadramento** (proporção ideal da tela). Em
-seguida, o módulo de enhancement (`app/infra/ai/enhancement.py`) aplica **CLAHE**
-e **redução de ruído leve** (`fastNlMeansDenoisingColored`) nesse quadro e o salva
-como a **thumbnail oficial** em alta definição (`ENHANCEMENT_*`), além do recorte
-da ave. Essa foto alimenta a Galeria e o Álbum de Conquistas (Life List). Todo o
-pós-processamento (ffmpeg + enhancement) roda em um *thread pool* dedicado, fora
-do laço de captura, para não travar a leitura da câmera. A visita expõe no banco
-as notas do quadro escolhido (`best_frame_score`, `best_frame_sharpness`,
-`best_frame_area_ratio`, `best_frame_confidence`) e o selo `enhanced`.
+**confiança** do YOLOv8 e **enquadramento** (proporção ideal da tela). Quadros com
+nitidez abaixo de `BEST_FRAME_MIN_SHARPNESS` são **descartados como desfoque de
+movimento**; se nenhum quadro da janela passar no corte, usa-se o melhor
+disponível (fallback), de modo que a visita nunca fica sem foto. Em seguida, o
+módulo de enhancement (`app/infra/ai/enhancement.py`) aplica **CLAHE** e **redução
+de ruído leve** (`fastNlMeansDenoisingColored`) nesse quadro e o salva como a
+**thumbnail oficial** em alta definição (`ENHANCEMENT_*`). O recorte da ave passa
+por um **crop inteligente** (`SMART_CROP_*`): ganha margem de contexto ao redor da
+caixa e é ajustado para uma faixa de resolução nítida. Essa foto alimenta a Galeria
+e o Álbum de Conquistas (Life List), e é a imagem enviada à IA externa quando o
+usuário pede a identificação da espécie. Todo o pós-processamento (ffmpeg +
+enhancement) roda em um *thread pool* dedicado, fora do laço de captura, para não
+travar a leitura da câmera. A visita expõe no banco as notas do quadro escolhido
+(`best_frame_score`, `best_frame_sharpness`, `best_frame_area_ratio`,
+`best_frame_confidence`, `best_frame_sharpness_ok`) e o selo `enhanced`.
 
 Os resumos do dia (time-lapse) ficam em `back\app-data\captures\timelapses\` e
 **não** são removidos pela política de retenção (`MEDIA_RETENTION_DAYS`); apague-os

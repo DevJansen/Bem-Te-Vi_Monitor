@@ -58,15 +58,30 @@ def save_bird_crop(
     visit_id: str,
     *,
     quality: int = 85,
+    margin: float = 0.0,
+    min_dimension: int = 0,
+    max_dimension: int = 1024,
 ) -> str | None:
-    """Salva o recorte da ave em app-data/crops e retorna seu caminho relativo."""
+    """Salva o recorte da ave em app-data/crops e retorna seu caminho relativo.
+
+    Crop inteligente: ``margin`` adiciona contexto ao redor da caixa (fração do
+    tamanho dela), ``min_dimension`` amplia recortes pequenos até uma resolução
+    nítida (alta definição) e ``max_dimension`` limita o tamanho final. Os
+    padrões preservam o comportamento anterior (corte exato, máx. 1024 px).
+    """
     settings = get_settings()
     try:
         settings.ensure_directories()
         height, width = frame.shape[:2]
         x1, y1, x2, y2 = bbox
-        left = max(0, min(width, int(x1)))
-        top = max(0, min(height, int(y1)))
+        # Margem proporcional ao tamanho da caixa: dá contexto (poleiro, bico,
+        # patas) sem cortar a ave.
+        if margin > 0:
+            pad_x = max(0.0, x2 - x1) * float(margin)
+            pad_y = max(0.0, y2 - y1) * float(margin)
+            x1, y1, x2, y2 = x1 - pad_x, y1 - pad_y, x2 + pad_x, y2 + pad_y
+        left = max(0, min(width, int(np.floor(x1))))
+        top = max(0, min(height, int(np.floor(y1))))
         right = max(0, min(width, int(np.ceil(x2))))
         bottom = max(0, min(height, int(np.ceil(y2))))
         if right <= left or bottom <= top:
@@ -77,17 +92,23 @@ def save_bird_crop(
         if crop.size == 0:
             logger.warning("Empty bird crop for visit=%s", visit_id)
             return None
-        max_dimension = 1024
+
         crop_height, crop_width = crop.shape[:2]
-        scale = min(1.0, max_dimension / max(crop_width, crop_height))
-        if scale < 1.0:
+        maior = max(crop_width, crop_height)
+        scale = 1.0
+        if max_dimension and maior > max_dimension:
+            scale = max_dimension / float(maior)
+        elif min_dimension and maior < min_dimension:
+            scale = min_dimension / float(maior)
+        if abs(scale - 1.0) > 1e-3:
+            interpolacao = cv2.INTER_AREA if scale < 1.0 else cv2.INTER_CUBIC
             crop = cv2.resize(
                 crop,
                 (
                     max(1, round(crop_width * scale)),
                     max(1, round(crop_height * scale)),
                 ),
-                interpolation=cv2.INTER_AREA,
+                interpolation=interpolacao,
             )
 
         output_path = settings.crops_dir / f"{visit_id}.jpg"

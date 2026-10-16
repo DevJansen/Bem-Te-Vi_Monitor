@@ -93,7 +93,11 @@ export function GalleryGrid({
     setIdentifyingVisitId(visit.id);
     setIdentificationError(null);
     try {
-      const identified = await identifyVisitExternal(visit.id);
+      const identified = await identifyVisitExternal(visit.id, {
+        // Preenche automaticamente o Catálogo Local / Life List com a espécie
+        // identificada, usando a foto tratada como referência.
+        addToCatalog: true,
+      });
       setIdentificationOverrides((current) => ({
         ...current,
         [visit.id]: identified,

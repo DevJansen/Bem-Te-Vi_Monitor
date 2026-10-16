@@ -269,6 +269,9 @@ e pergunta: *"Que espécie é essa?"* Ele responde com o nome comum e o científ
 - O AviaWatch aceita vários provedores. No card "IA Externa" você escolhe o **provedor** numa
   lista e o **modelo** é sugerido automaticamente — não precisa digitar endereço nenhum.
 - A foto fica guardada no seu computador e é enviada apenas durante essa consulta.
+- O AviaWatch envia a **foto tratada** (a melhor versão da ave, já realçada e recortada).
+- Ao identificar, a espécie é **cadastrada sozinha no Catálogo (Life List)** e a visita já fica
+  associada a ela — assim a ave aparece no Álbum de Conquistas com a melhor foto disponível.
 
 ### 🌦️ Clima e estatísticas
 

@@ -340,6 +340,8 @@ class VisitRepository:
         species: str,
         scientific_name: str,
         common_name: str,
+        species_id: str | None = None,
+        image_source: str | None = None,
     ) -> dict[str, Any] | None:
         with db_session(self.db_path) as conn:
             row = conn.execute(
@@ -349,18 +351,28 @@ class VisitRepository:
             if row is None:
                 return None
             metadata = json.loads(row["metadata_json"] or "{}")
-            metadata["external_identification"] = {
+            identification: dict[str, Any] = {
                 "scientific_name": scientific_name,
                 "common_name": common_name,
             }
+            # Registra de qual imagem tratada veio a identificação (recorte ou
+            # thumbnail oficial), para auditoria.
+            if image_source:
+                identification["image_source"] = image_source
+            metadata["external_identification"] = identification
             metadata["identification_status"] = "Identificado por IA Externa"
             conn.execute(
                 """
                 UPDATE visits
-                SET species = ?, metadata_json = ?
+                SET species = ?, species_id = COALESCE(?, species_id), metadata_json = ?
                 WHERE id = ?
                 """,
-                (species, json.dumps(metadata, ensure_ascii=False), visit_id),
+                (
+                    species,
+                    species_id,
+                    json.dumps(metadata, ensure_ascii=False),
+                    visit_id,
+                ),
             )
         return self.get(visit_id)
 

@@ -167,9 +167,13 @@ export type BirdVisit = {
     best_frame_sharpness?: number;
     best_frame_area_ratio?: number;
     best_frame_confidence?: number;
+    /** Falso quando todos os quadros eram desfoque (fallback). */
+    best_frame_sharpness_ok?: boolean;
     external_identification?: {
       scientific_name: string;
       common_name: string;
+      /** Imagem tratada usada na identificação: "recorte" ou "thumbnail". */
+      image_source?: string;
     };
     [key: string]: unknown;
   };
