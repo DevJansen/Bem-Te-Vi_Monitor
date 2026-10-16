@@ -70,6 +70,7 @@ export function OfflineAnalysisProvider({ children, onJobCompleted }: Props) {
   const uploadsRef = useRef<PendingUpload[]>([]);
   const activeIdsRef = useRef<Set<string>>(new Set());
   const notifiedRef = useRef<Set<string>>(new Set());
+  const successTimersRef = useRef<Map<string, number>>(new Map());
   const onCompletedRef = useRef(onJobCompleted);
   onCompletedRef.current = onJobCompleted;
   jobsRef.current = jobs;
@@ -108,13 +109,26 @@ export function OfflineAnalysisProvider({ children, onJobCompleted }: Props) {
 
     setSuccesses((current) => [...finished, ...current]);
     onCompletedRef.current?.();
-    const timers = finished.map((job) =>
-      window.setTimeout(() => {
+    // Agenda a saída automática de cada sucesso. Os temporizadores ficam em um
+    // ref (e não no retorno do efeito) para não serem cancelados quando o
+    // polling atualiza a lista de jobs logo em seguida.
+    finished.forEach((job) => {
+      const timer = window.setTimeout(() => {
         setSuccesses((current) => current.filter((item) => item.id !== job.id));
-      }, SUCCESS_VISIBLE_MS),
-    );
-    return () => timers.forEach((id) => window.clearTimeout(id));
+        successTimersRef.current.delete(job.id);
+      }, SUCCESS_VISIBLE_MS);
+      successTimersRef.current.set(job.id, timer);
+    });
   }, [jobs]);
+
+  // Limpa os temporizadores pendentes ao desmontar o provedor.
+  useEffect(
+    () => () => {
+      successTimersRef.current.forEach((id) => window.clearTimeout(id));
+      successTimersRef.current.clear();
+    },
+    [],
+  );
 
   // Polling adaptativo: rápido enquanto há trabalho, lento quando ocioso.
   useEffect(() => {
@@ -192,6 +206,11 @@ export function OfflineAnalysisProvider({ children, onJobCompleted }: Props) {
   }, []);
 
   const dismissSuccess = useCallback((id: string) => {
+    const timer = successTimersRef.current.get(id);
+    if (timer !== undefined) {
+      window.clearTimeout(timer);
+      successTimersRef.current.delete(id);
+    }
     setSuccesses((current) => current.filter((item) => item.id !== id));
   }, []);
 
