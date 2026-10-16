@@ -13,6 +13,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.trustedhost import TrustedHostMiddleware
+
+from app.core.security_middleware import (
+    LocalAccessGuardMiddleware,
+    SecurityHeadersMiddleware,
+)
 
 # Ensure `back/` is on sys.path when running as `python -m app.main`
 _BACK_DIR = Path(__file__).resolve().parents[1]
@@ -152,11 +158,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Static local captures (clips / thumbs) — never proxied externally by the app
+# Configuração resolvida uma única vez (usada por middlewares e montagens).
 from app.core.config import get_settings as _get_settings_for_mount
 
 _settings = _get_settings_for_mount()
 _settings.ensure_directories()
+
+# Restringe a API a conexões locais, salvo liberação explícita (ALLOW_REMOTE_ACCESS).
+app.add_middleware(
+    LocalAccessGuardMiddleware,
+    allow_remote=_settings.allow_remote_access,
+)
+# Valida o cabeçalho Host (proteção contra Host Header Injection).
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=_settings.allowed_hosts_list(),
+)
+# Cabeçalhos de segurança em toda resposta (adicionado por último = outermost).
+app.add_middleware(SecurityHeadersMiddleware)
+
+# Static local captures (clips / thumbs) — never proxied externally by the app
 app.mount(
     "/captures",
     StaticFiles(directory=str(_settings.captures_dir)),

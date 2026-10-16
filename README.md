@@ -117,6 +117,8 @@ O arquivo `back\.env.example` contém os nomes e os valores padrão. Copie-o par
 | `NIGHT_VISION_DENOISE` | Redução de ruído leve antes do realce | Padrão: `true` |
 | `NIGHT_FAUNA_ENABLED` | Expande a detecção para fauna noturna além de aves | Padrão: `false` |
 | `NIGHT_FAUNA_CLASS_IDS` | Classes extras do COCO quando a fauna noturna está ligada | Padrão: `15,16` (gato, cachorro) |
+| `ALLOW_REMOTE_ACCESS` | Libera acesso à API fora do computador local | Padrão: `false` (somente loopback). Use `true` só com VPN/proxy autenticado |
+| `ALLOWED_HOSTS` | Hosts aceitos no cabeçalho `Host` | Padrão: `127.0.0.1,localhost` |
 
 O painel administra a integração de IA Externa por completo (chave, URL base e
 modelo), os segredos do Telegram e do Discord, e as preferências de alerta. A
@@ -638,14 +640,24 @@ espaço.
 
 ---
 
-## Privacidade
+## Privacidade e segurança
 
 - Vídeos importados e detecção YOLO são processados localmente; o arquivo importado é apagado após a análise  
 - Somente a identificação externa envia a imagem recortada, após ação explícita  
 - SQLite, configurações de câmera e mídia em `back/app-data/`  
 - Segredos de integração armazenados no `back/.env` do backend; a API nunca os retorna em texto puro  
+- Segredos são **mascarados** nas respostas de configuração (ex.: `AIza...****`) e redigidos em logs/erros  
+- **Acesso somente local por padrão:** a API responde apenas a conexões do próprio computador
+  (loopback). Para expor na rede é preciso definir `ALLOW_REMOTE_ACCESS=true` (idealmente atrás
+  de VPN ou proxy reverso com autenticação)  
 - Rotas de leitura, gravação e teste das variáveis de ambiente limitadas a conexões locais  
+- Cabeçalhos de segurança HTTP (CSP, `X-Frame-Options`, `nosniff` etc.) em todas as respostas  
+- Validação do cabeçalho `Host` (`ALLOWED_HOSTS`) contra Host Header Injection  
+- Consultas SQLite sempre parametrizadas e caminhos de mídia validados contra *path traversal*  
 - Sem telemetria do AviaWatch  
+
+> A auditoria completa (achados, correções e remediação de histórico do Git) está em
+> [`docs/SEGURANCA.md`](docs/SEGURANCA.md).
 
 ---
 

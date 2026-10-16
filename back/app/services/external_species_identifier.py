@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 import requests
 
 from app.core.config import get_settings
+from app.core.redaction import redact_secrets
 
 DEFAULT_BASE_URL = "https://api.openai.com/v1"
 IDENTIFICATION_PROMPT = (
@@ -144,7 +145,9 @@ def identify_bird_image(image_bytes: bytes) -> SpeciesIdentification:
         response = _post(url, settings.ai_external_api_key, payload)
 
     if not 200 <= response.status_code < 300:
-        detail = provider_error_detail(response)
+        detail = redact_secrets(
+            provider_error_detail(response), [settings.ai_external_api_key]
+        )
         message = (
             f"A API externa de identificação respondeu com HTTP "
             f"{response.status_code}"

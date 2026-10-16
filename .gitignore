@@ -1,16 +1,47 @@
+# =====================================================================
+# AviaWatch — arquivos que NUNCA devem ser versionados
+# =====================================================================
+
+# --- Segredos e variáveis de ambiente -------------------------------
+# Bloqueia .env, .env.local, .env.production, .env.* em qualquer pasta.
+# O .env.example (modelo sem valores reais) continua versionado.
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+back/*env
+front/*env
+
+# --- Ambientes virtuais e dependências ------------------------------
 *venv
 *venv/
-back/*env
-front/node_modules
+node_modules/
+front/node_modules/
 
-# Python: bytecode compilado
+# --- Python: bytecode compilado -------------------------------------
 __pycache__/
 *.py[cod]
 
-# Build do frontend (gerado por `npm run build`)
+# --- Build do frontend (gerado por `npm run build`) -----------------
 front/dist/
 
-# Dados locais do app (banco, mídia e chaves) — nunca versionar.
-# Mantém apenas o .gitkeep para preservar a pasta.
+# --- Bancos de dados locais (SQLite) --------------------------------
+# O banco fica em back/app-data, mas bloqueamos o padrão em qualquer lugar.
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# --- Logs -----------------------------------------------------------
+*.log
+logs/
+
+# --- Mídia e gravações locais de teste ------------------------------
+# Clipes, miniaturas, recortes, importações e gravações nunca vão para o Git.
+media/
+recordings/
 back/app-data/*
 !back/app-data/.gitkeep

@@ -368,8 +368,9 @@ Se o arquivo estiver na Lixeira do computador, você pode restaurá-lo. Se exclu
 ## Segurança e privacidade
 
 - O AviaWatch foi feito para rodar **só no seu computador**.
-- As chaves (Telegram, Discord, IA) são guardadas num arquivo local e **nunca são mostradas** na tela.
+- As chaves (Telegram, Discord, IA) são guardadas num arquivo local e **nunca são mostradas** na tela — a tela exibe apenas um começo mascarado, como `AIza...****`.
 - O painel de configuração só aceita acesso do próprio computador (não funciona pela internet).
+- Por padrão, **toda** a API só responde ao seu computador. Para acessar de outro aparelho seria preciso mudar uma opção avançada (`ALLOW_REMOTE_ACCESS`) — e o recomendado, nesse caso, é usar uma VPN.
 - Não há telemetria: o programa não "espiona" você.
 
 > **Guarde bem** a pasta do programa e o arquivo de segredos. Ele contém suas senhas de integração.

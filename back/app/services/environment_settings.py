@@ -12,6 +12,7 @@ import requests
 from dotenv import dotenv_values, load_dotenv, set_key, unset_key
 
 from app.core.config import ENV_FILE, get_settings
+from app.core.redaction import is_masked, mask_secret, mask_url_secret, redact_secrets
 from app.domain.models import (
     EnvironmentConnectionTest,
     EnvironmentSettingsOut,
@@ -37,7 +38,6 @@ _ENV_KEYS = {
     "ai_external_model": "AI_EXTERNAL_MODEL",
 }
 _DEFAULT_AI_MODEL = "gpt-4o-mini"
-_MASK = "********"
 
 
 def _read_env_file() -> dict[str, str]:
@@ -47,8 +47,30 @@ def _read_env_file() -> dict[str, str]:
     return {key: value for key, value in parsed.items() if value is not None}
 
 
-def _masked(value: str | None) -> str | None:
-    return _MASK if value else None
+def _masked_display(field_name: str, value: str | None) -> str | None:
+    """Mascaramento conforme o tipo do campo (URL de webhook x segredo comum)."""
+    if field_name == "discord_webhook_url":
+        return mask_url_secret(value)
+    return mask_secret(value)
+
+
+def _is_unchanged_mask(
+    field_name: str,
+    env_name: str,
+    cleaned: str,
+    current: dict[str, str],
+) -> bool:
+    """Detecta quando o valor enviado é apenas a máscara (sem alteração real).
+
+    Evita que o usuário, ao salvar o formulário com o campo mascarado visível,
+    grave literalmente ``AIza...****`` por cima do segredo verdadeiro.
+    """
+    if is_masked(cleaned):
+        return True
+    stored = current.get(env_name)
+    if not stored:
+        return False
+    return cleaned == _masked_display(field_name, stored)
 
 
 def read_environment_settings() -> EnvironmentSettingsOut:
@@ -59,10 +81,10 @@ def read_environment_settings() -> EnvironmentSettingsOut:
     discord_configured = bool(values.get("DISCORD_WEBHOOK_URL"))
     ai_external_configured = bool(values.get("AI_EXTERNAL_API_KEY"))
     return EnvironmentSettingsOut(
-        telegram_bot_token=_masked(values.get("TELEGRAM_BOT_TOKEN")),
-        telegram_chat_id=_masked(values.get("TELEGRAM_CHAT_ID")),
-        discord_webhook_url=_masked(values.get("DISCORD_WEBHOOK_URL")),
-        ai_external_api_key=_masked(values.get("AI_EXTERNAL_API_KEY")),
+        telegram_bot_token=mask_secret(values.get("TELEGRAM_BOT_TOKEN")),
+        telegram_chat_id=mask_secret(values.get("TELEGRAM_CHAT_ID")),
+        discord_webhook_url=mask_url_secret(values.get("DISCORD_WEBHOOK_URL")),
+        ai_external_api_key=mask_secret(values.get("AI_EXTERNAL_API_KEY")),
         ai_external_base_url=values.get("AI_EXTERNAL_BASE_URL") or DEFAULT_BASE_URL,
         ai_external_model=values.get("AI_EXTERNAL_MODEL") or _DEFAULT_AI_MODEL,
         telegram_bot_token_configured=bool(values.get("TELEGRAM_BOT_TOKEN")),
@@ -89,11 +111,13 @@ def save_environment_settings(
 ) -> EnvironmentSettingsOut:
     supplied = payload.model_fields_set
     values_to_save: dict[str, str] = {}
+    current_values = _read_env_file()
     for field_name, env_name in _ENV_KEYS.items():
         value = getattr(payload, field_name)
         if field_name in supplied and value is not None:
             cleaned = value.strip()
-            if cleaned == _MASK:
+            # Reenvio do valor mascarado (sem alteração) é ignorado.
+            if _is_unchanged_mask(field_name, env_name, cleaned, current_values):
                 continue
             if "\n" in cleaned or "\r" in cleaned or "\x00" in cleaned:
                 raise ValueError(f"Valor inválido para {env_name}")
@@ -278,7 +302,7 @@ def test_environment_connection(
         },
     )
     if not 200 <= response.status_code < 300:
-        detail = provider_error_detail(response)
+        detail = redact_secrets(provider_error_detail(response), [api_key])
         message = (
             "A API de IA Externa rejeitou a requisição "
             f"(HTTP {response.status_code})"

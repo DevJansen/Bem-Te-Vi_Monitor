@@ -28,6 +28,13 @@ class Settings(BaseModel):
     # O chat é chamado em "{base}/chat/completions".
     ai_external_base_url: str = "https://api.openai.com/v1"
     app_data_dir: Path = DEFAULT_APP_DATA_DIR
+    # Acesso remoto: por padrão a API aceita SOMENTE conexões locais (loopback).
+    # Defina ALLOW_REMOTE_ACCESS=true apenas se for expor a API na rede de forma
+    # consciente (e idealmente atrás de um proxy reverso com autenticação).
+    allow_remote_access: bool = False
+    # Hosts aceitos no cabeçalho Host (proteção contra Host Header Injection).
+    # Separados por vírgula; o padrão cobre apenas o uso local.
+    allowed_hosts: str = "127.0.0.1,localhost"
     yolo_model: str = "yolov8n.pt"
     # Sensibilidade da detecção: quanto menor o limiar, mais aves são detectadas
     # (inclusive à distância e com pouca luz), ao custo de mais falsos positivos.
@@ -123,6 +130,18 @@ class Settings(BaseModel):
     def discord_enabled(self) -> bool:
         return bool(self.discord_webhook_url)
 
+    def allowed_hosts_list(self) -> list[str]:
+        """Hosts aceitos no cabeçalho Host, a partir de ``ALLOWED_HOSTS``.
+
+        Ignora entradas vazias. Nunca retorna lista vazia: cai no padrão local.
+        """
+        hosts = [
+            part.strip()
+            for part in str(self.allowed_hosts).split(",")
+            if part.strip()
+        ]
+        return hosts or ["127.0.0.1", "localhost"]
+
     def night_fauna_class_id_list(self) -> list[int]:
         """Devolve os ids de classe extras (fauna noturna) como lista de inteiros.
 
@@ -166,6 +185,11 @@ class Settings(BaseModel):
                 "AI_EXTERNAL_BASE_URL", "https://api.openai.com/v1"
             ),
             app_data_dir=Path(app_data) if app_data else DEFAULT_APP_DATA_DIR,
+            allow_remote_access=os.getenv("ALLOW_REMOTE_ACCESS", "false")
+            .strip()
+            .lower()
+            in {"1", "true", "yes", "on", "sim"},
+            allowed_hosts=os.getenv("ALLOWED_HOSTS", "127.0.0.1,localhost"),
             yolo_model=os.getenv("YOLO_MODEL", "yolov8n.pt"),
             yolo_confidence=min(
                 1.0,
