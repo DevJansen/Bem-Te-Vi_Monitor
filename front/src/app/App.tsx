@@ -3,6 +3,8 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { KPIBoard } from "@/components/dashboard/KPIBoard";
 import { AnomalyAlertsPanel } from "@/components/dashboard/AnomalyAlertsPanel";
+import { AiCorePanel } from "@/components/dashboard/AiCorePanel";
+import { AiStreamLog } from "@/components/dashboard/AiStreamLog";
 import { LiveStreamView } from "@/components/dashboard/LiveStreamView";
 import { WeatherWidget } from "@/components/dashboard/WeatherWidget";
 import { VisitsChart } from "@/components/dashboard/VisitsChart";
@@ -208,6 +210,7 @@ export function App() {
 
           {tab === "dashboard" ? (
             <div className="space-y-4">
+              <AiCorePanel />
               <WeatherWidget />
               <AnomalyAlertsPanel />
               <KPIBoard metrics={metricsQuery.data} loading={metricsQuery.loading} />
@@ -220,7 +223,10 @@ export function App() {
                     onDelete={(cam) => void handleDelete(cam)}
                   />
                 </div>
-                <SpeciesRanking metrics={metricsQuery.data} />
+                <div className="space-y-4">
+                  <SpeciesRanking metrics={metricsQuery.data} />
+                  <AiStreamLog />
+                </div>
               </div>
               <TodayVisitsPanel />
               <VisitsChart metrics={metricsQuery.data} />

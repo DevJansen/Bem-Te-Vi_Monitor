@@ -322,6 +322,17 @@ export function GalleryGrid({
             const individualsSummary = visit.metadata?.individuals_summary;
             const behaviorLabel = visit.metadata?.behavior_label;
             const behaviorIcon = visit.metadata?.behavior_icon;
+            // Índice de certeza da IA (barra de precisão) e anotação ornitológica.
+            const confidencePct = Math.round(
+              Math.min(1, Math.max(0, visit.confidence)) * 100,
+            );
+            const confidenceTone =
+              visit.confidence >= 0.8
+                ? "bg-emerald-400"
+                : visit.confidence >= 0.5
+                  ? "bg-amber-400"
+                  : "bg-red-400";
+            const aiAnnotation = visit.metadata?.ai_analysis?.annotation;
             return (
               <article
                 key={visit.id}
@@ -412,6 +423,39 @@ export function GalleryGrid({
                         </span>
                       ) : null}
                     </div>
+                  ) : null}
+                  {/* Índice de certeza da IA (barra de precisão da classificação). */}
+                  <div className="pt-1.5">
+                    <div className="mb-1 flex items-center justify-between text-[10px] text-[var(--color-text-muted)]">
+                      <span className="inline-flex items-center gap-1">
+                        <Bot className="h-3 w-3 text-emerald-400/80" />
+                        Índice de certeza da IA
+                      </span>
+                      <span className="font-mono font-semibold text-emerald-300">
+                        {confidencePct}%
+                      </span>
+                    </div>
+                    <div
+                      className="h-1.5 w-full overflow-hidden rounded-full bg-dark-700"
+                      role="meter"
+                      aria-valuenow={confidencePct}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-label="Índice de certeza da IA"
+                    >
+                      <div
+                        className={`h-full rounded-full ${confidenceTone} transition-all`}
+                        style={{ width: `${confidencePct}%` }}
+                      />
+                    </div>
+                  </div>
+                  {aiAnnotation ? (
+                    <p
+                      className="pt-1 text-[11px] italic leading-snug text-emerald-200/80"
+                      title="Anotação ornitológica gerada pela IA"
+                    >
+                      🧠 {aiAnnotation}
+                    </p>
                   ) : null}
                   <label className="block pt-1 text-xs text-[var(--color-text-muted)]">
                     Associar ao catálogo

@@ -169,6 +169,12 @@ class Settings(BaseModel):
     anomaly_species_gap_days: int = Field(default=180, ge=1, le=3650)
     # Janela (dias) para não repetir a mesma anomalia de espécie (evita spam).
     anomaly_cooldown_days: int = Field(default=30, ge=1, le=3650)
+    # --- AI Core (IA visível/transparente) ---
+    # Habilita os "pensamentos" da IA (log cognitivo em memória) e a anotação
+    # ornitológica automática nos metadados da visita.
+    ai_insights_enabled: bool = True
+    # Capacidade do buffer circular do log cognitivo (últimos eventos em memória).
+    ai_cognitive_log_capacity: int = Field(default=400, ge=50, le=5000)
 
     @property
     def db_path(self) -> Path:
@@ -445,6 +451,13 @@ class Settings(BaseModel):
             ),
             anomaly_cooldown_days=min(
                 3650, max(1, int(os.getenv("ANOMALY_COOLDOWN_DAYS", "30")))
+            ),
+            ai_insights_enabled=os.getenv("AI_INSIGHTS_ENABLED", "true")
+            .strip()
+            .lower()
+            not in {"0", "false", "no", "off", "não", "nao"},
+            ai_cognitive_log_capacity=min(
+                5000, max(50, int(os.getenv("AI_COGNITIVE_LOG_CAPACITY", "400")))
             ),
         )
 

@@ -46,6 +46,27 @@ export default {
           "0%": { backgroundPosition: "0 0" },
           "100%": { backgroundPosition: "2rem 0" },
         },
+        "pulse-ring": {
+          "0%": { transform: "scale(0.75)", opacity: "0.7" },
+          "100%": { transform: "scale(2.4)", opacity: "0" },
+        },
+        "scan-line": {
+          "0%": { transform: "translateY(-110%)", opacity: "0" },
+          "50%": { opacity: "0.9" },
+          "100%": { transform: "translateY(110%)", opacity: "0" },
+        },
+        blink: {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0" },
+        },
+        "core-glow": {
+          "0%, 100%": { boxShadow: "0 0 16px 0 rgba(16,185,129,0.30)" },
+          "50%": { boxShadow: "0 0 34px 4px rgba(16,185,129,0.55)" },
+        },
+        "data-flow": {
+          "0%": { backgroundPosition: "0% 50%" },
+          "100%": { backgroundPosition: "200% 50%" },
+        },
       },
       animation: {
         "fade-in-up": "fade-in-up 0.45s ease-out both",
@@ -55,6 +76,11 @@ export default {
         "slide-in-right": "slide-in-right 0.45s cubic-bezier(0.22, 1, 0.36, 1) both",
         "pulse-soft": "pulse-soft 1.8s ease-in-out infinite",
         "progress-stripes": "progress-stripes 0.9s linear infinite",
+        "pulse-ring": "pulse-ring 2.4s cubic-bezier(0.22, 1, 0.36, 1) infinite",
+        "scan-line": "scan-line 2.6s ease-in-out infinite",
+        blink: "blink 1.1s step-end infinite",
+        "core-glow": "core-glow 2.8s ease-in-out infinite",
+        "data-flow": "data-flow 3s linear infinite",
       },
     },
   },

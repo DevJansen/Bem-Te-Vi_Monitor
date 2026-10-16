@@ -692,3 +692,88 @@ class WeatherInsightsOut(BaseModel):
     generated_at: str = Field(
         default_factory=lambda: datetime.utcnow().isoformat() + "Z"
     )
+
+
+# --------------------------------------------------------------------------- #
+# Motor de IA (AI Core) — status, telemetria e log cognitivo
+# --------------------------------------------------------------------------- #
+class AiEngineOut(BaseModel):
+    """Estado do modelo/inferência em uso (Edge AI)."""
+
+    state: str
+    model: str | None = None
+    backend: str | None = None
+    device: str | None = None
+    imgsz: int | None = None
+    confidence: float | None = None
+    notes: list[str] = Field(default_factory=list)
+
+
+class AiThroughputOut(BaseModel):
+    """Volume de trabalho do motor (FPS, inferências e detecções)."""
+
+    fps: float = 0.0
+    inferences_today: int = 0
+    inferences_total: int = 0
+    detections_today: int = 0
+    detections_total: int = 0
+    frames_analyzed: int = 0
+
+
+class AiPerformanceOut(BaseModel):
+    """Latência da inferência (ms)."""
+
+    latency_ms_last: float = 0.0
+    latency_ms_avg: float = 0.0
+    latency_ms_min: float = 0.0
+    latency_ms_max: float = 0.0
+    latency_ms_p95: float = 0.0
+    samples: int = 0
+
+
+class AiResourcesOut(BaseModel):
+    """Uso de recursos do processo/sistema (nulos se indisponível)."""
+
+    cpu_percent: float | None = None
+    memory_mb: float | None = None
+    memory_percent: float | None = None
+    system_cpu_percent: float | None = None
+
+
+class AiStatusOut(BaseModel):
+    """Retrato completo do motor de IA para o painel "AI Core"."""
+
+    engine: AiEngineOut
+    throughput: AiThroughputOut
+    performance: AiPerformanceOut
+    resources: AiResourcesOut
+    cameras_enabled: int = 0
+    cameras_online: int = 0
+    uptime_seconds: float = 0.0
+    started_at: float | None = None
+    generated_at: str = Field(
+        default_factory=lambda: datetime.utcnow().isoformat() + "Z"
+    )
+
+
+class AiLogOut(BaseModel):
+    """Um "pensamento" da IA no log cognitivo em tempo real."""
+
+    id: int
+    timestamp: float
+    hora: str
+    # info | analise | sucesso | atencao | alerta
+    level: str = "info"
+    source: str | None = None
+    message: str
+    data: dict[str, Any] = Field(default_factory=dict)
+
+
+class AiLogsOut(BaseModel):
+    """Resposta incremental do log cognitivo (para polling do painel)."""
+
+    entries: list[AiLogOut] = Field(default_factory=list)
+    last_id: int = 0
+    generated_at: str = Field(
+        default_factory=lambda: datetime.utcnow().isoformat() + "Z"
+    )

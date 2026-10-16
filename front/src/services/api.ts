@@ -1,6 +1,8 @@
 import axios, { type AxiosError } from "axios";
 import type {
   Achievement,
+  AiLogsResponse,
+  AiStatusSnapshot,
   Anomaly,
   AppSettings,
   AppSettingsUpdate,
@@ -290,6 +292,32 @@ export async function acknowledgeAnomaly(id: string): Promise<Anomaly> {
   const { data } = await api.post<Anomaly>(
     `/anomalies/${encodeURIComponent(id)}/acknowledge`,
   );
+  return data;
+}
+
+/* ——— Motor de IA (AI Core) ——— */
+
+/** Estado atual do motor de IA, recursos e métricas de desempenho. */
+export async function fetchAiStatus(): Promise<AiStatusSnapshot> {
+  const { data } = await api.get<AiStatusSnapshot>("/ai/status");
+  return data;
+}
+
+/**
+ * Log cognitivo da IA (os "pensamentos" em tempo real).
+ *
+ * Com `sinceId`, devolve apenas os eventos mais novos que ele — ideal para o
+ * polling incremental do painel.
+ */
+export async function fetchAiLogs(
+  options?: { limit?: number; sinceId?: number },
+): Promise<AiLogsResponse> {
+  const { data } = await api.get<AiLogsResponse>("/ai/logs", {
+    params: {
+      limit: options?.limit ?? 60,
+      since_id: options?.sinceId,
+    },
+  });
   return data;
 }
 

@@ -203,6 +203,23 @@ export type BirdVisit = {
       /** Imagem tratada usada na identificação: "recorte" ou "thumbnail". */
       image_source?: string;
     };
+    /** Análise enriquecida gerada pela IA ("laudo" da visita + anotação). */
+    ai_analysis?: {
+      species?: string | null;
+      scientific_name?: string | null;
+      individuals_peak?: number | null;
+      ecological_status?: string | null;
+      ecological_label?: string | null;
+      ecological_badge?: string | null;
+      behavior?: string | null;
+      behavior_label?: string | null;
+      confidence?: number | null;
+      sharpness?: number | null;
+      temperature?: number | null;
+      weather?: string | null;
+      /** Anotação ornitológica em pt-BR escrita automaticamente pela IA. */
+      annotation: string;
+    };
     [key: string]: unknown;
   };
 };
@@ -589,5 +606,80 @@ export type WeatherInsights = {
   periods: TemperaturePeriodInsight[];
   species_timing: SpeciesWeatherTiming[];
   insights: InsightCard[];
+  generated_at: string;
+};
+
+/* ——— Motor de IA (AI Core) ——— */
+
+/** Estado do modelo/inferência em uso (Edge AI). */
+export type AiEngine = {
+  state: string;
+  model: string | null;
+  backend: string | null;
+  device: string | null;
+  imgsz: number | null;
+  confidence: number | null;
+  notes: string[];
+};
+
+/** Volume de trabalho do motor (FPS, inferências e detecções). */
+export type AiThroughput = {
+  fps: number;
+  inferences_today: number;
+  inferences_total: number;
+  detections_today: number;
+  detections_total: number;
+  frames_analyzed: number;
+};
+
+/** Latência da inferência (ms). */
+export type AiPerformance = {
+  latency_ms_last: number;
+  latency_ms_avg: number;
+  latency_ms_min: number;
+  latency_ms_max: number;
+  latency_ms_p95: number;
+  samples: number;
+};
+
+/** Uso de recursos do processo/sistema (nulos se indisponível). */
+export type AiResources = {
+  cpu_percent: number | null;
+  memory_mb: number | null;
+  memory_percent: number | null;
+  system_cpu_percent: number | null;
+};
+
+/** Retrato completo do motor de IA (endpoint GET /api/ai/status). */
+export type AiStatusSnapshot = {
+  engine: AiEngine;
+  throughput: AiThroughput;
+  performance: AiPerformance;
+  resources: AiResources;
+  cameras_enabled: number;
+  cameras_online: number;
+  uptime_seconds: number;
+  started_at: number | null;
+  generated_at: string;
+};
+
+/** Nível de um "pensamento" da IA (orienta a cor no painel). */
+export type AiLogLevel = "info" | "analise" | "sucesso" | "atencao" | "alerta";
+
+/** Um "pensamento" da IA no log cognitivo em tempo real. */
+export type AiLogEntry = {
+  id: number;
+  timestamp: number;
+  hora: string;
+  level: AiLogLevel | string;
+  source: string | null;
+  message: string;
+  data: Record<string, unknown>;
+};
+
+/** Resposta incremental do log cognitivo (polling do painel). */
+export type AiLogsResponse = {
+  entries: AiLogEntry[];
+  last_id: number;
   generated_at: string;
 };

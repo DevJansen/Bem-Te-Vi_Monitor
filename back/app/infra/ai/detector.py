@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from collections.abc import Iterable
 from dataclasses import dataclass
 
@@ -21,6 +22,7 @@ import numpy as np
 
 from app.core.config import get_settings
 from app.infra.ai.model_loader import ModeloOtimizado, carregar_modelo
+from app.services.ai_telemetry import get_ai_telemetry
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +189,17 @@ class BirdDetector:
                     otimizado.backend,
                     " | ".join(otimizado.observacoes),
                 )
+                # Telemetria: publica o modelo em uso para o painel "AI Core".
+                try:
+                    get_ai_telemetry().registrar_modelo(
+                        model=self.model_name,
+                        backend=otimizado.backend,
+                        device=self.device,
+                        imgsz=self.imgsz,
+                        notes=list(otimizado.observacoes),
+                    )
+                except Exception:  # pragma: no cover — telemetria é best-effort
+                    pass
                 return True
             except Exception as exc:
                 self._load_error = str(exc)
@@ -229,6 +242,7 @@ class BirdDetector:
             predict_kwargs: dict[str, object] = (
                 self._otimizado.predict_kwargs() if self._otimizado else {}
             )
+            inicio = time.perf_counter()
             try:
                 results = self._model.predict(
                     source=frame,
@@ -245,6 +259,7 @@ class BirdDetector:
             except Exception:
                 logger.exception("Falha na inferência do YOLO")
                 return []
+            latencia_ms = (time.perf_counter() - inicio) * 1000.0
 
         detections: list[Detection] = []
         try:
@@ -271,8 +286,18 @@ class BirdDetector:
                     )
         except Exception:
             logger.exception("Falha ao interpretar o resultado do YOLO")
+            self._registrar_telemetria(latencia_ms, 0)
             return []
+        self._registrar_telemetria(latencia_ms, len(detections))
         return detections
+
+    @staticmethod
+    def _registrar_telemetria(latencia_ms: float, deteccoes: int) -> None:
+        """Publica a inferência concluída na telemetria do motor (best-effort)."""
+        try:
+            get_ai_telemetry().registrar_inferencia(latencia_ms, deteccoes)
+        except Exception:  # pragma: no cover — telemetria nunca afeta a inferência
+            pass
 
 
 _detector: BirdDetector | None = None

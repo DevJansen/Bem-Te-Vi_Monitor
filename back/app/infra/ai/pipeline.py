@@ -14,7 +14,7 @@ import cv2
 import numpy as np
 
 from app.core.config import get_settings
-from app.domain.avifauna_sul import descrever
+from app.domain.avifauna_sul import descrever, info_especie
 from app.domain.models import RoiType, RoiZone, VisitOut, ZoneConfig, ZoneMode
 from app.infra.ai.annotate import draw_bird_detections
 from app.infra.ai.band_counting import ContadorIndividuos
@@ -46,8 +46,21 @@ from app.infra.media.storage import (
     save_clip_mp4,
     save_thumbnail,
 )
+from app.services.ai_cognitive_log import (
+    NIVEL_ALERTA,
+    NIVEL_ANALISE,
+    NIVEL_ATENCAO,
+    NIVEL_INFO,
+    NIVEL_SUCESSO,
+    registrar_pensamento,
+)
+from app.services.ai_telemetry import (
+    ESTADO_ANALISANDO,
+    get_ai_telemetry,
+)
 from app.services.anomaly_log import registrar_retorno_especie
 from app.services.calibration import get_calibration_service
+from app.services.ornithological_annotation import montar_analise_ia
 from app.services.system_context import ajustar_sensibilidade
 
 logger = logging.getLogger(__name__)
@@ -119,6 +132,9 @@ class CameraPipeline(threading.Thread):
         self._clima_ts = 0.0
         # Último ajuste contextual aplicado (registrado nos metadados da visita).
         self._ultimo_ajuste = None
+        # Chave do último ajuste contextual registrado no log cognitivo (para só
+        # anunciar mudanças de auto-calibração, evitando repetir a cada quadro).
+        self._ultimo_ajuste_chave: tuple | None = None
         # Executor dedicado ao pós-processamento (clipe + foto tratada). Rodar
         # fora do laço evita travar a leitura da câmera durante o ffmpeg e o
         # denoise da imagem.
@@ -133,6 +149,16 @@ class CameraPipeline(threading.Thread):
     def request_zones_reload(self) -> None:
         """Pede a recarga das zonas e ROI no próximo ciclo do laço."""
         self._zones_reload.set()
+
+    def _pensar(self, mensagem: str, *, nivel: str = NIVEL_INFO, **dados: Any) -> None:
+        """Registra um "pensamento" da IA no log cognitivo (se habilitado).
+
+        Nunca levanta exceção: a telemetria é sempre *best-effort* e não pode
+        afetar a captura.
+        """
+        if not self.settings.ai_insights_enabled:
+            return
+        registrar_pensamento(mensagem, nivel=nivel, origem=self.camera_id, **dados)
 
     def _load_zones(self) -> None:
         row = self.camera_repo.get(self.camera_id)
@@ -335,6 +361,33 @@ class CameraPipeline(threading.Thread):
                 self._clima_categoria = None
         return self._clima_categoria
 
+    def _anunciar_ajuste(self, ajuste: Any, confianca_base: float) -> None:
+        """Anuncia a auto-calibração contextual no log cognitivo da IA.
+
+        Só é chamado quando o ajuste efetivo muda (clima/horário), evitando
+        repetir a mesma mensagem a cada ciclo de inferência.
+        """
+        base = round(float(confianca_base), 4)
+        efetiva = round(float(ajuste.confianca_efetiva), 4)
+        if not ajuste.motivos:
+            self._pensar(
+                f"Auto-calibração: condições normais — limiar {efetiva:.2f}.",
+                nivel=NIVEL_INFO,
+                confidence=efetiva,
+                base=base,
+            )
+            return
+        motivos = "; ".join(ajuste.motivos)
+        self._pensar(
+            f"Auto-calibração: {motivos}. Limiar {efetiva:.2f} (base {base:.2f}).",
+            nivel=NIVEL_ANALISE,
+            confidence=efetiva,
+            base=base,
+            tta=bool(ajuste.tta),
+            adaptive_contrast=bool(ajuste.contraste_adaptativo),
+            reasons=list(ajuste.motivos),
+        )
+
     def _especies_dos_tracks(
         self, frame: np.ndarray, detections: list[Detection]
     ) -> dict[int, str]:
@@ -517,6 +570,15 @@ class CameraPipeline(threading.Thread):
         if detection.track_id is not None and species:
             self._especies_por_track[detection.track_id] = species
         self._comportamento_evento = None
+        # Pensamento da IA: detecção que disparou a janela de evento.
+        self._pensar(
+            f"IA detectou {species} (Conf: {conf:.2f}) — iniciando janela de "
+            f"{float(pre_seconds):.0f}s + {post_sec:.0f}s.",
+            nivel=NIVEL_SUCESSO,
+            species=species,
+            confidence=round(conf, 4),
+            zone=trigger_zone_id,
+        )
         self._post_frames_remaining = max(int(post_sec * fps), 0)
         self._post_collected = []
         if self._post_frames_remaining == 0:
@@ -741,8 +803,42 @@ class CameraPipeline(threading.Thread):
 
         # Status ecológico regional, quando a espécie já é conhecida na captura.
         especie_evento = str(event.get("species") or "")
-        if especie_evento and especie_evento.lower() != "bird":
+        tem_especie = bool(especie_evento) and especie_evento.lower() != "bird"
+        if tem_especie:
             metadata["ecological"] = descrever(especie_evento)
+
+        # --- Análise enriquecida da IA ("laudo" estruturado da visita) ---
+        nome_cientifico = self._nome_cientifico(event, especie_evento)
+        nitidez = (
+            round(float(best.metricas.nitidez), 2) if best is not None else None
+        )
+        temperatura, categoria_clima = self._clima_para_anotacao()
+        if self.settings.ai_insights_enabled:
+            metadata["ai_analysis"] = montar_analise_ia(
+                species=especie_evento or event["species"],
+                scientific_name=nome_cientifico,
+                ecological=metadata.get("ecological"),
+                behavior=(comportamento.tipo if comportamento is not None else None),
+                behavior_label=(
+                    comportamento.rotulo if comportamento is not None else None
+                ),
+                individuals_peak=metadata.get("individuals_peak"),
+                temperature=temperatura,
+                weather_category=categoria_clima,
+                confidence=float(event["confidence"]),
+                sharpness=nitidez,
+            )
+            self._anunciar_analise(
+                species=especie_evento or event["species"],
+                scientific_name=nome_cientifico,
+                ecological=metadata.get("ecological"),
+                behavior_label=(
+                    comportamento.rotulo if comportamento is not None else None
+                ),
+                individuals_peak=metadata.get("individuals_peak"),
+                sharpness=nitidez,
+                clip_seconds=metadata.get("clip_seconds"),
+            )
 
         try:
             visit = self.visit_repo.create(
@@ -763,12 +859,21 @@ class CameraPipeline(threading.Thread):
             return
 
         # Log de anomalias: espécie que não aparecia há meses reapareceu.
-        if especie_evento and especie_evento.lower() != "bird":
-            registrar_retorno_especie(
+        if tem_especie:
+            anomalia = registrar_retorno_especie(
                 species=especie_evento,
+                scientific_name=nome_cientifico,
                 visit_id=visit_id,
                 exclude_visit_id=visit_id,
             )
+            if anomalia:
+                self._pensar(
+                    f"Anomalia: {especie_evento} não era registrada há "
+                    f"{anomalia.get('days_absent')} dias!",
+                    nivel=NIVEL_ALERTA,
+                    species=especie_evento,
+                    days_absent=anomalia.get("days_absent"),
+                )
 
         visit_out = self.visit_repo.to_out(visit)
 
@@ -779,6 +884,97 @@ class CameraPipeline(threading.Thread):
                 except Exception:
                     logger.exception("on_visit callback failed")
 
+    @staticmethod
+    def _nome_cientifico(event: dict[str, Any], especie: str) -> str | None:
+        """Nome científico da espécie (extras do classificador ou base regional)."""
+        extras = event.get("species_extras") or {}
+        for chave in ("scientific_name", "scientificName", "scientific"):
+            valor = extras.get(chave)
+            if valor:
+                return str(valor)
+        if especie and especie.lower() != "bird":
+            info = info_especie(common_name=especie)
+            if info is not None:
+                return info.scientific_name
+        return None
+
+    @staticmethod
+    def _clima_para_anotacao() -> tuple[float | None, str | None]:
+        """Temperatura e categoria de clima atuais (cache do serviço de clima)."""
+        try:
+            from app.services.weather_service import get_weather_service
+
+            snap = get_weather_service().current()
+            if snap is not None and getattr(snap, "available", False):
+                return snap.temperature, snap.category
+        except Exception:
+            logger.debug("Clima indisponível para a anotação da IA", exc_info=True)
+        return None, None
+
+    def _anunciar_analise(
+        self,
+        *,
+        species: str,
+        scientific_name: str | None,
+        ecological: dict[str, Any] | None,
+        behavior_label: str | None,
+        individuals_peak: int | None,
+        sharpness: float | None,
+        clip_seconds: Any,
+    ) -> None:
+        """Emite os "pensamentos" finais da IA sobre o melhor quadro da janela."""
+        # 1) Nitidez do quadro escolhido (qualidade do Laplacian).
+        if sharpness is not None:
+            if sharpness >= 300:
+                qualidade = "Excelente"
+            elif sharpness >= 120:
+                qualidade = "Boa"
+            elif sharpness >= 40:
+                qualidade = "Aceitável"
+            else:
+                qualidade = "Baixa"
+            self._pensar(
+                f"Analisando nitidez do frame (Laplacian: {sharpness:.1f} — {qualidade}).",
+                nivel=NIVEL_ANALISE,
+                sharpness=sharpness,
+            )
+
+        # 2) Identificação da espécie + status ecológico + comportamento.
+        eco = ecological or {}
+        rotulo = eco.get("label")
+        if species and species.lower() != "bird":
+            partes = [valor for valor in (rotulo, behavior_label) if valor]
+            sufixo = f" ({' / '.join(partes)})" if partes else ""
+            self._pensar(
+                f"Espécie identificada: {species}{sufixo}.",
+                nivel=NIVEL_SUCESSO,
+                species=species,
+                scientific_name=scientific_name,
+                ecological_status=eco.get("status"),
+            )
+        else:
+            self._pensar(
+                "Detecção genérica de ave — aguardando identificação da espécie.",
+                nivel=NIVEL_INFO,
+            )
+
+        # 3) Contagem de bando (pico simultâneo no comedouro).
+        if individuals_peak is not None and int(individuals_peak) > 1:
+            self._pensar(
+                f"Bando detectado: pico de {int(individuals_peak)} indivíduos simultâneos.",
+                nivel=NIVEL_ANALISE,
+                individuals_peak=int(individuals_peak),
+            )
+
+        # 4) Buffer temporal + thumbnail de alta definição.
+        if clip_seconds:
+            self._pensar(
+                f"Buffer temporal de {float(clip_seconds):.0f}s salvo e thumbnail "
+                "de alta definição gerada.",
+                nivel=NIVEL_INFO,
+                clip_seconds=float(clip_seconds),
+            )
+
     def run(self) -> None:
         logger.info("Pipeline started for camera %s", self.camera_id)
         if not self.detector.load():
@@ -786,6 +982,17 @@ class CameraPipeline(threading.Thread):
                 "Detector unavailable for camera %s: %s",
                 self.camera_id,
                 self.detector.load_error,
+            )
+            self._pensar(
+                f"Modelo de IA indisponível: {self.detector.load_error}",
+                nivel=NIVEL_ATENCAO,
+            )
+        else:
+            self._pensar(
+                f"Motor de IA pronto ({self.detector.backend or 'pytorch'}) — "
+                "monitorando o stream em tempo real.",
+                nivel=NIVEL_SUCESSO,
+                backend=self.detector.backend,
             )
 
         self._load_zones()
@@ -855,6 +1062,23 @@ class CameraPipeline(threading.Thread):
                         noite=self._night_active,
                     )
                     self._ultimo_ajuste = ajuste
+                    # Telemetria do motor (AI Core): FPS e estado "pensando".
+                    try:
+                        telemetria = get_ai_telemetry()
+                        telemetria.definir_fps(fps)
+                        telemetria.definir_estado(ESTADO_ANALISANDO)
+                    except Exception:
+                        pass
+                    # Auto-calibração: anuncia no log cognitivo só quando muda.
+                    chave_ajuste = (
+                        round(float(ajuste.confianca_efetiva), 4),
+                        bool(ajuste.tta),
+                        bool(ajuste.contraste_adaptativo),
+                        tuple(ajuste.motivos),
+                    )
+                    if chave_ajuste != self._ultimo_ajuste_chave:
+                        self._ultimo_ajuste_chave = chave_ajuste
+                        self._anunciar_ajuste(ajuste, calibracao.yolo_confidence)
                     # Portão de movimento: roda o YOLO quando há movimento, quando
                     # já existe uma ave rastreada (não perdê-la se ficar imóvel) ou,
                     # por segurança, a cada `IDLE_INFER_MAX_SKIPS` ciclos parados.

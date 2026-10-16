@@ -458,6 +458,20 @@ acima do que o usuário configurou.
 movimento**) e **log de anomalias**: se uma espécie que não era registrada há
 mais de 6 meses reaparecer, um alerta é criado no painel (`GET /api/anomalies`).
 
+**6. IA visível (AI Core).** O painel ganha um **Núcleo de IA** (widget futurista
+em Dark Mode com pulsos neon) que mostra em tempo real o estado do modelo, o FPS
+do stream, a latência da inferência, o número de inferências/detecções (hoje e
+total), o uso de CPU/RAM, o backend em uso (TensorRT/ONNX/PyTorch) e o tempo de
+atividade. Ao lado, um **terminal de logs cognitivos** lista os "pensamentos" da
+IA conforme acontecem (detecção, nitidez do quadro escolhido, identificação da
+espécie, auto-calibração por clima, bandos e anomalias). A **Galeria** passa a
+exibir, em cada card, um **Índice de Certeza da IA** (barra 0–100%) e a
+**anotação ornitológica** gerada automaticamente (ex.: "Espécie identificada:
+Tangara sayaca (Nativa) — alimentando-se em grupo de 3 indivíduos, sob
+temperatura de 24°C e céu limpo."). Os endpoints `GET /api/ai/status` e
+`GET /api/ai/logs` expõem essa telemetria para integração externa. O comportamento
+pode ser desligado com `AI_INSIGHTS_ENABLED=false`.
+
 ### Manter o catálogo local de aves
 
 1. Abra **Minhas Aves** e escolha **Cadastrar Nova Ave**.
@@ -630,6 +644,8 @@ aviawatch/
 | GET | `/api/anomalies` | Log de anomalias acústico-visuais (ex.: espécie que reaparece após meses); aceita `limit` e `only_pending` |
 | GET | `/api/anomalies/pending-count` | Quantidade de anomalias ainda não reconhecidas (badge do painel) |
 | POST | `/api/anomalies/{id}/acknowledge` | Marca uma anomalia como reconhecida |
+| GET | `/api/ai/status` | **AI Core**: estado do motor, FPS, latência da inferência, inferências hoje/total, detecções, recursos (CPU/RAM), modelo/backend/dispositivo e tempo de atividade |
+| GET | `/api/ai/logs?limit=&since_id=` | **Logs cognitivos da IA**: "pensamentos" em tempo real (detecção, nitidez do frame, espécie identificada, auto-calibração por clima, anomalias); `since_id` habilita polling incremental |
 | GET | `/api/analytics/weather-correlation` | Relação entre o clima (chuva/temperatura/vento) e as visitas |
 | GET | `/api/analytics/weather-insights` | Insights automáticos cruzando clima e hábitos: faixas de temperatura, chuva × seco, horário no frio × no calor e horário por espécie |
 | GET | `/api/analytics/timelapses` | Lista os resumos do dia (time-lapses) já gerados |
