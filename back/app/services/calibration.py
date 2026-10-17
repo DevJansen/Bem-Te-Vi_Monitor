@@ -50,7 +50,7 @@ PROFILE_PRESETS: dict[CalibrationProfile, dict[str, float]] = {
     # Passarinhos Parados / Alimentador (recomendado): confiança menor para
     # pegar aves distantes e permanência longa para aves imóveis comendo.
     CalibrationProfile.STATIONARY: {
-        "yolo_confidence": 0.25,
+        "yolo_confidence": 0.22,
         "object_persistence_time": 10.0,
         "motion_sensitivity": 0.80,
     },
@@ -180,19 +180,31 @@ class CalibrationService:
     # Persistência e runtime
     # ------------------------------------------------------------------ #
     def _defaults(self) -> CalibrationOut:
-        """Valores iniciais vindos do .env."""
+        """Valores iniciais vindos do .env (alta sensibilidade por padrão).
+
+        Quando os padrões coincidem com o perfil recomendado, o rótulo já vem
+        apontando para ele — assim o painel mostra a configuração sensível como
+        ativa sem o usuário precisar mexer em nada.
+        """
+        confianca = _clamp_confidence(self._settings.yolo_confidence)
+        persistencia = min(30.0, max(0.0, self._settings.object_persistence_time))
+        movimento = min(1.0, max(0.0, self._settings.motion_sensitivity))
+        preset = PROFILE_PRESETS[RECOMMENDED_PROFILE]
+        coincide = (
+            abs(confianca - preset["yolo_confidence"]) < 1e-9
+            and abs(persistencia - preset["object_persistence_time"]) < 1e-9
+            and abs(movimento - preset["motion_sensitivity"]) < 1e-9
+        )
         return CalibrationOut(
-            yolo_confidence=_clamp_confidence(self._settings.yolo_confidence),
-            object_persistence_time=min(
-                30.0, max(0.0, self._settings.object_persistence_time)
-            ),
-            motion_sensitivity=min(1.0, max(0.0, self._settings.motion_sensitivity)),
+            yolo_confidence=confianca,
+            object_persistence_time=persistencia,
+            motion_sensitivity=movimento,
             night_vision_mode=NightVisionMode.normalize(self._settings.night_vision_mode),
             night_vision_threshold=min(
                 255.0, max(0.0, float(self._settings.night_vision_threshold))
             ),
             night_fauna_enabled=bool(self._settings.night_fauna_enabled),
-            profile=CalibrationProfile.CUSTOM,
+            profile=RECOMMENDED_PROFILE if coincide else CalibrationProfile.CUSTOM,
             recommended_profile=RECOMMENDED_PROFILE,
         )
 

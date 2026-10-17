@@ -95,7 +95,12 @@ class CameraPipeline(threading.Thread):
         self.visit_repo = VisitRepository(self.settings.db_path)
         self.settings_repo = SettingsRepository(self.settings.db_path)
         self.buffer = PreRecordBuffer(seconds=self.settings.pre_record_seconds)
-        self.zone_validator = ZoneValidator()
+        # Validador de zonas com supressão anti-spam: a mesma ave permanecendo no
+        # comedouro NÃO gera novos alertas/registros (mesmo evento).
+        self.zone_validator = ZoneValidator(
+            presence_grace_seconds=self.settings.presence_grace_seconds,
+            alert_cooldown_seconds=self.settings.alert_cooldown_seconds,
+        )
         # Portão de movimento inicial: evita rodar o YOLO em cenas paradas.
         self.motion = MotionDetector(sensitivity=self.settings.motion_sensitivity)
         # Visão noturna: realce de contraste para quadros escuros / infravermelho.
@@ -136,6 +141,8 @@ class CameraPipeline(threading.Thread):
         # Chave do último ajuste contextual registrado no log cognitivo (para só
         # anunciar mudanças de auto-calibração, evitando repetir a cada quadro).
         self._ultimo_ajuste_chave: tuple | None = None
+        # Throttling do log de supressão anti-spam (mesma ave = mesmo evento).
+        self._ultimo_log_supressao = 0.0
         # Contador de inferências executadas neste fluxo (Alaris Core por stream).
         self._inferencias = 0
         # Executor dedicado ao pós-processamento (clipe + foto tratada). Rodar
@@ -329,12 +336,11 @@ class CameraPipeline(threading.Thread):
             cv2.fillPoly(mask, [points], 0)
 
         masked_frame = cv2.bitwise_and(frame, frame, mask=mask)
-        # Contraste adaptativo: ligado pelo contexto (clima adverso) ou pela
-        # configuração, quando há ROI (comedouro/bebedouro) para revelar aves
-        # pequenas e camufladas.
-        usar_contraste = contraste or (
-            self.settings.roi_adaptive_contrast and bool(self._roi_zones)
-        )
+        # Contraste adaptativo (CLAHE): ligado pelo contexto (clima adverso) ou
+        # pela configuração — que já vem LIGADA por padrão para destacar aves
+        # pequenas/camufladas contra o fundo do comedouro. Aplicado só ao quadro
+        # de inferência (a imagem gravada permanece original).
+        usar_contraste = contraste or self.settings.roi_adaptive_contrast
         infer_frame = (
             self._contraste_adaptativo(masked_frame) if usar_contraste else masked_frame
         )
@@ -487,6 +493,25 @@ class CameraPipeline(threading.Thread):
             self._guardar_comportamento(comportamento)
         except Exception:
             logger.exception("Falha ao observar a janela do evento")
+
+    def _log_supressao(self) -> None:
+        """Registra (com throttling) que a mesma ave continua — alerta suprimido.
+
+        Transparência do Alaris Core: a ave permanece no comedouro, então o
+        sistema mantém o rastreio e o buffer ativos, porém **não** cria um novo
+        alerta/registro — evitando spam da mesma visita. O log é limitado a uma
+        mensagem a cada 15 s para não poluir o painel.
+        """
+        agora = time.time()
+        if agora - self._ultimo_log_supressao < 15.0:
+            return
+        self._ultimo_log_supressao = agora
+        self._pensar(
+            "Mesma ave ainda no comedouro — novo alerta/registro suprimido "
+            "(mesmo evento em andamento).",
+            nivel=NIVEL_INFO,
+            zonas=self.zone_validator.active_presence_zones(),
+        )
 
     def _is_detection_allowed(
         self, detection: Detection, width: int, height: int
@@ -1193,6 +1218,14 @@ class CameraPipeline(threading.Thread):
                             fps=self.buffer.estimated_fps(),
                             pre_seconds=pre_seconds,
                         )
+                elif (
+                    detections
+                    and self._pending_event is None
+                    and self.zone_validator.has_active_presence()
+                ):
+                    # A mesma ave continua no comedouro: mantém o rastreio e o
+                    # buffer ativos, mas SEM novo alerta/registro (anti-spam).
+                    self._log_supressao()
 
                 # Janela pós-evento: coleta os quadros para o clipe de ~6 s e
                 # avalia o melhor quadro (nitidez + confiança + enquadramento).

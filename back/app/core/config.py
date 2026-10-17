@@ -42,15 +42,17 @@ class Settings(BaseModel):
     allowed_hosts: str = "127.0.0.1,localhost"
     yolo_model: str = "yolov8n.pt"
     # Sensibilidade da detecção: quanto menor o limiar, mais aves são detectadas
-    # (inclusive à distância e com pouca luz), ao custo de mais falsos positivos.
-    # 0.30 é o padrão recomendado para câmeras de comedouro/ninho.
-    yolo_confidence: float = Field(default=0.30, ge=0.05, le=1.0)
+    # (inclusive à distância, pequenas, camufladas ou com pouca luz), ao custo de
+    # mais falsos positivos. 0.22 é o padrão de ALTA SENSIBILIDADE do Alaris Core
+    # para câmeras de comedouro/ninho (aves pequenas e paradas ao pousar).
+    yolo_confidence: float = Field(default=0.22, ge=0.05, le=1.0)
     # Tempo de permanência imóvel (segundos): por quanto tempo o rastreio mantém
-    # a visita ativa mesmo se a ave ficar totalmente imóvel se alimentando.
-    object_persistence_time: float = Field(default=5.0, ge=0.0, le=30.0)
+    # a visita ativa mesmo se a ave ficar totalmente imóvel se alimentando (o
+    # YOLO costuma perder aves paradas; a retenção evita reiniciar a visita).
+    object_persistence_time: float = Field(default=10.0, ge=0.0, le=30.0)
     # Sensibilidade de detecção de movimento inicial (0 a 1). Valores maiores
     # detectam movimentos mais sutis (ave chegando ao comedouro).
-    motion_sensitivity: float = Field(default=0.5, ge=0.0, le=1.0)
+    motion_sensitivity: float = Field(default=0.80, ge=0.0, le=1.0)
     # Classe do dataset COCO para "bird". Mantida em 14 como padrão.
     yolo_bird_class_id: int = Field(default=14, ge=0)
     # --- Edge AI: aceleração da inferência ---
@@ -70,9 +72,20 @@ class Settings(BaseModel):
     # Test-Time Augmentation global (reforço de recall). Mais lento; o contexto
     # sistêmico já o liga automaticamente em clima adverso.
     yolo_tta: bool = False
-    # Filtro de contraste adaptativo (CLAHE) antes da inferência nas ROI: revela
-    # aves pequenas/camufladas no comedouro. Não afeta a imagem gravada.
+    # Filtro de contraste adaptativo (CLAHE) antes da inferência: revela aves
+    # pequenas/camufladas contra o fundo do comedouro. Não afeta a imagem gravada
+    # nem o clipe. Já vem LIGADO por padrão.
     roi_adaptive_contrast: bool = True
+    # --- Supressão de spam: mesma ave = mesmo evento ---
+    # Tempo (s) de ausência necessário para ENCERRAR a presença de uma ave numa
+    # zona. Enquanto a ave permanecer (mesmo que o YOLO a perca por instantes),
+    # não há novo alerta/registro. Um valor alto evita alertas repetidos da mesma
+    # visita; só depois desse tempo uma nova ave pode disparar um novo evento.
+    presence_grace_seconds: float = Field(default=30.0, ge=0.0, le=600.0)
+    # Cooldown mínimo (s) entre alertas na MESMA zona (piso). Rede de segurança
+    # extra: mesmo que a presença se encerre, um novo alerta só ocorre após este
+    # intervalo. Combina com o cooldown por zona configurado no painel.
+    alert_cooldown_seconds: float = Field(default=30.0, ge=0.0, le=600.0)
     pre_record_seconds: float = Field(default=3.0, ge=3.0, le=30.0)
     post_record_seconds: float = 3.0
     camera_reconnect_delay_sec: float = 3.0
@@ -303,7 +316,7 @@ class Settings(BaseModel):
             yolo_model=os.getenv("YOLO_MODEL", "yolov8n.pt"),
             yolo_confidence=min(
                 1.0,
-                max(0.05, float(os.getenv("YOLO_CONFIDENCE", "0.30"))),
+                max(0.05, float(os.getenv("YOLO_CONFIDENCE", "0.22"))),
             ),
             object_persistence_time=min(
                 30.0,
@@ -312,14 +325,14 @@ class Settings(BaseModel):
                     float(
                         os.getenv(
                             "OBJECT_PERSISTENCE_TIME",
-                            os.getenv("YOLO_TRACK_RETENTION_SECONDS", "5.0"),
+                            os.getenv("YOLO_TRACK_RETENTION_SECONDS", "10.0"),
                         )
                     ),
                 ),
             ),
             motion_sensitivity=min(
                 1.0,
-                max(0.0, float(os.getenv("MOTION_SENSITIVITY", "0.5"))),
+                max(0.0, float(os.getenv("MOTION_SENSITIVITY", "0.80"))),
             ),
             yolo_bird_class_id=max(0, int(os.getenv("YOLO_BIRD_CLASS_ID", "14"))),
             yolo_acceleration=os.getenv("YOLO_ACCELERATION", "auto"),
@@ -337,6 +350,14 @@ class Settings(BaseModel):
             .strip()
             .lower()
             not in {"0", "false", "no", "off", "não", "nao"},
+            presence_grace_seconds=min(
+                600.0,
+                max(0.0, float(os.getenv("PRESENCE_GRACE_SECONDS", "30"))),
+            ),
+            alert_cooldown_seconds=min(
+                600.0,
+                max(0.0, float(os.getenv("ALERT_COOLDOWN_SECONDS", "30"))),
+            ),
             pre_record_seconds=max(
                 3.0,
                 float(os.getenv("PRE_RECORD_SECONDS", "3.0")),

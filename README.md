@@ -69,12 +69,13 @@ desabilitados. As integrações também podem ser configuradas depois em
 > em chamados, capturas de tela ou commits. O arquivo contém segredos e deve ficar
 > apenas na máquina que executa o backend.
 
-O backend usa confiança YOLO de `0.30` (sensibilidade maior, ideal para aves
-distantes ou paradas), tempo de permanência de `5` segundos para aves imóveis,
-sensibilidade de movimento de `0.5`, mantém pelo menos `3` segundos de
-pré-gravação e remove clipes, snapshots e recortes locais com mais de 30 dias.
-Esses padrões podem ser ajustados no `back\.env` (`YOLO_CONFIDENCE`,
-`OBJECT_PERSISTENCE_TIME`, `MOTION_SENSITIVITY`, `PRE_RECORD_SECONDS` e
+O backend usa confiança YOLO de `0.22` (alta sensibilidade, ideal para aves
+distantes, pequenas, camufladas ou paradas ao pousar), tempo de permanência de
+`10` segundos para aves imóveis, sensibilidade de movimento de `0.80`, mantém
+pelo menos `3` segundos de pré-gravação e remove clipes, snapshots e recortes
+locais com mais de 30 dias. Esses padrões podem ser ajustados no `back\.env`
+(`YOLO_CONFIDENCE`, `OBJECT_PERSISTENCE_TIME`, `MOTION_SENSITIVITY`,
+`PRESENCE_GRACE_SECONDS`, `ALERT_COOLDOWN_SECONDS`, `PRE_RECORD_SECONDS` e
 `MEDIA_RETENTION_DAYS`) ou em tempo real no painel, em
 **Configurações → Calibração e Ajustes**. O limite mínimo de confiança é `0.05`
 e a retenção deve ser de pelo menos um dia.
@@ -94,16 +95,18 @@ O arquivo `back\.env.example` contém os nomes e os valores padrão. Copie-o par
 | `AI_EXTERNAL_MODEL` | Modelo compatível com visão | Padrão: `gpt-4o-mini` |
 | `PORT` | Porta configurada na aplicação | Padrão: `8000`; os comandos de inicialização fornecidos usam a porta `8000` |
 | `YOLO_MODEL` | Arquivo/modelo de detecção | Padrão: `yolov8n.pt` |
-| `YOLO_CONFIDENCE` | Sensibilidade da detecção (menor = mais sensível) | Padrão: `0.30`; faixa: `0.05` a `1.0` |
-| `OBJECT_PERSISTENCE_TIME` | Tempo (s) que o rastreio mantém a visita com a ave imóvel | Padrão: `5.0`; faixa: `0` a `30` |
-| `MOTION_SENSITIVITY` | Sensibilidade de detecção de movimento inicial | Padrão: `0.5`; faixa: `0` a `1` |
+| `YOLO_CONFIDENCE` | Sensibilidade da detecção (menor = mais sensível) | Padrão: `0.22`; faixa: `0.05` a `1.0` |
+| `OBJECT_PERSISTENCE_TIME` | Tempo (s) que o rastreio mantém a visita com a ave imóvel | Padrão: `10.0`; faixa: `0` a `30` |
+| `MOTION_SENSITIVITY` | Sensibilidade de detecção de movimento inicial | Padrão: `0.80`; faixa: `0` a `1` |
 | `YOLO_BIRD_CLASS_ID` | Classe do COCO usada na inferência | Padrão: `14` (`bird`) |
 | `YOLO_ACCELERATION` | Backend de inferência (Edge AI) | `auto` (padrão: TensorRT > ONNX > PyTorch), `engine`/`tensorrt`, `onnx` ou `pt` |
 | `YOLO_DEVICE` | Dispositivo de inferência | `auto` (padrão: GPU se houver, senão CPU), `cpu` ou `0`/`1`… (GPU) |
 | `YOLO_HALF` | FP16 no PyTorch em GPU CUDA | Padrão: `false`; ignorado em CPU/TRT/ONNX |
 | `YOLO_IMGSZ` | Tamanho de entrada da inferência (px) | Padrão: `640`; `960`/`1280` aumentam o recall de aves pequenas |
 | `YOLO_TTA` | Test-Time Augmentation global (reforço de recall) | Padrão: `false` (mais lento) |
-| `ROI_ADAPTIVE_CONTRAST` | Contraste adaptativo (CLAHE) antes da inferência nas ROI | Padrão: `true`; revela aves camufladas sem afetar a imagem gravada |
+| `ROI_ADAPTIVE_CONTRAST` | Contraste adaptativo (CLAHE) antes da inferência | Padrão: `true`; revela aves pequenas/camufladas sem afetar a imagem gravada |
+| `PRESENCE_GRACE_SECONDS` | Ausência (s) para encerrar a presença — anti-spam "mesma ave = mesmo evento" | Padrão: `30`; faixa: `0` a `600` (ajuste para `30` ou `60`) |
+| `ALERT_COOLDOWN_SECONDS` | Cooldown mínimo (s) entre alertas na mesma zona (piso) | Padrão: `30`; faixa: `0` a `600` |
 | `PRE_RECORD_SECONDS` | Duração anterior à detecção incluída no clipe | Padrão/mínimo: `3.0` |
 | `POST_RECORD_SECONDS` | Duração posterior à detecção | Padrão: `3.0` (com o pré-roll, o clipe cobre ~6 s) |
 | `CAMERA_RECONNECT_DELAY_SEC` | Intervalo de reconexão da câmera | Padrão: `3.0` |
@@ -529,6 +532,27 @@ temperatura de 24°C e céu limpo."). Os endpoints `GET /api/ai/status` e
 `GET /api/ai/logs` expõem essa telemetria para integração externa. O comportamento
 pode ser desligado com `AI_INSIGHTS_ENABLED=false`.
 
+**7. Alta sensibilidade e anti-spam (Alaris Core).** Para não perder aves
+pequenas ou paradas no comedouro **e** evitar alertas/gravações repetidos da
+mesma visita, o motor já inicia com:
+
+- **Confiança `0.22`** por padrão (mais permissiva), com **CLAHE** ligado antes
+  da inferência para destacar a plumagem contra o fundo do comedouro;
+- **Retenção de rastreio de `10 s`** e **sensibilidade de movimento `0.80`**,
+  mantendo a ave na mesma visita mesmo quando o YOLO a perde por instantes;
+- **Regra de permanência:** enquanto a ave estiver no comedouro, o Alaris mantém
+  o rastreio e o buffer ativos, mas **não cria novos alertas/registros** — o
+  movimento contínuo é tratado como o **mesmo evento em andamento**;
+- **Encerramento por ausência:** um novo alerta só ocorre se a ave **sair
+  completamente** da zona por mais de `PRESENCE_GRACE_SECONDS` (padrão `30 s`) e
+  uma nova ave pousar, respeitando ainda o `ALERT_COOLDOWN_SECONDS` (padrão
+  `30 s`) por zona.
+
+Tudo isso já vem **ativado por padrão** — não é preciso ajustar nada a cada
+inicialização. Os valores podem ser afinados no `back\.env` (`YOLO_CONFIDENCE`,
+`OBJECT_PERSISTENCE_TIME`, `MOTION_SENSITIVITY`, `PRESENCE_GRACE_SECONDS`,
+`ALERT_COOLDOWN_SECONDS`) ou, no caso do cooldown, por zona no painel.
+
 ### Manter o catálogo local de aves
 
 1. Abra **Minhas Aves** e escolha **Cadastrar Nova Ave**.
@@ -610,11 +634,17 @@ Na seção **Calibração e Ajustes** o usuário escolhe entre dois perfis pront
 **Passarinhos Parados / Alimentador** (recomendado) e **Alta Movimentação / Voo
 Rápido** — ou ajusta manualmente, com sliders explicativos, a *Sensibilidade da
 IA*, o *Tempo de permanência imóvel* (3–15 s) e a *Sensibilidade de movimento
-inicial*. A mesma tela traz a **Visão Noturna (Infravermelho)**: modo
-automático/sempre/desligado, o limiar de luminosidade e a opção de monitorar a
-fauna noturna além de aves. Em **Preferências da IA e alertas** ficam os limites de
-notificação, gravação pré/pós-detecção e o liga/desliga de notificações. Tudo é
-aplicado em tempo de execução, sem reiniciar o backend.
+inicial*. O perfil recomendado já vem **ativo por padrão** (confiança `0.22`,
+permanência `10 s`, movimento `0.80`), entregando alta sensibilidade sem ajustes
+manuais. A **regra anti-spam** (mesma ave = mesmo evento) atua de forma
+transparente: enquanto a ave permanece no comedouro, o Alaris segue rastreando,
+mas não cria novos alertas/registros; um novo evento só nasce após a ave sair
+por completo da zona e outra pousar. A mesma tela traz a **Visão Noturna
+(Infravermelho)**: modo automático/sempre/desligado, o limiar de luminosidade e a
+opção de monitorar a fauna noturna além de aves. Em **Preferências da IA e
+alertas** ficam os limites de notificação, gravação pré/pós-detecção e o
+liga/desliga de notificações. Tudo é aplicado em tempo de execução, sem reiniciar
+o backend.
 
 ### Excluir visitas e limpar o histórico
 
