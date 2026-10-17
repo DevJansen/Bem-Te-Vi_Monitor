@@ -214,6 +214,9 @@ class VisitOut(BaseModel):
     visitor_kind: str = "bird"
     # Grupo divertido do visitante (ex.: "esquilo", "felino").
     visitor_group: str | None = None
+    # Segmentação por Jardim (migração 10): rótulo amigável do jardim no
+    # momento da captura (ex.: "Jardim da Varanda").
+    location_label: str | None = None
     # Condições meteorológicas no momento da visita (integração Open-Meteo).
     temperature: float | None = None
     humidity: float | None = None
@@ -416,6 +419,28 @@ class AnalyticsSummaryOut(BaseModel):
 class HourlyDistributionOut(BaseModel):
     hour: str
     visits: int
+
+
+# --- Segmentação por Jardim (Câmaras Remotas/Locais) -------------------------
+class GardenTodayOut(BaseModel):
+    """Resumo de um jardim (câmera) no dia de hoje."""
+
+    camera_id: str
+    garden: str
+    camera_name: str | None = None
+    visits: int = 0
+    species_counts: dict[str, int] = Field(default_factory=dict)
+    visits_by_hour: dict[str, int] = Field(default_factory=dict)
+
+
+class TodayByGardenOut(BaseModel):
+    """Visitas de hoje consolidadas e segmentadas por jardim."""
+
+    date: str
+    consolidated_visits: int = 0
+    consolidated_species_counts: dict[str, int] = Field(default_factory=dict)
+    consolidated_visits_by_hour: dict[str, int] = Field(default_factory=dict)
+    gardens: list[GardenTodayOut] = Field(default_factory=list)
 
 
 class LifeListSpeciesOut(BaseModel):

@@ -1,12 +1,37 @@
-import type { Metrics } from "@/types";
+import { useEffect, useState } from "react";
+import type { Metrics, TodayByGarden } from "@/types";
+import { fetchTodayByGarden } from "@/services/api";
+import { usePolling } from "@/hooks/usePolling";
 
 type Props = {
   metrics: Metrics | null;
+  /** Quando informado, exibe o fluxo de horário apenas desse jardim. */
+  gardenId?: string | null;
 };
 
-export function VisitsChart({ metrics }: Props) {
+export function VisitsChart({ metrics, gardenId }: Props) {
+  const [gardenData, setGardenData] = useState<TodayByGarden | null>(null);
+
+  const { data } = usePolling(fetchTodayByGarden, 15_000);
+  useEffect(() => {
+    if (data) setGardenData(data);
+  }, [data]);
+
+  const consolidatedMap = metrics?.visits_by_hour ?? {};
   const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
-  const map = metrics?.visits_by_hour ?? {};
+
+  let map: Record<string, number> = consolidatedMap;
+  let titleSuffix = "";
+  if (gardenId && gardenData) {
+    const garden = gardenData.gardens.find((g) => g.camera_id === gardenId);
+    if (garden) {
+      map = garden.visits_by_hour;
+      titleSuffix = ` · ${garden.garden}`;
+    }
+  } else if (!gardenId && gardenData) {
+    map = gardenData.consolidated_visits_by_hour;
+  }
+
   const values = hours.map((h) => map[h] ?? map[String(Number(h))] ?? 0);
   const max = Math.max(...values, 1);
 
@@ -15,10 +40,10 @@ export function VisitsChart({ metrics }: Props) {
       <div className="mb-4 flex items-end justify-between gap-3">
         <div>
           <h2 className="font-display text-base font-semibold text-[var(--color-text-primary)]">
-            Visitas por horário
+            Visitas por horário{titleSuffix}
           </h2>
           <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
-            Distribuição de hoje (UTC/local do servidor)
+            Distribuição de hoje (segmentada por jardim)
           </p>
         </div>
         <p className="text-xs text-[var(--color-text-muted)]">

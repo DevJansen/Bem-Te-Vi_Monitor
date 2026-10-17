@@ -12,7 +12,7 @@ import {
   Star,
 } from "lucide-react";
 import type { BirdSpecies, BirdVisit, WildlifeSummary } from "@/types";
-import { fetchTodayVisits, fetchWildlifeSummary, getErrorMessage, resolveMediaUrl, visitCropUrl } from "@/services/api";
+import { fetchTodayVisits, fetchWildlifeSummary, getErrorMessage, listCameras, resolveMediaUrl, visitCropUrl } from "@/services/api";
 import { usePolling } from "@/hooks/usePolling";
 import { cn } from "@/utils/cn";
 import { formatTime } from "@/utils/format";
@@ -75,13 +75,24 @@ type Props = {
  */
 export function TodayVisitsPanel({ species = [], onOpenInGallery }: Props) {
   const [view, setView] = useState<"birds" | "visitors">("birds");
+  const [gardenFilter, setGardenFilter] = useState<string | null>(null);
 
   const birdsQuery = usePolling(loadBirdVisits, 8_000, view === "birds");
   const visitorsQuery = usePolling(loadVisitorVisits, 8_000, view === "visitors");
   const wildlifeQuery = usePolling(loadWildlifeSummary, 15_000);
+  const camerasQuery = usePolling(listCameras, 60_000);
 
   const activeQuery = view === "birds" ? birdsQuery : visitorsQuery;
-  const visits = useMemo(() => activeQuery.data ?? [], [activeQuery.data]);
+  const allVisits = useMemo(() => activeQuery.data ?? [], [activeQuery.data]);
+  const visits = useMemo(
+    () =>
+      gardenFilter
+        ? allVisits.filter((v) => v.camera_id === gardenFilter)
+        : allVisits,
+    [allVisits, gardenFilter],
+  );
+
+  const cameras = camerasQuery.data ?? [];
 
   const [page, setPage] = useState(1);
   const [selectedVisit, setSelectedVisit] = useState<BirdVisit | null>(null);
@@ -154,6 +165,21 @@ export function TodayVisitsPanel({ species = [], onOpenInGallery }: Props) {
               {visits.length} hoje
             </span>
           ) : null}
+          <select
+            value={gardenFilter ?? ""}
+            onChange={(event) =>
+              setGardenFilter(event.target.value === "" ? null : event.target.value)
+            }
+            aria-label="Filtrar por jardim"
+            className="rounded-md border border-dark-700 bg-dark-900/60 px-2 py-1.5 text-xs text-[var(--color-text-primary)] transition hover:border-emerald-400/40 focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
+          >
+            <option value="">Todos os jardins</option>
+            {cameras.map((camera) => (
+              <option key={camera.id} value={camera.id}>
+                {camera.location_label || camera.name || "Jardim sem nome"}
+              </option>
+            ))}
+          </select>
           <button
             type="button"
             onClick={() => void activeQuery.refresh()}
@@ -383,6 +409,11 @@ function VisitRow({
             <span className="truncate text-sm font-semibold text-[var(--color-text-primary)]">
               {label}
             </span>
+            {visit.location_label || visit.camera_name ? (
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-sky-400/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-300">
+                📍 {visit.location_label || visit.camera_name}
+              </span>
+            ) : null}
             {fresh ? (
               <span className="inline-flex shrink-0 animate-pulse-soft items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
                 <Sparkles className="h-2.5 w-2.5" />

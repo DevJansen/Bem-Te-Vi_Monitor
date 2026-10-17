@@ -38,6 +38,7 @@ import type {
   SpeciesProfile,
   Timelapse,
   TimelapseGenerateResult,
+  TodayByGarden,
   WeatherCorrelation,
   WeatherInsights,
   WildlifeSummary,
@@ -450,6 +451,12 @@ export async function fetchAchievements(): Promise<Achievement[]> {
 /** Resumo dos Visitantes Silvestres / Convidados Especiais (Modo Esquilo). */
 export async function fetchWildlifeSummary(): Promise<WildlifeSummary> {
   const { data } = await api.get<WildlifeSummary>("/wildlife/summary");
+  return data;
+}
+
+/** Visitas de hoje consolidadas e segmentadas por jardim (câmera). */
+export async function fetchTodayByGarden(): Promise<TodayByGarden> {
+  const { data } = await api.get<TodayByGarden>("/analytics/today");
   return data;
 }
 export async function fetchTodayVisits(

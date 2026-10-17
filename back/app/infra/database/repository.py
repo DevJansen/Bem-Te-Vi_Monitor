@@ -324,6 +324,7 @@ class VisitRepository:
         local_date: str | None = None,
         visitor_kind: str = "bird",
         visitor_group: str | None = None,
+        location_label: str | None = None,
     ) -> dict[str, Any]:
         vid = visit_id or str(uuid.uuid4())
         # Registra as condições do tempo no momento da visita. Quando o chamador
@@ -345,8 +346,8 @@ class VisitRepository:
                     id, camera_id, species, confidence, detected_at, dwell_seconds,
                     clip_path, thumbnail_path, bbox_json, zone_id, metadata_json,
                     temperature, humidity, weather_code, wind_speed,
-                    local_hour, local_date, visitor_kind, visitor_group
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    local_hour, local_date, visitor_kind, visitor_group, location_label
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     vid,
@@ -368,6 +369,7 @@ class VisitRepository:
                     local_date,
                     visitor_kind or "bird",
                     visitor_group,
+                    location_label,
                 ),
             )
         visit = self.get(vid)
@@ -574,19 +576,27 @@ class VisitRepository:
             return [dict(r) for r in rows]
 
     def list_today(
-        self, *, limit: int = 100, visitor_kind: str | None = None
+        self, *, limit: int = 100, visitor_kind: str | None = None,
+        camera_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """Visitas registradas hoje (data UTC do servidor), mais recentes primeiro.
 
-        Cada linha já traz ``thumbnail_path`` (miniatura capturada pelo YOLOv8),
-        que o ``to_out`` converte em ``thumbnail_url`` para o painel.
-
         ``visitor_kind`` permite separar o painel de aves do painel de
         **Visitantes Especiais**: ``"bird"`` só aves, ``"special"`` só não-aves.
+        ``camera_id`` restringe a um jardim específico (segmentação por jardim).
         """
         today_prefix = datetime.now(timezone.utc).date().isoformat()
         clausula_visitante, params_visitante = _clausula_visitante("v", visitor_kind)
-        extra = f"AND {clausula_visitante}" if clausula_visitante else ""
+        clauses = ["v.detected_at LIKE ?"]
+        params: list[Any] = [f"{today_prefix}%"]
+        if clausula_visitante:
+            clauses.append(clausula_visitante)
+            params.extend(params_visitante)
+        if camera_id:
+            clauses.append("v.camera_id = ?")
+            params.append(camera_id)
+        where = " AND ".join(clauses)
+        params.append(limit)
         with db_session(self.db_path) as conn:
             rows = conn.execute(
                 f"""
@@ -596,11 +606,11 @@ class VisitRepository:
                 FROM visits v
                 LEFT JOIN cameras c ON c.id = v.camera_id
                 LEFT JOIN bird_species bs ON bs.id = v.species_id
-                WHERE v.detected_at LIKE ? {extra}
+                WHERE {where}
                 ORDER BY v.detected_at DESC
                 LIMIT ?
                 """,
-                [f"{today_prefix}%", *params_visitante, limit],
+                params,
             ).fetchall()
             return [dict(r) for r in rows]
 
@@ -747,6 +757,7 @@ class VisitRepository:
             ),
             visitor_kind=row.get("visitor_kind") or "bird",
             visitor_group=row.get("visitor_group"),
+            location_label=row.get("location_label"),
             temperature=_optional_float(row.get("temperature")),
             humidity=_optional_float(row.get("humidity")),
             weather_code=row.get("weather_code"),

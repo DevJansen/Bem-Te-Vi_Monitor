@@ -230,6 +230,23 @@ MIGRATIONS: list[tuple[int, str]] = [
             ON visits(visitor_kind);
         """,
     ),
+    (
+        10,
+        """
+        -- Segmentação por Jardim (Câmaras Remotas/Locais): cada visita registra
+        -- o rótulo amigável do jardim (location_label da câmera) no momento da
+        -- captura, para que os painéis e gráficos possam agregar/filtrar por
+        -- jardim sem depender de joins posteriores (e sobrevivendo a renomeações
+        -- da câmera). Câmaras sem rótulo recebem NULL (exibido como
+        -- "Jardim sem nome").
+        ALTER TABLE visits ADD COLUMN location_label TEXT;
+
+        CREATE INDEX IF NOT EXISTS idx_visits_location_label
+            ON visits(location_label);
+        CREATE INDEX IF NOT EXISTS idx_visits_camera_id
+            ON visits(camera_id);
+        """,
+    ),
 ]
 
 

@@ -16,6 +16,7 @@ from app.domain.models import (
     TimelapseGenerateRequest,
     TimelapseGenerateResult,
     TimelapseOut,
+    TodayByGardenOut,
     WeatherCorrelationOut,
     WeatherInsightsOut,
 )
@@ -40,6 +41,19 @@ def get_analytics_summary() -> AnalyticsSummaryOut:
         raise HTTPException(
             status_code=500,
             detail="Não foi possível calcular as estatísticas.",
+        ) from exc
+
+
+@router.get("/today", response_model=TodayByGardenOut)
+def get_analytics_today() -> TodayByGardenOut:
+    """Visitas de hoje consolidadas e segmentadas por jardim (câmera)."""
+    try:
+        return TodayByGardenOut(**_repository().today_by_garden())
+    except Exception as exc:
+        logger.exception("get_analytics_today failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível calcular as visitas de hoje por jardim.",
         ) from exc
 
 

@@ -996,6 +996,14 @@ class CameraPipeline(threading.Thread):
                 clip_seconds=metadata.get("clip_seconds"),
             )
 
+        # Rótulo amigável do jardim (location_label da câmera) no momento da
+        # captura — base da segmentação por jardim no painel.
+        try:
+            _cam = self.camera_repo.get(self.camera_id)
+            _garden = (_cam or {}).get("location_label")
+        except Exception:
+            _garden = None
+
         try:
             visit = self.visit_repo.create(
                 visit_id=visit_id,
@@ -1013,6 +1021,7 @@ class CameraPipeline(threading.Thread):
                 local_date=local_date,
                 visitor_kind=visitante.kind.value,
                 visitor_group=visitante.grupo.chave if visitante.grupo else None,
+                location_label=_garden,
             )
         except Exception:
             logger.exception("Failed to persist visit for camera %s", self.camera_id)

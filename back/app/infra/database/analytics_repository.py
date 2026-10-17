@@ -869,3 +869,87 @@ class AnalyticsRepository:
             "groups": grupos,
             "generated_at": datetime.now(timezone.utc).isoformat() + "Z",
         }
+
+    def today_by_garden(self) -> dict[str, Any]:
+        """Visitas de hoje consolidadas e segmentadas por jardim (câmera).
+
+        Usado pelo painel para o seletor "Visão Geral (Todos os Jardins)" vs.
+        jardim específico e pelos gráficos de horário de pico por jardim.
+        Apenas aves (Visitantes Especiais ficam no painel dedicado).
+        """
+        today_prefix = datetime.now(timezone.utc).date().isoformat()
+        with db_session(self.db_path) as conn:
+            consolidated_rows = conn.execute(
+                f"""
+                SELECT species, COUNT(*) AS c
+                FROM visits
+                WHERE {SQL_SO_AVES} AND {SQL_DATA_LOCAL} = ?
+                GROUP BY species
+                """,
+                (today_prefix,),
+            ).fetchall()
+            consolidated_hours = conn.execute(
+                f"""
+                SELECT {SQL_HORA_LOCAL_2D} AS hour, COUNT(*) AS c
+                FROM visits
+                WHERE {SQL_SO_AVES} AND {SQL_DATA_LOCAL} = ?
+                GROUP BY hour
+                """,
+                (today_prefix,),
+            ).fetchall()
+            consolidated_total = conn.execute(
+                f"SELECT COUNT(*) AS c FROM visits WHERE {SQL_SO_AVES} AND {SQL_DATA_LOCAL} = ?",
+                (today_prefix,),
+            ).fetchone()["c"]
+
+            gardens_meta = conn.execute(
+                "SELECT id, name, location_label FROM cameras ORDER BY name"
+            ).fetchall()
+            gardens_out: list[dict[str, Any]] = []
+            for cam in gardens_meta:
+                cam_id = cam["id"]
+                species_rows = conn.execute(
+                    f"""
+                    SELECT species, COUNT(*) AS c
+                    FROM visits
+                    WHERE {SQL_SO_AVES} AND {SQL_DATA_LOCAL} = ? AND camera_id = ?
+                    GROUP BY species
+                    """,
+                    (today_prefix, cam_id),
+                ).fetchall()
+                hour_rows = conn.execute(
+                    f"""
+                    SELECT {SQL_HORA_LOCAL_2D} AS hour, COUNT(*) AS c
+                    FROM visits
+                    WHERE {SQL_SO_AVES} AND {SQL_DATA_LOCAL} = ? AND camera_id = ?
+                    GROUP BY hour
+                    """,
+                    (today_prefix, cam_id),
+                ).fetchall()
+                total = conn.execute(
+                    f"SELECT COUNT(*) AS c FROM visits WHERE {SQL_SO_AVES} AND {SQL_DATA_LOCAL} = ? AND camera_id = ?",
+                    (today_prefix, cam_id),
+                ).fetchone()["c"]
+                garden_label = cam["location_label"] or cam["name"] or "Jardim sem nome"
+                gardens_out.append(
+                    {
+                        "camera_id": cam_id,
+                        "garden": garden_label,
+                        "camera_name": cam["name"],
+                        "visits": int(total),
+                        "species_counts": {r["species"]: int(r["c"]) for r in species_rows},
+                        "visits_by_hour": {
+                            (r["hour"] or "00"): int(r["c"]) for r in hour_rows if r["hour"]
+                        },
+                    }
+                )
+
+        return {
+            "date": today_prefix,
+            "consolidated_visits": int(consolidated_total),
+            "consolidated_species_counts": {r["species"]: int(r["c"]) for r in consolidated_rows},
+            "consolidated_visits_by_hour": {
+                (r["hour"] or "00"): int(r["c"]) for r in consolidated_hours if r["hour"]
+            },
+            "gardens": gardens_out,
+        }

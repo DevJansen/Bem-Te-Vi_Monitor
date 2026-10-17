@@ -104,10 +104,16 @@ async def list_today_visits(
             "(só Visitantes Especiais, ex.: esquilos)."
         ),
     ),
+    camera_id: str | None = Query(
+        default=None,
+        description="Restringe a um jardim específico (camera_id).",
+    ),
 ) -> list[VisitOut]:
     """Visitas de hoje (mais recentes primeiro), com a miniatura do YOLOv8."""
     try:
-        rows = _repo().list_today(limit=limit, visitor_kind=visitor_kind)
+        rows = _repo().list_today(
+            limit=limit, visitor_kind=visitor_kind, camera_id=camera_id
+        )
         return [VisitRepository.to_out(r) for r in rows]
     except Exception as exc:
         logger.exception("list_today_visits failed")

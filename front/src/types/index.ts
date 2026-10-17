@@ -221,6 +221,8 @@ export type BirdVisit = {
   visitor_kind: string;
   /** Grupo divertido do visitante (ex.: "esquilo"). */
   visitor_group: string | null;
+  /** Segmentação por Jardim: rótulo amigável do jardim no momento da captura. */
+  location_label: string | null;
   /** Condições do tempo no momento da visita (Open-Meteo). */
   temperature: number | null;
   humidity: number | null;
@@ -357,6 +359,23 @@ export type AnalyticsSummary = {
 export type HourlyDistribution = {
   hour: string;
   visits: number;
+};
+
+export type GardenToday = {
+  camera_id: string;
+  garden: string;
+  camera_name: string | null;
+  visits: number;
+  species_counts: Record<string, number>;
+  visits_by_hour: Record<string, number>;
+};
+
+export type TodayByGarden = {
+  date: string;
+  consolidated_visits: number;
+  consolidated_species_counts: Record<string, number>;
+  consolidated_visits_by_hour: Record<string, number>;
+  gardens: GardenToday[];
 };
 
 export type LifeListSpecies = {
