@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Film, Images } from "lucide-react";
 import type { BirdSpecies, BirdVisit } from "@/types";
 import { GalleryGrid } from "@/components/gallery/GalleryGrid";
@@ -11,6 +11,10 @@ type Props = {
   loading?: boolean;
   onVisitDeleted: (visitId: string) => void;
   onVisitUpdated: () => void;
+  /** Visita que deve abrir automaticamente no player (atalho do painel). */
+  focusVisitId?: string | null;
+  /** Avisa o painel que o foco já foi consumido. */
+  onFocusHandled?: () => void;
 };
 
 type GalleryView = "captures" | "timelapses";
@@ -25,8 +29,15 @@ export function GalleryPanel({
   loading,
   onVisitDeleted,
   onVisitUpdated,
+  focusVisitId,
+  onFocusHandled,
 }: Props) {
   const [view, setView] = useState<GalleryView>("captures");
+
+  // Um atalho do painel sempre abre na visão de capturas.
+  useEffect(() => {
+    if (focusVisitId) setView("captures");
+  }, [focusVisitId]);
 
   return (
     <section className="space-y-4">
@@ -56,6 +67,8 @@ export function GalleryPanel({
           loading={loading}
           onVisitDeleted={onVisitDeleted}
           onVisitUpdated={onVisitUpdated}
+          focusVisitId={focusVisitId}
+          onFocusHandled={onFocusHandled}
         />
       ) : (
         <TimelapseGallery />

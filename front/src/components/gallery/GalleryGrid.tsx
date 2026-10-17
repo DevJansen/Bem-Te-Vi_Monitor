@@ -27,6 +27,10 @@ type Props = {
   loading?: boolean;
   onVisitDeleted: (visitId: string) => void;
   onVisitUpdated: () => void;
+  /** Visita que deve abrir automaticamente no player (atalho do painel). */
+  focusVisitId?: string | null;
+  /** Avisa que o foco já foi consumido. */
+  onFocusHandled?: () => void;
 };
 
 export function GalleryGrid({
@@ -35,6 +39,8 @@ export function GalleryGrid({
   loading,
   onVisitDeleted,
   onVisitUpdated,
+  focusVisitId,
+  onFocusHandled,
 }: Props) {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -59,6 +65,19 @@ export function GalleryGrid({
   const [toast, setToast] = useState<string | null>(null);
   // Visita cujo clipe está aberto no player de vídeo (null = fechado).
   const [playingVisit, setPlayingVisit] = useState<BirdVisit | null>(null);
+
+  // Atalho do painel "Visitas de Hoje": abre o player da visita solicitada
+  // assim que ela aparece na lista (aguarda o primeiro carregamento).
+  useEffect(() => {
+    if (!focusVisitId) return;
+    const target = visits.find((visit) => visit.id === focusVisitId);
+    if (target) {
+      setPlayingVisit(target);
+      onFocusHandled?.();
+      return;
+    }
+    if (!loading && visits.length > 0) onFocusHandled?.();
+  }, [focusVisitId, visits, loading, onFocusHandled]);
 
   const currentVisits = useMemo(
     () =>

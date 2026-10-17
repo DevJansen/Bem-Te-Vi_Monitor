@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { KPIBoard } from "@/components/dashboard/KPIBoard";
@@ -82,6 +82,10 @@ export function App() {
   const [roiCamera, setRoiCamera] = useState<Camera | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [deletedVisitIds, setDeletedVisitIds] = useState<Set<string>>(new Set());
+  // Visita que deve abrir automaticamente na Galeria (atalho do deep-dive).
+  const [galleryFocusVisitId, setGalleryFocusVisitId] = useState<string | null>(
+    null,
+  );
 
   const metricsQuery = usePolling(fetchMetrics, 8_000);
   const camerasQuery = usePolling(listCameras, 5_000);
@@ -163,6 +167,17 @@ export function App() {
     void Promise.all([visitsQuery.refresh(), metricsQuery.refresh()]);
   };
 
+  // Atalho "ver clipe na Galeria": troca de aba e abre o clipe da visita.
+  const handleOpenVisitInGallery = useCallback((visitId: string) => {
+    setGalleryFocusVisitId(visitId);
+    setTab("gallery");
+  }, []);
+
+  const handleGalleryFocusHandled = useCallback(
+    () => setGalleryFocusVisitId(null),
+    [],
+  );
+
   const handleHistoryCleared = (cutoff: string | null, failedIds: string[]) => {
     const failedSet = new Set(failedIds);
     const removedIds = (visitsQuery.data ?? [])
@@ -230,7 +245,10 @@ export function App() {
                   <AiStreamLog />
                 </div>
               </div>
-              <TodayVisitsPanel />
+              <TodayVisitsPanel
+                species={speciesQuery.data ?? []}
+                onOpenInGallery={handleOpenVisitInGallery}
+              />
               <VisitsChart metrics={metricsQuery.data} />
               <AudioDetectionFeed />
             </div>
@@ -265,6 +283,8 @@ export function App() {
                 loading={visitsQuery.loading}
                 onVisitDeleted={handleVisitDeleted}
                 onVisitUpdated={() => void visitsQuery.refresh()}
+                focusVisitId={galleryFocusVisitId}
+                onFocusHandled={handleGalleryFocusHandled}
               />
             </div>
           ) : null}
