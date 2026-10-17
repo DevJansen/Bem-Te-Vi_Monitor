@@ -433,6 +433,13 @@ sem reiniciar o backend.
   distribuição, dados biogeográficos, migração, porte, longevidade e
   curiosidades, exibidos em um modal formatado. A ficha fica em cache nos
   metadados da visita; use **Atualizar** (ou `refresh=true`) para reconsultar.
+- A mesma consulta também está disponível **no nível da espécie**, a partir de
+  **Minhas Aves** (botão **Ficha IA** no cartão) e do **Álbum de Conquistas** /
+  ficha técnica (botão **🔎 Ficha ornitológica (IA)**) —
+  `POST /api/species/{id}/ask-ai`. Aqui o *prompt* usa o nome popular/científico
+  cadastrado e a **foto de referência tratada**; o resultado fica em cache na
+  própria espécie (`bird_species.ai_consult_json`, migração 7) e é reaproveitado
+  pela ficha técnica da espécie.
 - Sem imagem tratada disponível ou chave configurada, a API informa o erro. Os
   recortes ficam em `back\app-data\crops\` e seguem a política de retenção de mídia.
 
@@ -777,6 +784,7 @@ aviawatch/
 | GET | `/api/species` | Listar o catálogo local de aves |
 | POST | `/api/species` | Cadastrar uma espécie (multipart: `common_name`, `scientific_name`, `description`, `reference_image` opcional) |
 | GET | `/api/species/{id}/profile` | Ficha técnica da espécie (histórico, horários de pico, temperatura média, clima, notas e status ecológico) |
+| POST | `/api/species/{id}/ask-ai` | Consulta ornitológica profunda na IA externa **por espécie** (Minhas Aves / Álbum; `refresh=true` reconsulta) |
 | DELETE | `/api/species/{id}` | Excluir espécie e sua foto; preservar visitas sem associação |
 | POST | `/api/offline/upload` | Enviar MP4/AVI/MOV/MKV e iniciar a análise offline em background (multipart: `file`, `camera_id`, `recorded_at`) |
 | GET | `/api/offline/jobs` | Estado de todas as análises offline (em andamento e concluídas) com progresso, contagem de aves e detecções |

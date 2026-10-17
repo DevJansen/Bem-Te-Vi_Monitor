@@ -422,6 +422,38 @@ class SpeciesWeatherStatOut(BaseModel):
     avg_temperature: float | None = None
 
 
+class SpeciesConsultOut(BaseModel):
+    """Ficha ornitológica profunda devolvida pela IA externa (Gemini/OpenAI).
+
+    Estrutura rica pedida no *prompt* ornitológico: nome científico, família,
+    status de conservação, comportamento alimentar, habitat, curiosidades e
+    dados biogeográficos.
+    """
+
+    scientific_name: str
+    common_name: str
+    family: str = ""
+    order: str = ""
+    conservation_status: str = ""
+    diet: str = ""
+    feeding_behavior: str = ""
+    habitat: str = ""
+    distribution: str = ""
+    biogeography: str = ""
+    migration: str = ""
+    size_cm: str = ""
+    weight_g: str = ""
+    lifespan: str = ""
+    curiosities: list[str] = Field(default_factory=list)
+    notes: str = ""
+    # Metadados da consulta (provedor, modelo, imagem usada e cache).
+    provider: str | None = None
+    model: str | None = None
+    image_source: str | None = None
+    generated_at: str | None = None
+    cached: bool = False
+
+
 class SpeciesProfileOut(BaseModel):
     """Ficha técnica completa de uma espécie do Catálogo Local (Minhas Aves).
 
@@ -461,38 +493,8 @@ class SpeciesProfileOut(BaseModel):
     weather_distribution: list[SpeciesWeatherStatOut] = Field(default_factory=list)
     # Histórico recente (mais novo primeiro).
     recent_sightings: list[SpeciesSightingOut] = Field(default_factory=list)
-
-
-class SpeciesConsultOut(BaseModel):
-    """Ficha ornitológica profunda devolvida pela IA externa (Gemini/OpenAI).
-
-    Estrutura rica pedida no *prompt* ornitológico: nome científico, família,
-    status de conservação, comportamento alimentar, habitat, curiosidades e
-    dados biogeográficos.
-    """
-
-    scientific_name: str
-    common_name: str
-    family: str = ""
-    order: str = ""
-    conservation_status: str = ""
-    diet: str = ""
-    feeding_behavior: str = ""
-    habitat: str = ""
-    distribution: str = ""
-    biogeography: str = ""
-    migration: str = ""
-    size_cm: str = ""
-    weight_g: str = ""
-    lifespan: str = ""
-    curiosities: list[str] = Field(default_factory=list)
-    notes: str = ""
-    # Metadados da consulta (provedor, modelo, imagem usada e cache).
-    provider: str | None = None
-    model: str | None = None
-    image_source: str | None = None
-    generated_at: str | None = None
-    cached: bool = False
+    # Ficha ornitológica da IA externa em cache (quando já consultada).
+    ai_consult: SpeciesConsultOut | None = None
 
 
 class AchievementOut(BaseModel):

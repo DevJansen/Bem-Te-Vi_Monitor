@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import type { BirdVisit, SpeciesAiConsult } from "@/types";
 import {
+  askSpeciesAi,
   askVisitAi,
   getErrorMessage,
   resolveMediaUrl,
@@ -27,64 +28,101 @@ import {
 import { cn } from "@/utils/cn";
 import { resolveVisitNames, resolveVisitSpeciesLabel } from "@/utils/visits";
 
+/** Referência de espécie usada na consulta a partir de "Minhas Aves". */
+export type SpeciesConsultSubject = {
+  id: string;
+  common_name: string;
+  scientific_name: string;
+  /** Imagem tratada da espécie (foto de referência), quando existir. */
+  image_url?: string | null;
+};
+
 type Props = {
-  /** Visita consultada (null = modal fechado). */
-  visit: BirdVisit | null;
+  /** Visita consultada (consulta no nível da visita). */
+  visit?: BirdVisit | null;
+  /** Espécie consultada (consulta no nível da espécie, ex.: Minhas Aves). */
+  species?: SpeciesConsultSubject | null;
   onClose: () => void;
 };
 
 /**
  * Modal da **consulta ornitológica profunda** ("Perguntar à IA Externa").
  *
- * O backend estrutura um *prompt* ornitológico rico e devolve a ficha
- * formatada: nome científico, família, status de conservação, comportamento
- * alimentar, habitat, curiosidades e dados biogeográficos. O resultado é
- * cacheado nos metadados da visita (o botão "Atualizar" força nova consulta).
+ * Funciona em dois níveis: por **visita** (Galeria / detalhe da visita) e por
+ * **espécie** (Minhas Aves / Álbum de Conquistas). Em ambos, o backend estrutura
+ * um *prompt* ornitológico rico e devolve a ficha formatada: nome científico,
+ * família, status de conservação, comportamento alimentar, habitat, curiosidades
+ * e dados biogeográficos. O resultado é cacheado (o botão "Atualizar" refaz).
  */
-export function SpeciesAiConsultModal({ visit, onClose }: Props) {
+export function SpeciesAiConsultModal({ visit, species, onClose }: Props) {
   const [consult, setConsult] = useState<SpeciesAiConsult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async (visitId: string, refresh: boolean) => {
-    setLoading(true);
-    setError(null);
-    try {
-      setConsult(await askVisitAi(visitId, refresh));
-    } catch (cause) {
-      setError(
-        getErrorMessage(cause, "Não foi possível consultar a IA externa."),
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const visitId = visit?.id ?? null;
+  const speciesId = species?.id ?? null;
 
-  // Carrega (do cache ou da IA) sempre que uma nova visita é aberta.
+  const load = useCallback(
+    async (refresh: boolean): Promise<SpeciesAiConsult> => {
+      if (visitId) return askVisitAi(visitId, refresh);
+      if (speciesId) return askSpeciesAi(speciesId, refresh);
+      throw new Error("Nada para consultar");
+    },
+    [visitId, speciesId],
+  );
+
+  // Carrega (do cache ou da IA) sempre que o alvo da consulta muda.
   useEffect(() => {
-    if (!visit) return;
+    if (!visitId && !speciesId) return;
     setConsult(null);
     setError(null);
-    void load(visit.id, false);
-  }, [visit, load]);
+    let active = true;
+    setLoading(true);
+    void (async () => {
+      try {
+        const data = await load(false);
+        if (active) setConsult(data);
+      } catch (cause) {
+        if (active) {
+          setError(
+            getErrorMessage(cause, "Não foi possível consultar a IA externa."),
+          );
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [visitId, speciesId, load]);
 
   // Fecha com a tecla Esc.
   useEffect(() => {
-    if (!visit) return;
+    if (!visitId && !speciesId) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [visit, onClose]);
+  }, [visitId, speciesId, onClose]);
 
-  if (!visit) return null;
+  if (!visitId && !speciesId) return null;
 
-  const names = resolveVisitNames(visit);
-  const label = resolveVisitSpeciesLabel(visit);
-  const image = visit.metadata?.crop_path
-    ? visitCropUrl(visit.id)
-    : resolveMediaUrl(visit.thumbnail_url ?? visit.thumbnail_path);
+  // Nomes e imagem dependem do nível (visita × espécie).
+  const names = visit ? resolveVisitNames(visit) : null;
+  const title = visit
+    ? names?.commonName || resolveVisitSpeciesLabel(visit)
+    : species?.common_name ?? "";
+  const scientificName = visit
+    ? names?.scientificName ?? null
+    : species?.scientific_name ?? null;
+  const label = title || "Espécie";
+  const image = visit
+    ? visit.metadata?.crop_path
+      ? visitCropUrl(visit.id)
+      : resolveMediaUrl(visit.thumbnail_url ?? visit.thumbnail_path)
+    : species?.image_url ?? null;
 
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-3 sm:p-6">
@@ -112,10 +150,10 @@ export function SpeciesAiConsultModal({ visit, onClose }: Props) {
               Alaris Core · Consulta Ornitológica
             </p>
             <h2 className="truncate font-display text-base font-semibold text-[var(--color-text-primary)] sm:text-lg">
-              {names.commonName || label}
+              {label}
             </h2>
             <p className="text-xs italic text-[var(--color-text-muted)]">
-              {names.scientificName ?? "Nome científico não identificado"}
+              {scientificName ?? "Nome científico não identificado"}
             </p>
           </div>
           <button
@@ -167,7 +205,24 @@ export function SpeciesAiConsultModal({ visit, onClose }: Props) {
                 <button
                   type="button"
                   disabled={loading}
-                  onClick={() => void load(visit.id, true)}
+                  onClick={() =>
+                    void (async () => {
+                      setLoading(true);
+                      setError(null);
+                      try {
+                        setConsult(await load(true));
+                      } catch (cause) {
+                        setError(
+                          getErrorMessage(
+                            cause,
+                            "Não foi possível consultar a IA externa.",
+                          ),
+                        );
+                      } finally {
+                        setLoading(false);
+                      }
+                    })()
+                  }
                   className="inline-flex items-center gap-1.5 rounded-lg border border-dark-600 px-2.5 py-1 text-[11px] font-medium text-[var(--color-text-muted)] transition hover:bg-dark-700 hover:text-[var(--color-text-primary)] disabled:opacity-50"
                 >
                   <RefreshCw

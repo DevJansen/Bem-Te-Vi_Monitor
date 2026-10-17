@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -53,6 +54,17 @@ def _crop_url(visit_id: str | None) -> str | None:
         return None
     crop_path = get_settings().crops_dir / f"{visit_id}.jpg"
     return f"/api/visits/{visit_id}/crop" if crop_path.is_file() else None
+
+
+def _parse_ai_consult(raw: str | None) -> dict[str, Any] | None:
+    """Lê o cache da ficha ornitológica da IA externa gravado na espécie."""
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def _visit_image_url(visit_id: str | None, thumbnail_path: str | None) -> str | None:
@@ -572,6 +584,7 @@ class AnalyticsRepository:
                 for row in weather_rows
             ],
             "recent_sightings": recent_sightings,
+            "ai_consult": _parse_ai_consult(species.get("ai_consult_json")),
         }
 
     def achievements(self) -> list[dict[str, Any]]:

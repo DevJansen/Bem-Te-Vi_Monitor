@@ -184,6 +184,14 @@ MIGRATIONS: list[tuple[int, str]] = [
         PRAGMA foreign_keys=ON;
         """,
     ),
+    (
+        7,
+        """
+        -- Ficha ornitológica da IA externa por espécie (cache da consulta
+        -- profunda acionada a partir de "Minhas Aves" / Álbum de Conquistas).
+        ALTER TABLE bird_species ADD COLUMN ai_consult_json TEXT;
+        """,
+    ),
 ]
 
 

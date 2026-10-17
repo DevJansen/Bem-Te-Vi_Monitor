@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Bird, LoaderCircle, Plus, Trash2, X } from "lucide-react";
+import { Bird, Bot, LoaderCircle, Plus, Trash2, X } from "lucide-react";
 import type { BirdSpecies } from "@/types";
 import { createSpecies, deleteSpecies, getErrorMessage } from "@/services/api";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
@@ -7,6 +7,7 @@ import {
   SpeciesProfileModal,
   type SpeciesRef,
 } from "@/components/species/SpeciesProfileModal";
+import { SpeciesAiConsultModal } from "@/components/species/SpeciesAiConsultModal";
 
 type Props = {
   species: BirdSpecies[];
@@ -64,6 +65,8 @@ export function SpeciesCatalog({
   const [toast, setToast] = useState<string | null>(null);
   // Espécie aberta na ficha técnica (null = modal fechado).
   const [selected, setSelected] = useState<SpeciesRef | null>(null);
+  // Espécie aberta na ficha ornitológica da IA externa (null = fechado).
+  const [consultSpecies, setConsultSpecies] = useState<BirdSpecies | null>(null);
 
   useEffect(() => {
     if (!toast) return;
@@ -216,14 +219,25 @@ export function SpeciesCatalog({
                     {item.description}
                   </p>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={() => setDeletingSpecies(item)}
-                  className="relative z-20 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-red-300 transition hover:bg-red-500/10"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Excluir espécie
-                </button>
+                <div className="flex flex-wrap items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setConsultSpecies(item)}
+                    title="Perguntar à IA externa (nome científico, família, conservação, dieta, habitat, curiosidades)"
+                    className="relative z-20 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-violet-200 transition hover:bg-violet-500/10"
+                  >
+                    <Bot className="h-3.5 w-3.5" />
+                    Ficha IA
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeletingSpecies(item)}
+                    className="relative z-20 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-red-300 transition hover:bg-red-500/10"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Excluir espécie
+                  </button>
+                </div>
               </div>
             </article>
           ))}
@@ -349,6 +363,21 @@ export function SpeciesCatalog({
       <SpeciesProfileModal
         species={selected}
         onClose={() => setSelected(null)}
+      />
+
+      {/* Ficha ornitológica da IA externa (consulta profunda da espécie). */}
+      <SpeciesAiConsultModal
+        species={
+          consultSpecies
+            ? {
+                id: consultSpecies.id,
+                common_name: consultSpecies.common_name,
+                scientific_name: consultSpecies.scientific_name,
+                image_url: consultSpecies.reference_image_url,
+              }
+            : null
+        }
+        onClose={() => setConsultSpecies(null)}
       />
 
       <ConfirmDialog

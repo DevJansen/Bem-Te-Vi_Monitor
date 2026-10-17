@@ -319,6 +319,24 @@ export async function fetchSpeciesProfile(
   return data;
 }
 
+/**
+ * Consulta ornitológica profunda da **espécie** (Minhas Aves / Álbum).
+ *
+ * Usa os nomes e a foto de referência tratada da espécie. O resultado fica em
+ * cache no cadastro; `refresh` força uma nova consulta à IA externa.
+ */
+export async function askSpeciesAi(
+  speciesId: string,
+  refresh = false,
+): Promise<SpeciesAiConsult> {
+  const { data } = await api.post<SpeciesAiConsult>(
+    `/species/${encodeURIComponent(speciesId)}/ask-ai`,
+    undefined,
+    { params: refresh ? { refresh: true } : undefined, timeout: 60_000 },
+  );
+  return data;
+}
+
 /* ——— Log de anomalias acústico-visuais ——— */
 
 export async function listAnomalies(options?: {

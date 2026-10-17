@@ -315,6 +315,10 @@ e pergunta: *"Que espécie é essa?"* Ele responde com o nome comum e o científ
   alimentar, habitat, distribuição, dados biogeográficos, porte e curiosidades. O
   resultado aparece num painel organizado e fica guardado para não repetir consultas
   (use **Atualizar** para refazer).
+- A mesma ficha também está em **Minhas Aves**: use o botão **Ficha IA** no cartão da
+  ave (ou abra a ficha técnica dela e toque em **🔎 Ficha ornitológica (IA)**). Aqui a
+  consulta parte da espécie cadastrada e da **foto de referência**, e o resultado fica
+  guardado na própria espécie.
 - Se a espécie **já estava** no seu catálogo, o AviaWatch **não duplica** o card: apenas
   soma mais uma visita e guarda a nova foto/vídeo naquela espécie.
 

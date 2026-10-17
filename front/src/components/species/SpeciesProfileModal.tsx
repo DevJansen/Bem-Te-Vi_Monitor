@@ -3,6 +3,7 @@ import {
   Activity,
   AlertTriangle,
   Bird,
+  Bot,
   CalendarClock,
   CloudSun,
   Droplets,
@@ -21,6 +22,7 @@ import {
   getErrorMessage,
   visitCropUrl,
 } from "@/services/api";
+import { SpeciesAiConsultModal } from "@/components/species/SpeciesAiConsultModal";
 import { cn } from "@/utils/cn";
 import { formatDateTime } from "@/utils/format";
 import { formatHumidity, formatTemperature, weatherEmoji } from "@/utils/weather";
@@ -51,6 +53,8 @@ export function SpeciesProfileModal({ species, onClose }: Props) {
   const [profile, setProfile] = useState<SpeciesProfile | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Ficha ornitológica da IA externa aberta sobre a ficha da espécie.
+  const [consultOpen, setConsultOpen] = useState(false);
 
   const load = useCallback(async (speciesId: string) => {
     setLoading(true);
@@ -68,17 +72,19 @@ export function SpeciesProfileModal({ species, onClose }: Props) {
     if (!species) return;
     setProfile(null);
     setError(null);
+    setConsultOpen(false);
     void load(species.id);
   }, [species, load]);
 
   useEffect(() => {
     if (!species) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      // Não fecha a ficha da espécie com Esc quando a ficha da IA está por cima.
+      if (event.key === "Escape" && !consultOpen) onClose();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [species, onClose]);
+  }, [species, onClose, consultOpen]);
 
   if (!species) return null;
 
@@ -203,6 +209,16 @@ export function SpeciesProfileModal({ species, onClose }: Props) {
                       {profile.ecological_notes}
                     </p>
                   ) : null}
+                  {/* Ficha ornitológica da IA externa (consulta profunda). */}
+                  <button
+                    type="button"
+                    onClick={() => setConsultOpen(true)}
+                    title="Perguntar à IA externa (nome científico, família, conservação, dieta, habitat, curiosidades)"
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-violet-400/40 bg-violet-500/15 px-3 py-2 text-xs font-semibold text-violet-200 transition hover:bg-violet-500/25"
+                  >
+                    <Bot className="h-3.5 w-3.5" />
+                    🔎 Ficha ornitológica (IA)
+                  </button>
                 </div>
               </div>
 
@@ -370,6 +386,25 @@ export function SpeciesProfileModal({ species, onClose }: Props) {
           ) : null}
         </div>
       </section>
+
+      {/* Ficha ornitológica da IA externa (consulta profunda, por cima). */}
+      <SpeciesAiConsultModal
+        species={
+          consultOpen
+            ? {
+                id: profile?.id ?? species.id,
+                common_name: profile?.common_name ?? species.common_name,
+                scientific_name:
+                  profile?.scientific_name ?? species.scientific_name,
+                image_url:
+                  profile?.best_photo_url ??
+                  profile?.reference_image_url ??
+                  null,
+              }
+            : null
+        }
+        onClose={() => setConsultOpen(false)}
+      />
     </div>
   );
 }

@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 import cv2
 import numpy as np
-from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, Query, Response, UploadFile, status
 
 from app.core.config import get_settings
-from app.domain.models import BirdSpeciesOut, SpeciesProfileOut
+from app.domain.models import BirdSpeciesOut, SpeciesConsultOut, SpeciesProfileOut
 from app.infra.database.analytics_repository import AnalyticsRepository
 from app.infra.database.repository import BirdSpeciesRepository
+from app.services.external_species_identifier import (
+    ExternalIdentificationError,
+    consult_species_profile,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/species", tags=["species"])
@@ -125,6 +131,97 @@ def get_species_profile(species_id: str) -> SpeciesProfileOut:
     if profile is None:
         raise HTTPException(status_code=404, detail="Espécie não encontrada.")
     return SpeciesProfileOut(**profile)
+
+
+def _parse_ai_consult(raw: str | None) -> dict | None:
+    """Lê o cache da ficha ornitológica gravado em ``bird_species``."""
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+@router.post("/{species_id}/ask-ai", response_model=SpeciesConsultOut)
+def ask_ai_about_species(
+    species_id: str,
+    refresh: bool = Query(
+        default=False,
+        description="Ignora a ficha em cache e consulta a IA externa novamente.",
+    ),
+) -> SpeciesConsultOut:
+    """Consulta ornitológica profunda da **espécie** (Minhas Aves / Álbum).
+
+    Diferente da consulta por visita, esta parte do cadastro da espécie: usa os
+    nomes popular/científico e a **foto de referência tratada** (quando existe)
+    para montar o *prompt* ornitológico rico. O resultado fica em cache na própria
+    espécie; use ``refresh=true`` para forçar uma nova consulta.
+    """
+    repository = _repo()
+    row = repository.get(species_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Espécie não encontrada.")
+
+    # Cache local: evita gastar chamadas de IA repetindo a mesma consulta.
+    if not refresh:
+        cached = _parse_ai_consult(row.get("ai_consult_json"))
+        if cached and cached.get("common_name"):
+            return SpeciesConsultOut(**{**cached, "cached": True})
+
+    settings = get_settings()
+    if not settings.ai_external_api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="Configure AI_EXTERNAL_API_KEY para habilitar a consulta externa",
+        )
+
+    common_name = str(row.get("common_name") or "").strip()
+    scientific_name = str(row.get("scientific_name") or "").strip()
+    if not common_name and not scientific_name:
+        raise HTTPException(
+            status_code=422,
+            detail="Cadastre o nome popular ou científico antes de consultar a IA.",
+        )
+
+    # Envia a foto de referência tratada (close-up do Alaris), se disponível.
+    image_bytes: bytes | None = None
+    image_source: str | None = None
+    reference_path = row.get("reference_image_path")
+    if reference_path:
+        candidate = settings.reference_birds_dir / Path(str(reference_path)).name
+        if candidate.is_file():
+            try:
+                image_bytes = candidate.read_bytes()
+                image_source = "foto de referência"
+            except OSError:
+                logger.debug(
+                    "Foto de referência ilegível para a consulta species=%s",
+                    species_id,
+                )
+                image_bytes = None
+
+    try:
+        consult = consult_species_profile(
+            common_name=common_name,
+            scientific_name=scientific_name,
+            image_bytes=image_bytes,
+        )
+    except ExternalIdentificationError as exc:
+        logger.warning("Consulta externa falhou species=%s: %s", species_id, exc)
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    payload: dict[str, object] = {
+        **consult.as_dict(),
+        "provider": consult.provider,
+        "model": consult.model,
+        "image_source": image_source,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "cached": False,
+    }
+    repository.set_ai_consult(species_id, json.dumps(payload, ensure_ascii=False))
+    return SpeciesConsultOut(**payload)
 
 
 @router.delete("/{species_id}", status_code=status.HTTP_204_NO_CONTENT)

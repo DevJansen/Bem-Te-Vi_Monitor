@@ -381,6 +381,8 @@ export type SpeciesProfile = {
   avg_humidity: number | null;
   weather_distribution: SpeciesWeatherStat[];
   recent_sightings: SpeciesSighting[];
+  /** Ficha ornitológica da IA externa em cache (quando já consultada). */
+  ai_consult?: SpeciesAiConsult | null;
 };
 
 /** Ficha ornitológica profunda retornada pela IA externa (Gemini/OpenAI). */

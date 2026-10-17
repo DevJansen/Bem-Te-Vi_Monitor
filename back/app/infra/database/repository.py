@@ -684,6 +684,19 @@ class BirdSpeciesRepository:
                 return None
         return self.get(species_id)
 
+    def set_ai_consult(
+        self, species_id: str, payload_json: str | None
+    ) -> dict[str, Any] | None:
+        """Grava (ou limpa) o cache da ficha ornitológica da IA externa."""
+        with db_session(self.db_path) as conn:
+            cursor = conn.execute(
+                "UPDATE bird_species SET ai_consult_json = ? WHERE id = ?",
+                (payload_json, species_id),
+            )
+            if cursor.rowcount == 0:
+                return None
+        return self.get(species_id)
+
     def delete(self, species_id: str) -> dict[str, Any] | None:
         with db_session(self.db_path) as conn:
             row = conn.execute(
