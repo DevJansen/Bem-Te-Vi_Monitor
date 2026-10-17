@@ -16,6 +16,7 @@ import numpy as np
 
 from app.core.config import get_settings
 from app.domain.avifauna_sul import descrever, info_especie
+from app.domain.fauna_taxonomy import descrever_visitante
 from app.domain.models import RoiType, RoiZone, VisitOut, ZoneConfig, ZoneMode
 from app.infra.ai.annotate import (
     apply_banner,
@@ -68,7 +69,7 @@ from app.services.anomaly_log import registrar_retorno_especie
 from app.services.calibration import get_calibration_service
 from app.services.camera_weather import local_time_fields
 from app.services.ornithological_annotation import montar_analise_ia
-from app.services.species_catalog import match_or_create_species
+from app.services.species_catalog import EspecieNaoAveError, match_or_create_species
 from app.services.system_context import ajustar_sensibilidade
 
 logger = logging.getLogger(__name__)
@@ -939,11 +940,31 @@ class CameraPipeline(threading.Thread):
         # Status ecológico regional, quando a espécie já é conhecida na captura.
         especie_evento = str(event.get("species") or "")
         tem_especie = bool(especie_evento) and especie_evento.lower() != "bird"
-        if tem_especie:
+
+        # --- Taxonomia do Alaris Core (o "anti-esquilo") ---------------------
+        # Pós-processamento do rótulo: decide se o bicho é uma **ave** (fluxo
+        # ornitológico normal) ou um **Visitante Especial** (esquilo, gato…).
+        # Não-aves ficam FORA da Life List, das estatísticas de aves e dos
+        # alertas — mas são registrados em "Convidados do Jardim".
+        nome_cientifico = self._nome_cientifico(event, especie_evento)
+        visitante = descrever_visitante(especie_evento or event["species"], nome_cientifico)
+        metadata["visitor"] = visitante.as_metadata()
+        if not visitante.eh_ave:
+            metadata["identification_status"] = (
+                metadata.get("identification_status") or "Visitante Especial"
+            )
+            self._pensar(
+                f"{visitante.grupo.icone if visitante.grupo else '🐾'} "
+                f"Visitante Especial no comedouro: {visitante.nome} "
+                "(registrado em Convidados do Jardim).",
+                nivel=NIVEL_INFO,
+                species=visitante.nome,
+                visitor_kind=visitante.kind.value,
+            )
+        if tem_especie and visitante.eh_ave:
             metadata["ecological"] = descrever(especie_evento)
 
         # --- Análise enriquecida da IA ("laudo" estruturado da visita) ---
-        nome_cientifico = self._nome_cientifico(event, especie_evento)
         nitidez = (
             round(float(best.metricas.nitidez), 2) if best is not None else None
         )
@@ -990,13 +1011,16 @@ class CameraPipeline(threading.Thread):
                 metadata=metadata,
                 local_hour=local_hour,
                 local_date=local_date,
+                visitor_kind=visitante.kind.value,
+                visitor_group=visitante.grupo.chave if visitante.grupo else None,
             )
         except Exception:
             logger.exception("Failed to persist visit for camera %s", self.camera_id)
             return
 
         # Log de anomalias: espécie que não aparecia há meses reapareceu.
-        if tem_especie:
+        # (Apenas aves: um esquilo recorrente não é uma anomalia ornitológica.)
+        if tem_especie and visitante.eh_ave:
             anomalia = registrar_retorno_especie(
                 species=especie_evento,
                 scientific_name=nome_cientifico,
@@ -1016,8 +1040,8 @@ class CameraPipeline(threading.Thread):
         # Compara a identificação com a Life List ("Minhas Aves"): se a espécie
         # já existe, apenas vincula a visita (incrementa o contador e agrega a
         # foto/vídeo à galeria da espécie); se é nova, cria o card estruturado
-        # no Álbum de Conquistas.
-        if tem_especie:
+        # no Álbum de Conquistas. Visitantes Especiais NÃO entram na Life List.
+        if tem_especie and visitante.eh_ave:
             self._smart_match_life_list(
                 visit_id=visit_id,
                 common_name=especie_evento,
@@ -1028,7 +1052,9 @@ class CameraPipeline(threading.Thread):
 
         visit_out = self.visit_repo.to_out(visit)
 
-        if self.on_visit and self._notify_enabled():
+        # Alertas (Telegram/Discord/Webhook): apenas para **aves**. Um esquilo
+        # no comedouro é uma visita divertida, não um alerta ornitológico.
+        if self.on_visit and self._notify_enabled() and visitante.eh_ave:
             if visit_out.confidence >= self._min_confidence_notify():
                 try:
                     self.on_visit(visit_out)
@@ -1064,6 +1090,14 @@ class CameraPipeline(threading.Thread):
                 reference_image_source=referencia,
             )
             self.visit_repo.assign_species(visit_id, str(match.species["id"]))
+        except EspecieNaoAveError:
+            # Guarda anti-esquilo: o nome não é de ave — não entra na Life List.
+            logger.info(
+                "Visitante Especial ignorado pela Life List: %s (camera=%s)",
+                common_name,
+                self.camera_id,
+            )
+            return
         except Exception:
             logger.exception(
                 "Smart Match falhou visit=%s camera=%s", visit_id, self.camera_id

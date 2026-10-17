@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 
 from app.core.config import get_settings
 from app.domain.avifauna_sul import info_especie
+from app.domain.fauna_taxonomy import descrever_visitante
 from app.domain.models import SpeciesConsultOut, VisitOut, VisitSpeciesAssignment
 from app.infra.database.repository import VisitRepository
 from app.services.anomaly_log import registrar_retorno_especie
@@ -20,7 +21,7 @@ from app.services.external_species_identifier import (
     consult_species_profile,
     identify_bird_image_file,
 )
-from app.services.species_catalog import match_or_create_species
+from app.services.species_catalog import EspecieNaoAveError, match_or_create_species
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/visits", tags=["visits"])
@@ -71,10 +72,21 @@ async def list_visits(
     offset: int = Query(default=0, ge=0),
     camera_id: str | None = None,
     species: str | None = None,
+    visitor_kind: str | None = Query(
+        default=None,
+        description=(
+            "Filtra por natureza do visitante: 'bird' (aves), 'mammal'/'other' "
+            "(um grupo exato) ou 'special' (qualquer Visitante Especial)."
+        ),
+    ),
 ) -> list[VisitOut]:
     try:
         rows = _repo().list(
-            limit=limit, offset=offset, camera_id=camera_id, species=species
+            limit=limit,
+            offset=offset,
+            camera_id=camera_id,
+            species=species,
+            visitor_kind=visitor_kind,
         )
         return [VisitRepository.to_out(r) for r in rows]
     except Exception as exc:
@@ -85,10 +97,17 @@ async def list_visits(
 @router.get("/today", response_model=list[VisitOut])
 async def list_today_visits(
     limit: int = Query(default=50, ge=1, le=200),
+    visitor_kind: str | None = Query(
+        default=None,
+        description=(
+            "Filtra as visitas de hoje: 'bird' (só aves) ou 'special' "
+            "(só Visitantes Especiais, ex.: esquilos)."
+        ),
+    ),
 ) -> list[VisitOut]:
     """Visitas de hoje (mais recentes primeiro), com a miniatura do YOLOv8."""
     try:
-        rows = _repo().list_today(limit=limit)
+        rows = _repo().list_today(limit=limit, visitor_kind=visitor_kind)
         return [VisitRepository.to_out(r) for r in rows]
     except Exception as exc:
         logger.exception("list_today_visits failed")
@@ -214,10 +233,16 @@ def identify_visit_external(
 
     species = f"{identification.common_name} ({identification.scientific_name})"
 
-    # Cadastro automático no Catálogo Local / Life List (opcional). A imagem
-    # tratada vira a foto de referência da espécie, quando nova.
+    # Taxonomia do Alaris Core (o "anti-esquilo"): decide se é ave ou Visitante
+    # Especial. Esquilos/gatos NÃO entram na Life List nem geram anomalia de ave.
+    visitante = descrever_visitante(
+        identification.common_name, identification.scientific_name
+    )
+
+    # Cadastro automático no Catálogo Local / Life List (apenas para aves). A
+    # imagem tratada vira a foto de referência da espécie, quando nova.
     catalog_species_id: str | None = None
-    if add_to_catalog:
+    if add_to_catalog and visitante.eh_ave:
         try:
             # Alaris Core Smart Match: se a espécie já está na Life List, o card
             # existente é reaproveitado (sem duplicar); se é nova, nasce um card
@@ -228,6 +253,12 @@ def identify_visit_external(
                 reference_image_source=image_path,
             )
             catalog_species_id = str(match.species["id"])
+        except EspecieNaoAveError:
+            logger.info(
+                "Visitante Especial identificado (não-ave) visit=%s: %s",
+                visit_id,
+                identification.common_name,
+            )
         except Exception:
             logger.exception(
                 "Falha ao cadastrar a espécie no catálogo visit=%s", visit_id
@@ -243,13 +274,15 @@ def identify_visit_external(
     )
     if updated is None:
         raise HTTPException(status_code=404, detail="Visit not found")
-    # Log de anomalia: espécie reaparecendo após longo intervalo.
-    registrar_retorno_especie(
-        species=identification.common_name,
-        scientific_name=identification.scientific_name,
-        visit_id=visit_id,
-        exclude_visit_id=visit_id,
-    )
+    # Log de anomalia (retorno de espécie após longo intervalo): só faz sentido
+    # para aves — um esquilo que reaparece não é uma "anomalia ornitológica".
+    if visitante.eh_ave:
+        registrar_retorno_especie(
+            species=identification.common_name,
+            scientific_name=identification.scientific_name,
+            visit_id=visit_id,
+            exclude_visit_id=visit_id,
+        )
     return VisitRepository.to_out(updated)
 
 

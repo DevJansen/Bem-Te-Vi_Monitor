@@ -663,6 +663,36 @@ O catálogo fica na tabela `bird_species` do SQLite, com imagens em
 opcional e não altera a detecção automática do YOLO. Use a Galeria para revisar e
 associar manualmente as detecções com as espécies conhecidas.
 
+### Visitantes Silvestres / Convidados do Jardim (Modo Esquilo)
+
+O Alaris Core classifica o animal que aparece no comedouro com uma camada de
+**taxonomia pos-deteccao** (`app/domain/fauna_taxonomy.py`): aves seguem o fluxo
+ornitologico normal; mamiferos (esquilos, gatos, gambas, morcegos...) viram
+**Visitantes Especiais** -- nao entram na Life List ("Minhas Aves") nem nas
+estatisticas de aves, nao disparam alertas de Telegram/Webhook e nao geram
+anomalia ornitologica, mas ganham:
+
+1. **Painel "Visitas de Hoje" -> aba "Visitantes Especiais"**: contador secundario
+   com as aparicoes do dia e as estatisticas divertidas do "Modo Esquilo"
+   (ex.: esquilo 3 visitas hoje, ~36 sementes roubadas hoje).
+2. **Galeria -> aba "Convidados do Jardim"**: capturas dos bichos, agrupadas sob a
+   categoria tematica (ex.: Convidados do Jardim (Esquilos)).
+3. **Album de Conquistas -> badge secreta "O Ladrao de Sementes"**: desbloqueada
+   automaticamente na primeira aparicao de um esquilo. As medalhas secretas
+   aparecem mascaradas ("???") ate serem conquistadas.
+4. **Resumo dedicado**: `GET /api/wildlife/summary` (totais, por grupo, sementes
+   estimadas, badge desbloqueada) e `GET /api/wildlife/visits?today=true`.
+
+A deteccao dos Visitantes Especiais pode vir de duas fontes:
+- **Fauna noturna** (classes extras do COCO, ex.: gato/cachorro) quando
+  `NIGHT_FAUNA_ENABLED=true`;
+- **Identificacao externa** (Gemini Vision): se a IA externa identifica o
+  animal como esquilo/gato/etc., a visita e reclassificada como Visitante
+  Especial e **nao** e cadastrada na Life List (guarda anti-esquilo).
+
+A classificacao e conservadora: na duvida, o animal e tratado como **ave**, para
+nunca descartar um passaro legitimo.
+
 ### Analisar vídeos gravados ou cartões de memória
 
 1. Copie a gravação do cartão de memória para o computador.

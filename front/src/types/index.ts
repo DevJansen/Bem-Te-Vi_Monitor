@@ -217,6 +217,10 @@ export type BirdVisit = {
   species_id: string | null;
   assigned_species_common_name: string | null;
   assigned_species_scientific_name: string | null;
+  /** "bird" para aves; "mammal"/"other" para Visitantes Especiais (esquilos…). */
+  visitor_kind: string;
+  /** Grupo divertido do visitante (ex.: "esquilo"). */
+  visitor_group: string | null;
   /** Condições do tempo no momento da visita (Open-Meteo). */
   temperature: number | null;
   humidity: number | null;
@@ -333,6 +337,10 @@ export type Metrics = {
   species_counts: Record<string, number>;
   visits_by_hour: Record<string, number>;
   last_visit_at: string | null;
+  // --- Visitantes Especiais / Convidados do Jardim (Modo Esquilo) ---
+  visitors_today: number;
+  squirrel_visits_today: number;
+  seeds_stolen_today: number;
   generated_at: string;
 };
 
@@ -484,6 +492,34 @@ export type Achievement = {
   target: number;
   progress: number;
   unlocked: boolean;
+  /** Medalha secreta: só revela nome/descrição após desbloqueada. */
+  secret: boolean;
+};
+
+export type WildlifeVisitorStat = {
+  group: string;
+  label: string;
+  icon: string;
+  gallery_category: string;
+  visits: number;
+  last_seen_at: string | null;
+  /** Consumo estimado (brincadeira): sementes/petiscos levados. */
+  estimated_consumption: number;
+  unit: string;
+};
+
+export type WildlifeSummary = {
+  total_visits: number;
+  visits_today: number;
+  visitors_today: number;
+  squirrel_visits_today: number;
+  seeds_stolen_today: number;
+  seeds_stolen_total: number;
+  first_visit_at: string | null;
+  has_visitors: boolean;
+  squirrel_badge_unlocked: boolean;
+  groups: WildlifeVisitorStat[];
+  generated_at: string;
 };
 
 /** Resumo do dia (time-lapse) gerado a partir dos clipes das visitas. */

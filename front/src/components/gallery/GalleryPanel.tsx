@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Film, Images } from "lucide-react";
+import { Film, Images, Squirrel } from "lucide-react";
 import type { BirdSpecies, BirdVisit } from "@/types";
 import { GalleryGrid } from "@/components/gallery/GalleryGrid";
 import { TimelapseGallery } from "@/components/gallery/TimelapseGallery";
@@ -17,7 +17,7 @@ type Props = {
   onFocusHandled?: () => void;
 };
 
-type GalleryView = "captures" | "timelapses";
+type GalleryView = "captures" | "guests" | "timelapses";
 
 /**
  * Aba Galeria com duas visões: as capturas individuais das visitas e os
@@ -53,6 +53,12 @@ export function GalleryPanel({
           onClick={() => setView("captures")}
         />
         <TabButton
+          active={view === "guests"}
+          icon={Squirrel}
+          label="Convidados do Jardim"
+          onClick={() => setView("guests")}
+        />
+        <TabButton
           active={view === "timelapses"}
           icon={Film}
           label="Resumos do Dia (Time-Lapse)"
@@ -63,6 +69,16 @@ export function GalleryPanel({
       {view === "captures" ? (
         <GalleryGrid
           visits={visits}
+          species={species}
+          loading={loading}
+          onVisitDeleted={onVisitDeleted}
+          onVisitUpdated={onVisitUpdated}
+          focusVisitId={focusVisitId}
+          onFocusHandled={onFocusHandled}
+        />
+      ) : view === "guests" ? (
+        <GalleryGrid
+          visits={visits.filter((v) => v.visitor_kind !== "bird")}
           species={species}
           loading={loading}
           onVisitDeleted={onVisitDeleted}

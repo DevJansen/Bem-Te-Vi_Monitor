@@ -56,6 +56,22 @@ export function resolveVisitNames(visit: BirdVisit): {
 
 /** Rótulo da espécie: nome popular identificado ou o fallback "Ave (genérica)". */
 export function resolveVisitSpeciesLabel(visit: BirdVisit): string {
+  // Visitantes Especiais (esquilos, gatos…) não são aves: exibem o rótulo do
+  // grupo em vez de tentar resolver um nome de espécie de ave.
+  if (visit.visitor_kind && visit.visitor_kind !== "bird") {
+    const visitorMeta = (visit.metadata?.visitor ?? {}) as {
+      label?: string;
+      icon?: string;
+    };
+    if (visitorMeta.label) {
+      return visitorMeta.icon
+        ? `${visitorMeta.icon} ${visitorMeta.label}`
+        : visitorMeta.label;
+    }
+    return visit.visitor_group
+      ? `🐾 ${visit.visitor_group}`
+      : "Visitante Especial";
+  }
   return resolveVisitNames(visit).commonName || formatSpeciesLabel(visit.species);
 }
 

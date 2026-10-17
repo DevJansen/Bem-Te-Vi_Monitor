@@ -21,6 +21,7 @@ from app.domain.models import (
     ZoneConfig,
 )
 from app.core.redact import redact_url
+from app.domain.fauna_taxonomy import GRUPO_ESQUILO, descrever_visitante
 from app.infra.database.connection import db_session
 from app.services.weather_service import current_weather_for_storage
 
@@ -57,6 +58,29 @@ SQL_HORA_LOCAL_2D = (
     "ELSE printf('%02d', local_hour) END"
 )
 SQL_DATA_LOCAL = "COALESCE(local_date, substr(detected_at, 1, 10))"
+
+# Visitantes Silvestres (migração 9). As estatísticas ornitológicas contam
+# **apenas aves**; mamíferos e outros bichos aparecem no painel "Convidados do
+# Jardim" e nunca poluem a Life List nem os gráficos de aves.
+SQL_SO_AVES = "visitor_kind = 'bird'"
+# Valor especial aceito pelos filtros de listagem: "todos os não-aves".
+VISITOR_KIND_ESPECIAL = "special"
+
+
+def _clausula_visitante(
+    alias: str, visitor_kind: str | None
+) -> tuple[str | None, list[Any]]:
+    """Traduz o filtro ``visitor_kind`` numa cláusula SQL + parâmetros.
+
+    Aceita ``"bird"``/``"mammal"``/``"other"`` para um grupo exato e
+    ``"special"`` para "qualquer Visitante Especial" (tudo que não é ave).
+    """
+    if not visitor_kind:
+        return None, []
+    coluna = f"{alias}.visitor_kind" if alias else "visitor_kind"
+    if visitor_kind == VISITOR_KIND_ESPECIAL:
+        return f"{coluna} != 'bird'", []
+    return f"{coluna} = ?", [visitor_kind]
 
 
 def _media_url(relative: str | None) -> str | None:
@@ -298,6 +322,8 @@ class VisitRepository:
         wind_speed: float | None = None,
         local_hour: int | None = None,
         local_date: str | None = None,
+        visitor_kind: str = "bird",
+        visitor_group: str | None = None,
     ) -> dict[str, Any]:
         vid = visit_id or str(uuid.uuid4())
         # Registra as condições do tempo no momento da visita. Quando o chamador
@@ -319,8 +345,8 @@ class VisitRepository:
                     id, camera_id, species, confidence, detected_at, dwell_seconds,
                     clip_path, thumbnail_path, bbox_json, zone_id, metadata_json,
                     temperature, humidity, weather_code, wind_speed,
-                    local_hour, local_date
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    local_hour, local_date, visitor_kind, visitor_group
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     vid,
@@ -340,6 +366,8 @@ class VisitRepository:
                     wind_speed,
                     local_hour,
                     local_date,
+                    visitor_kind or "bird",
+                    visitor_group,
                 ),
             )
         visit = self.get(vid)
@@ -418,6 +446,10 @@ class VisitRepository:
         species_id: str | None = None,
         image_source: str | None = None,
     ) -> dict[str, Any] | None:
+        # Taxonomia do Alaris Core: decide se o bicho é uma **ave** (fluxo
+        # ornitológico normal) ou um **Visitante Especial** (esquilo, gato…).
+        # Não-aves nunca entram na Life List e ganham a prateleira da Galeria.
+        visitante = descrever_visitante(common_name, scientific_name)
         with db_session(self.db_path) as conn:
             row = conn.execute(
                 "SELECT metadata_json FROM visits WHERE id = ?",
@@ -436,25 +468,38 @@ class VisitRepository:
                 identification["image_source"] = image_source
             metadata["external_identification"] = identification
             metadata["identification_status"] = "Identificado por IA Externa"
-            # Status ecológico regional (rótulo automático para o painel).
-            try:
-                from app.domain.avifauna_sul import descrever
+            metadata["visitor"] = visitante.as_metadata()
+            if visitante.eh_ave:
+                # Status ecológico regional (rótulo automático para o painel).
+                try:
+                    from app.domain.avifauna_sul import descrever
 
-                metadata["ecological"] = descrever(
-                    common_name=common_name, scientific_name=scientific_name
-                )
-            except Exception:
-                logger.debug("Falha ao rotular status ecológico", exc_info=True)
+                    metadata["ecological"] = descrever(
+                        common_name=common_name, scientific_name=scientific_name
+                    )
+                except Exception:
+                    logger.debug("Falha ao rotular status ecológico", exc_info=True)
+                clausula_species = "species_id = COALESCE(?, species_id)"
+                params_species: Any = species_id
+            else:
+                # Visitante Especial: garante que a visita NÃO fica vinculada a
+                # nenhuma espécie de ave da Life List.
+                metadata["ecological"] = None
+                clausula_species = "species_id = ?"
+                params_species = None
             conn.execute(
-                """
+                f"""
                 UPDATE visits
-                SET species = ?, species_id = COALESCE(?, species_id), metadata_json = ?
+                SET species = ?, {clausula_species}, metadata_json = ?,
+                    visitor_kind = ?, visitor_group = ?
                 WHERE id = ?
                 """,
                 (
                     species,
-                    species_id,
+                    params_species,
                     json.dumps(metadata, ensure_ascii=False),
+                    visitante.kind.value,
+                    visitante.grupo.chave if visitante.grupo else None,
                     visit_id,
                 ),
             )
@@ -495,6 +540,7 @@ class VisitRepository:
         offset: int = 0,
         camera_id: str | None = None,
         species: str | None = None,
+        visitor_kind: str | None = None,
     ) -> list[dict[str, Any]]:
         clauses: list[str] = []
         params: list[Any] = []
@@ -504,6 +550,10 @@ class VisitRepository:
         if species:
             clauses.append("v.species = ?")
             params.append(species)
+        clausula_visitante, params_visitante = _clausula_visitante("v", visitor_kind)
+        if clausula_visitante:
+            clauses.append(clausula_visitante)
+            params.extend(params_visitante)
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         params.extend([limit, offset])
         with db_session(self.db_path) as conn:
@@ -523,27 +573,34 @@ class VisitRepository:
             ).fetchall()
             return [dict(r) for r in rows]
 
-    def list_today(self, *, limit: int = 100) -> list[dict[str, Any]]:
+    def list_today(
+        self, *, limit: int = 100, visitor_kind: str | None = None
+    ) -> list[dict[str, Any]]:
         """Visitas registradas hoje (data UTC do servidor), mais recentes primeiro.
 
         Cada linha já traz ``thumbnail_path`` (miniatura capturada pelo YOLOv8),
         que o ``to_out`` converte em ``thumbnail_url`` para o painel.
+
+        ``visitor_kind`` permite separar o painel de aves do painel de
+        **Visitantes Especiais**: ``"bird"`` só aves, ``"special"`` só não-aves.
         """
         today_prefix = datetime.now(timezone.utc).date().isoformat()
+        clausula_visitante, params_visitante = _clausula_visitante("v", visitor_kind)
+        extra = f"AND {clausula_visitante}" if clausula_visitante else ""
         with db_session(self.db_path) as conn:
             rows = conn.execute(
-                """
+                f"""
                 SELECT v.*, c.name AS camera_name,
                     bs.common_name AS assigned_species_common_name,
                     bs.scientific_name AS assigned_species_scientific_name
                 FROM visits v
                 LEFT JOIN cameras c ON c.id = v.camera_id
                 LEFT JOIN bird_species bs ON bs.id = v.species_id
-                WHERE v.detected_at LIKE ?
+                WHERE v.detected_at LIKE ? {extra}
                 ORDER BY v.detected_at DESC
                 LIMIT ?
                 """,
-                (f"{today_prefix}%", limit),
+                [f"{today_prefix}%", *params_visitante, limit],
             ).fetchall()
             return [dict(r) for r in rows]
 
@@ -580,17 +637,27 @@ class VisitRepository:
             return int(row["c"]) if row else 0
 
     def stats(self) -> dict[str, Any]:
+        """Estatísticas do painel ornitológico + contadores dos Visitantes.
+
+        As métricas de aves ignoram os Visitantes Especiais (mamíferos/outros);
+        eles ganham contadores próprios (``visitors_today``, ``squirrel_*`` e a
+        estatística divertida ``seeds_stolen_today``).
+        """
         today_prefix = datetime.now(timezone.utc).date().isoformat()
         with db_session(self.db_path) as conn:
-            total = conn.execute("SELECT COUNT(*) AS c FROM visits").fetchone()["c"]
+            total = conn.execute(
+                f"SELECT COUNT(*) AS c FROM visits WHERE {SQL_SO_AVES}"
+            ).fetchone()["c"]
             today = conn.execute(
-                f"SELECT COUNT(*) AS c FROM visits WHERE {SQL_DATA_LOCAL} = ?",
+                f"SELECT COUNT(*) AS c FROM visits "
+                f"WHERE {SQL_SO_AVES} AND {SQL_DATA_LOCAL} = ?",
                 (today_prefix,),
             ).fetchone()["c"]
             species_rows = conn.execute(
-                """
+                f"""
                 SELECT species, COUNT(*) AS c
                 FROM visits
+                WHERE {SQL_SO_AVES}
                 GROUP BY species
                 ORDER BY c DESC
                 LIMIT 50
@@ -600,20 +667,34 @@ class VisitRepository:
                 f"""
                 SELECT {SQL_HORA_LOCAL_2D} AS hour, COUNT(*) AS c
                 FROM visits
-                WHERE {SQL_DATA_LOCAL} = ?
+                WHERE {SQL_SO_AVES} AND {SQL_DATA_LOCAL} = ?
                 GROUP BY hour
                 ORDER BY hour
                 """,
                 (today_prefix,),
             ).fetchall()
             last = conn.execute(
-                "SELECT detected_at FROM visits ORDER BY detected_at DESC LIMIT 1"
+                f"SELECT detected_at FROM visits WHERE {SQL_SO_AVES} "
+                "ORDER BY detected_at DESC LIMIT 1"
+            ).fetchone()
+            # --- Visitantes Silvestres / Convidados Especiais (Modo Esquilo) ---
+            visitantes_today = conn.execute(
+                f"""
+                SELECT COUNT(*) AS total,
+                    COUNT(DISTINCT COALESCE(visitor_group, 'visitante')) AS grupos,
+                    SUM(CASE WHEN visitor_group = 'esquilo' THEN 1 ELSE 0 END)
+                        AS esquilos
+                FROM visits
+                WHERE visitor_kind != 'bird' AND {SQL_DATA_LOCAL} = ?
+                """,
+                (today_prefix,),
             ).fetchone()
             cam_total = conn.execute("SELECT COUNT(*) AS c FROM cameras").fetchone()["c"]
             cam_active = conn.execute(
                 "SELECT COUNT(*) AS c FROM cameras WHERE is_active = 1"
             ).fetchone()["c"]
 
+        esquilos_hoje = int(visitantes_today["esquilos"] or 0)
         return {
             "total_visits": int(total),
             "visits_today": int(today),
@@ -624,6 +705,9 @@ class VisitRepository:
                 (r["hour"] or "00"): int(r["c"]) for r in hour_rows if r["hour"]
             },
             "last_visit_at": last["detected_at"] if last else None,
+            "visitors_today": int(visitantes_today["grupos"] or 0),
+            "squirrel_visits_today": esquilos_hoje,
+            "seeds_stolen_today": esquilos_hoje * GRUPO_ESQUILO.consumo_por_visita,
         }
 
     @staticmethod
@@ -661,6 +745,8 @@ class VisitRepository:
             assigned_species_scientific_name=row.get(
                 "assigned_species_scientific_name"
             ),
+            visitor_kind=row.get("visitor_kind") or "bird",
+            visitor_group=row.get("visitor_group"),
             temperature=_optional_float(row.get("temperature")),
             humidity=_optional_float(row.get("humidity")),
             weather_code=row.get("weather_code"),

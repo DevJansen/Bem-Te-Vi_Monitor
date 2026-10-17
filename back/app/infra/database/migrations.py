@@ -213,6 +213,23 @@ MIGRATIONS: list[tuple[int, str]] = [
         ALTER TABLE visits ADD COLUMN local_date TEXT;
         """,
     ),
+    (
+        9,
+        """
+        -- Visitantes Silvestres / Convidados Especiais ("Modo Esquilo").
+        -- O Alaris Core classifica o animal que aparece no comedouro: aves
+        -- seguem o fluxo ornitológico normal; mamíferos e outros viram
+        -- "Visitantes Especiais" (card próprio, galeria temática) e ficam
+        -- FORA da Life List e das estatísticas de aves.
+        --   visitor_kind: 'bird' | 'mammal' | 'other' (padrão 'bird').
+        --   visitor_group: grupo divertido (ex.: 'esquilo', 'felino').
+        ALTER TABLE visits ADD COLUMN visitor_kind TEXT NOT NULL DEFAULT 'bird';
+        ALTER TABLE visits ADD COLUMN visitor_group TEXT;
+
+        CREATE INDEX IF NOT EXISTS idx_visits_visitor_kind
+            ON visits(visitor_kind);
+        """,
+    ),
 ]
 
 

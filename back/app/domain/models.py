@@ -209,6 +209,11 @@ class VisitOut(BaseModel):
     species_id: str | None = None
     assigned_species_common_name: str | None = None
     assigned_species_scientific_name: str | None = None
+    # Visitantes Silvestres / Convidados Especiais (migração 9).
+    # "bird" para aves; "mammal"/"other" para quem não é ave (ex.: esquilo).
+    visitor_kind: str = "bird"
+    # Grupo divertido do visitante (ex.: "esquilo", "felino").
+    visitor_group: str | None = None
     # Condições meteorológicas no momento da visita (integração Open-Meteo).
     temperature: float | None = None
     humidity: float | None = None
@@ -390,6 +395,11 @@ class StatsOut(BaseModel):
     species_counts: dict[str, int] = Field(default_factory=dict)
     visits_by_hour: dict[str, int] = Field(default_factory=dict)
     last_visit_at: str | None = None
+    # --- Visitantes Silvestres / Convidados Especiais (Modo Esquilo) ---
+    # Contadores lúdicos do painel: quantos "ladrões de sementes" passaram hoje.
+    visitors_today: int = 0
+    squirrel_visits_today: int = 0
+    seeds_stolen_today: int = 0
     generated_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
 
 
@@ -546,6 +556,41 @@ class AchievementOut(BaseModel):
     target: int = Field(ge=1)
     progress: int = Field(ge=0)
     unlocked: bool
+    # Medalha "secreta": só revela nome/descrição depois de desbloqueada.
+    secret: bool = False
+
+
+class WildlifeVisitorStatOut(BaseModel):
+    """Contagem de um grupo de Visitantes Especiais (ex.: Esquilos)."""
+
+    group: str
+    label: str
+    icon: str
+    gallery_category: str
+    visits: int = Field(ge=0)
+    last_seen_at: str | None = None
+    # Consumo estimado (brincadeira): sementes/petiscos levados por esse grupo.
+    estimated_consumption: int = Field(ge=0)
+    unit: str = ""
+
+
+class WildlifeSummaryOut(BaseModel):
+    """Painel dos Visitantes Silvestres / Convidados Especiais (Modo Esquilo)."""
+
+    total_visits: int = Field(ge=0)
+    visits_today: int = Field(ge=0)
+    # Quantos grupos distintos apareceram hoje.
+    visitors_today: int = Field(ge=0)
+    squirrel_visits_today: int = Field(ge=0)
+    # Estatísticas divertidas do painel.
+    seeds_stolen_today: int = Field(ge=0)
+    seeds_stolen_total: int = Field(ge=0)
+    first_visit_at: str | None = None
+    has_visitors: bool = False
+    # Desbloqueio da badge secreta "O Ladrão de Sementes".
+    squirrel_badge_unlocked: bool = False
+    groups: list[WildlifeVisitorStatOut] = Field(default_factory=list)
+    generated_at: str
 
 
 class AnomalyOut(BaseModel):

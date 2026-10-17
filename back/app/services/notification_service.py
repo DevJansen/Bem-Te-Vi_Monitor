@@ -110,6 +110,11 @@ class NotificationService:
 
     def _should_notify(self, visit: VisitOut) -> bool:
         """Decide se a visita deve gerar alerta, respeitando as preferências."""
+        # Visitantes Especiais (esquilos, gatos…) não geram alertas de aves: são
+        # registrados no painel "Convidados do Jardim", mas nunca disparam
+        # Telegram/Discord/Webhook como se fossem uma ave.
+        if (visit.visitor_kind or "bird") != "bird":
+            return False
         if not self._notify_enabled():
             return False
         if visit.confidence < self._min_confidence_notify():

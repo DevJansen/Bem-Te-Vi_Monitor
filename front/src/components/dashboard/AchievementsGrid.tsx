@@ -35,6 +35,11 @@ export function AchievementsGrid({ achievements }: Props) {
             100,
             Math.round((item.progress / item.target) * 100),
           );
+          const isSecretLocked = item.secret && !item.unlocked;
+          const displayName = isSecretLocked ? "???" : item.name;
+          const displayDescription = isSecretLocked
+            ? "Medalha secreta — descubra para revelar. 🕵️"
+            : item.description;
           return (
             <article
               key={item.id}
@@ -43,7 +48,9 @@ export function AchievementsGrid({ achievements }: Props) {
                 "animate-pop-in rounded-xl border p-4 transition-transform duration-300 hover:-translate-y-1",
                 item.unlocked
                   ? "border-amber-400/40 bg-gradient-to-br from-amber-400/10 to-dark-800"
-                  : "border-dark-700 bg-dark-900/50",
+                  : isSecretLocked
+                    ? "border-violet-500/30 bg-gradient-to-br from-violet-500/5 to-dark-900/50"
+                    : "border-dark-700 bg-dark-900/50",
               )}
             >
               <div className="flex items-start gap-3">
@@ -52,11 +59,17 @@ export function AchievementsGrid({ achievements }: Props) {
                     "flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-2xl ring-2",
                     item.unlocked
                       ? "bg-amber-400/15 ring-amber-400/50"
-                      : "bg-dark-800 ring-dark-700 grayscale opacity-50",
+                      : isSecretLocked
+                        ? "bg-violet-500/10 ring-violet-500/40"
+                        : "bg-dark-800 ring-dark-700 grayscale opacity-50",
                   )}
                   aria-hidden
                 >
-                  {item.unlocked ? item.icon : <LockKeyhole className="h-5 w-5" />}
+                  {item.unlocked
+                    ? item.icon
+                    : isSecretLocked
+                      ? "🔒"
+                      : <LockKeyhole className="h-5 w-5" />}
                 </span>
                 <div className="min-w-0">
                   <h3
@@ -64,13 +77,15 @@ export function AchievementsGrid({ achievements }: Props) {
                       "font-medium",
                       item.unlocked
                         ? "text-[var(--color-text-primary)]"
-                        : "text-[var(--color-text-muted)]",
+                        : isSecretLocked
+                          ? "text-violet-300"
+                          : "text-[var(--color-text-muted)]",
                     )}
                   >
-                    {item.name}
+                    {displayName}
                   </h3>
                   <p className="mt-0.5 text-xs leading-snug text-[var(--color-text-muted)]">
-                    {item.description}
+                    {displayDescription}
                   </p>
                 </div>
               </div>
@@ -82,15 +97,21 @@ export function AchievementsGrid({ achievements }: Props) {
                       "h-full rounded-full transition-[width] duration-700 ease-out",
                       item.unlocked
                         ? "bg-gradient-to-r from-amber-500 to-amber-300"
-                        : "bg-emerald-500/70",
+                        : isSecretLocked
+                          ? "bg-violet-500/60"
+                          : "bg-emerald-500/70",
                     )}
                     style={{ width: `${progressPct}%` }}
                   />
                 </div>
                 <p className="mt-1 text-[11px] tabular-nums text-[var(--color-text-muted)]">
                   {item.unlocked
-                    ? "Conquistada 🎉"
-                    : `${item.progress} de ${item.target}`}
+                    ? isSecretLocked
+                      ? "Desbloqueada! 🎉"
+                      : "Conquistada 🎉"
+                    : isSecretLocked
+                      ? "???"
+                      : `${item.progress} de ${item.target}`}
                 </p>
               </div>
             </article>

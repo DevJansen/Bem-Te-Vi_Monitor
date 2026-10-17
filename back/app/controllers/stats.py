@@ -32,6 +32,9 @@ async def get_stats() -> StatsOut:
             species_counts=raw["species_counts"],
             visits_by_hour=raw["visits_by_hour"],
             last_visit_at=raw["last_visit_at"],
+            visitors_today=raw.get("visitors_today", 0),
+            squirrel_visits_today=raw.get("squirrel_visits_today", 0),
+            seeds_stolen_today=raw.get("seeds_stolen_today", 0),
             generated_at=datetime.now(timezone.utc).isoformat(),
         )
     except Exception as exc:

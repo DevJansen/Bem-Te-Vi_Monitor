@@ -20,9 +20,26 @@ from pathlib import Path
 
 from app.core.config import get_settings
 from app.domain.avifauna_sul import classificar_status
+from app.domain.fauna_taxonomy import classificar_visitante, FaunaKind
 from app.infra.database.repository import BirdSpeciesRepository
 
 logger = logging.getLogger(__name__)
+
+
+class EspecieNaoAveError(ValueError):
+    """Levantado quando o nome **não é de uma ave** (ex.: um esquilo).
+
+    É o "guarda anti-esquilo" do Alaris Core: impede que mamíferos entrem na
+    Life List ("Minhas Aves") como se fossem novas espécies de ave. Os
+    visitantes silvestres são registrados à parte, em "Convidados do Jardim".
+    """
+
+    def __init__(self, common_name: str, scientific_name: str | None) -> None:
+        self.common_name = common_name
+        self.scientific_name = scientific_name
+        super().__init__(
+            f"'{common_name}' não é uma ave — registrado como Visitante Especial."
+        )
 
 
 def _normalizar(texto: str | None) -> str:
@@ -106,7 +123,14 @@ def match_or_create_species(
       preenchida com a imagem tratada desta captura.
     - Se for **espécie nova**, cria o card estruturado no catálogo (Life List),
       já com o status ecológico regional e a melhor foto tratada disponível.
+
+    Levanta :class:`EspecieNaoAveError` quando o nome é de um animal que **não é
+    ave** (ex.: esquilo) — o chamador registra o bicho como Visitante Especial,
+    fora da Life List.
     """
+    if classificar_visitante(common_name, scientific_name) != FaunaKind.AVE:
+        raise EspecieNaoAveError(common_name, scientific_name)
+
     repo = BirdSpeciesRepository(get_settings().db_path)
     existente = _buscar_existente(repo, scientific_name, common_name)
     if existente is not None:
@@ -152,7 +176,10 @@ def find_or_create_species(
     description: str = "",
     reference_image_source: Path | str | None = None,
 ) -> dict:
-    """Atalho de compatibilidade: devolve apenas a espécie (sem o ``created``)."""
+    """Atalho de compatibilidade: devolve apenas a espécie (sem o ``created``).
+
+    Propaga :class:`EspecieNaoAveError` quando o nome não é de uma ave.
+    """
     return match_or_create_species(
         common_name=common_name,
         scientific_name=scientific_name,

@@ -40,6 +40,7 @@ import type {
   TimelapseGenerateResult,
   WeatherCorrelation,
   WeatherInsights,
+  WildlifeSummary,
   Zone,
 } from "@/types";
 
@@ -446,10 +447,17 @@ export async function fetchAchievements(): Promise<Achievement[]> {
   return data;
 }
 
-/** Visitas de hoje (mais recentes primeiro), com a miniatura do YOLOv8. */
-export async function fetchTodayVisits(limit = 50): Promise<BirdVisit[]> {
+/** Resumo dos Visitantes Silvestres / Convidados Especiais (Modo Esquilo). */
+export async function fetchWildlifeSummary(): Promise<WildlifeSummary> {
+  const { data } = await api.get<WildlifeSummary>("/wildlife/summary");
+  return data;
+}
+export async function fetchTodayVisits(
+  limit = 50,
+  visitorKind?: "bird" | "special" | "mammal" | "other",
+): Promise<BirdVisit[]> {
   const { data } = await api.get<BirdVisit[]>("/visits/today", {
-    params: { limit },
+    params: { limit, visitor_kind: visitorKind },
   });
   return data;
 }

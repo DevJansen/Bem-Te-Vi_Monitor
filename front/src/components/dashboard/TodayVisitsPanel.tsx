@@ -8,10 +8,11 @@ import {
   Radar,
   RefreshCw,
   Sparkles,
+  Squirrel,
   Star,
 } from "lucide-react";
-import type { BirdSpecies, BirdVisit } from "@/types";
-import { fetchTodayVisits, getErrorMessage, resolveMediaUrl, visitCropUrl } from "@/services/api";
+import type { BirdSpecies, BirdVisit, WildlifeSummary } from "@/types";
+import { fetchTodayVisits, fetchWildlifeSummary, getErrorMessage, resolveMediaUrl, visitCropUrl } from "@/services/api";
 import { usePolling } from "@/hooks/usePolling";
 import { cn } from "@/utils/cn";
 import { formatTime } from "@/utils/format";
@@ -29,12 +30,32 @@ const PAGE_SIZE = 5;
 /** Limite buscado na API: cobre todas as visitas do dia (máx. aceito: 200). */
 const FETCH_LIMIT = 200;
 
-async function loadTodayVisits(): Promise<BirdVisit[]> {
+async function loadBirdVisits(): Promise<BirdVisit[]> {
   try {
     return await fetchTodayVisits(FETCH_LIMIT);
   } catch (error) {
     throw new Error(
       getErrorMessage(error, "Não foi possível carregar as visitas de hoje."),
+    );
+  }
+}
+
+async function loadVisitorVisits(): Promise<BirdVisit[]> {
+  try {
+    return await fetchTodayVisits(FETCH_LIMIT, "special");
+  } catch (error) {
+    throw new Error(
+      getErrorMessage(error, "Não foi possível carregar os Visitantes Especiais."),
+    );
+  }
+}
+
+async function loadWildlifeSummary(): Promise<WildlifeSummary> {
+  try {
+    return await fetchWildlifeSummary();
+  } catch (error) {
+    throw new Error(
+      getErrorMessage(error, "Não foi possível carregar os Visitantes Especiais."),
     );
   }
 }
@@ -53,8 +74,14 @@ type Props = {
  * Alaris Core.
  */
 export function TodayVisitsPanel({ species = [], onOpenInGallery }: Props) {
-  const query = usePolling(loadTodayVisits, 8_000);
-  const visits = useMemo(() => query.data ?? [], [query.data]);
+  const [view, setView] = useState<"birds" | "visitors">("birds");
+
+  const birdsQuery = usePolling(loadBirdVisits, 8_000, view === "birds");
+  const visitorsQuery = usePolling(loadVisitorVisits, 8_000, view === "visitors");
+  const wildlifeQuery = usePolling(loadWildlifeSummary, 15_000);
+
+  const activeQuery = view === "birds" ? birdsQuery : visitorsQuery;
+  const visits = useMemo(() => activeQuery.data ?? [], [activeQuery.data]);
 
   const [page, setPage] = useState(1);
   const [selectedVisit, setSelectedVisit] = useState<BirdVisit | null>(null);
@@ -65,6 +92,11 @@ export function TodayVisitsPanel({ species = [], onOpenInGallery }: Props) {
     const id = window.setInterval(() => setNow(Date.now()), 5_000);
     return () => window.clearInterval(id);
   }, []);
+
+  // Volta à primeira página ao trocar de visão.
+  useEffect(() => {
+    setPage(1);
+  }, [view]);
 
   const totalPages = Math.max(1, Math.ceil(visits.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -108,7 +140,7 @@ export function TodayVisitsPanel({ species = [], onOpenInGallery }: Props) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {freshCount > 0 ? (
+          {freshCount > 0 && view === "birds" ? (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-500/15 px-2.5 py-1 text-[10px] font-semibold text-emerald-300">
               <span className="relative flex h-1.5 w-1.5">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
@@ -124,22 +156,66 @@ export function TodayVisitsPanel({ species = [], onOpenInGallery }: Props) {
           ) : null}
           <button
             type="button"
-            onClick={() => void query.refresh()}
-            disabled={query.loading}
+            onClick={() => void activeQuery.refresh()}
+            disabled={activeQuery.loading}
             aria-label="Atualizar visitas de hoje"
             className="rounded-md p-1.5 text-[var(--color-text-muted)] transition hover:text-emerald-300 disabled:opacity-50"
           >
-            <RefreshCw className={cn("h-4 w-4", query.loading && "animate-spin")} />
+            <RefreshCw className={cn("h-4 w-4", activeQuery.loading && "animate-spin")} />
           </button>
         </div>
       </div>
 
+      {/* Aba segmentada: Aves × Visitantes Especiais (Modo Esquilo) */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-dark-700 bg-dark-900/40 px-4 py-2">
+        <button
+          type="button"
+          onClick={() => setView("birds")}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition",
+            view === "birds"
+              ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+              : "text-[var(--color-text-muted)] hover:text-emerald-300",
+          )}
+        >
+          <Bird className="h-3.5 w-3.5" />
+          Aves
+        </button>
+        <button
+          type="button"
+          onClick={() => setView("visitors")}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition",
+            view === "visitors"
+              ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
+              : "text-[var(--color-text-muted)] hover:text-amber-300",
+          )}
+        >
+          <Squirrel className="h-3.5 w-3.5" />
+          Visitantes Especiais
+        </button>
+
+        {view === "visitors" ? (
+          <div className="ml-auto flex flex-wrap items-center gap-2 text-[10px] font-semibold">
+            <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-amber-300">
+              🐿️ {wildlifeQuery.data?.squirrel_visits_today ?? 0} hoje
+            </span>
+            <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-amber-300">
+              🌰 {wildlifeQuery.data?.seeds_stolen_today ?? 0} sementes roubadas hoje
+            </span>
+            <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-amber-300">
+              Total: {wildlifeQuery.data?.total_visits ?? 0} aparições
+            </span>
+          </div>
+        ) : null}
+      </div>
+
       <div className="p-4">
-        {query.error ? (
+        {activeQuery.error ? (
           <p role="alert" className="text-sm text-red-300">
-            {query.error}
+            {activeQuery.error}
           </p>
-        ) : query.loading && visits.length === 0 ? (
+        ) : activeQuery.loading && visits.length === 0 ? (
           <LoadingSkeleton />
         ) : visits.length === 0 ? (
           <EmptyState />

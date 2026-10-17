@@ -12,10 +12,12 @@ from app.infra.database.repository import (
     SQL_DATA_LOCAL,
     SQL_HORA_LOCAL,
     SQL_HORA_LOCAL_2D,
+    SQL_SO_AVES,
     _media_url,
     _optional_float,
 )
 from app.domain.avifauna_sul import descrever, info_especie
+from app.domain.fauna_taxonomy import grupo_por_chave
 from app.core.config import get_settings
 from app.services.weather_service import category_for_label
 
@@ -109,11 +111,12 @@ class AnalyticsRepository:
                     SUM(CASE WHEN detected_at >= ? THEN 1 ELSE 0 END) AS visits_last_7_days,
                     COALESCE(AVG(dwell_seconds), 0) AS average_duration_seconds
                 FROM visits
+                WHERE {SQL_SO_AVES}
                 """,
                 (today_prefix, week_start),
             ).fetchone()
             leader = conn.execute(
-                """
+                f"""
                 SELECT COALESCE(
                     bs.common_name,
                     NULLIF(v.species, 'bird'),
@@ -121,6 +124,7 @@ class AnalyticsRepository:
                 ) AS species_name, COUNT(*) AS visit_count
                 FROM visits v
                 LEFT JOIN bird_species bs ON bs.id = v.species_id
+                WHERE {SQL_SO_AVES}
                 GROUP BY species_name
                 ORDER BY visit_count DESC, species_name COLLATE NOCASE ASC
                 LIMIT 1
@@ -130,7 +134,7 @@ class AnalyticsRepository:
                 f"""
                 SELECT {SQL_HORA_LOCAL_2D} AS hour, COUNT(*) AS visit_count
                 FROM visits
-                WHERE length(detected_at) >= 13
+                WHERE {SQL_SO_AVES} AND length(detected_at) >= 13
                 GROUP BY hour
                 ORDER BY visit_count DESC, hour ASC
                 LIMIT 1
@@ -156,7 +160,7 @@ class AnalyticsRepository:
         """
         with db_session(self.db_path) as conn:
             totals = conn.execute(
-                """
+                f"""
                 SELECT
                     COUNT(*) AS total_visits,
                     SUM(
@@ -172,10 +176,11 @@ class AnalyticsRepository:
                         CASE WHEN weather_code IS NOT NULL THEN temperature END
                     ) AS max_temperature
                 FROM visits
+                WHERE {SQL_SO_AVES}
                 """
             ).fetchone()
             condition_rows = conn.execute(
-                """
+                f"""
                 SELECT
                     weather_code AS condition,
                     COUNT(*) AS visits,
@@ -183,7 +188,7 @@ class AnalyticsRepository:
                     AVG(humidity) AS avg_humidity,
                     AVG(wind_speed) AS avg_wind_speed
                 FROM visits
-                WHERE weather_code IS NOT NULL
+                WHERE {SQL_SO_AVES} AND weather_code IS NOT NULL
                 GROUP BY weather_code
                 ORDER BY visits DESC, weather_code COLLATE NOCASE ASC
                 """
@@ -195,7 +200,7 @@ class AnalyticsRepository:
                     COUNT(*) AS visits,
                     AVG(temperature) AS avg_temperature
                 FROM visits
-                WHERE length(detected_at) >= 13
+                WHERE {SQL_SO_AVES} AND length(detected_at) >= 13
                 GROUP BY hour
                 ORDER BY visits DESC, hour ASC
                 LIMIT 5
@@ -278,7 +283,7 @@ class AnalyticsRepository:
                 f"""
                 SELECT {SQL_HORA_LOCAL_2D} AS hour, COUNT(*) AS visit_count
                 FROM visits
-                WHERE length(detected_at) >= 13
+                WHERE {SQL_SO_AVES} AND length(detected_at) >= 13
                 GROUP BY hour
                 """
             ).fetchall()
@@ -290,9 +295,11 @@ class AnalyticsRepository:
         ]
 
     def total_visits(self) -> int:
-        """Número total de visitas registradas (todas as colunas do histórico)."""
+        """Número total de visitas de **aves** (Visitantes Especiais à parte)."""
         with db_session(self.db_path) as conn:
-            row = conn.execute("SELECT COUNT(*) AS c FROM visits").fetchone()
+            row = conn.execute(
+                f"SELECT COUNT(*) AS c FROM visits WHERE {SQL_SO_AVES}"
+            ).fetchone()
         return int(row["c"]) if row else 0
 
     def weather_visit_rows(self) -> list[dict[str, Any]]:
@@ -318,7 +325,8 @@ class AnalyticsRepository:
                     bs.scientific_name AS scientific_name
                 FROM visits v
                 LEFT JOIN bird_species bs ON bs.id = v.species_id
-                WHERE v.temperature IS NOT NULL OR v.weather_code IS NOT NULL
+                WHERE (v.temperature IS NOT NULL OR v.weather_code IS NOT NULL)
+                    AND v.visitor_kind = 'bird'
                 ORDER BY v.detected_at ASC
                 """
             ).fetchall()
@@ -598,6 +606,8 @@ class AnalyticsRepository:
 
         Cada conquista devolve o progresso atual e o alvo, permitindo que o
         front-end desenhe a barra de progresso e o estado bloqueado/desbloqueado.
+        As medalhas **secretas** (``secret=True``) só revelam nome e descrição
+        depois de desbloqueadas — um easter egg para o observador curioso.
         """
         with db_session(self.db_path) as conn:
             totals = conn.execute(
@@ -607,29 +617,32 @@ class AnalyticsRepository:
                     COUNT(DISTINCT species_id) AS species_observed,
                     COUNT(DISTINCT {SQL_DATA_LOCAL}) AS active_days
                 FROM visits
+                WHERE {SQL_SO_AVES}
                 """
             ).fetchone()
             dawn_count = conn.execute(
                 f"""
                 SELECT COUNT(*) AS c FROM visits
-                WHERE length(detected_at) >= 13
+                WHERE {SQL_SO_AVES} AND length(detected_at) >= 13
                     AND {SQL_HORA_LOCAL} < 6
                 """
             ).fetchone()["c"]
             night_count = conn.execute(
                 f"""
                 SELECT COUNT(*) AS c FROM visits
-                WHERE length(detected_at) >= 13
+                WHERE {SQL_SO_AVES} AND length(detected_at) >= 13
                     AND {SQL_HORA_LOCAL} >= 20
                 """
             ).fetchone()["c"]
             rain_count = conn.execute(
-                """
+                f"""
                 SELECT COUNT(*) AS c FROM visits
-                WHERE weather_code LIKE '%Chuva%'
+                WHERE {SQL_SO_AVES} AND (
+                    weather_code LIKE '%Chuva%'
                     OR weather_code LIKE '%Chuvisco%'
                     OR weather_code LIKE '%Pancada%'
                     OR weather_code LIKE '%Tempestade%'
+                )
                 """
             ).fetchone()["c"]
             rare_count = conn.execute(
@@ -643,6 +656,10 @@ class AnalyticsRepository:
                 """,
                 (RARITY_RARE_MAX,),
             ).fetchone()["c"]
+            # Badge secreta "O Ladrão de Sementes": esquilos no comedouro.
+            squirrel_count = conn.execute(
+                "SELECT COUNT(*) AS c FROM visits WHERE visitor_group = 'esquilo'"
+            ).fetchone()["c"]
 
         total_visits = int(totals["total_visits"] or 0)
         species_observed = int(totals["species_observed"] or 0)
@@ -651,9 +668,10 @@ class AnalyticsRepository:
         night_count = int(night_count or 0)
         rain_count = int(rain_count or 0)
         rare_count = int(rare_count or 0)
+        squirrel_count = int(squirrel_count or 0)
 
-        # (id, nome, descrição, ícone, alvo, progresso atual)
-        definitions: list[tuple[str, str, str, str, int, int]] = [
+        # (id, nome, descrição, ícone, alvo, progresso atual, secreta)
+        definitions: list[tuple[str, str, str, str, int, int, bool]] = [
             (
                 "primeira_visita",
                 "Primeira Visita",
@@ -661,6 +679,7 @@ class AnalyticsRepository:
                 "🐣",
                 1,
                 total_visits,
+                False,
             ),
             (
                 "explorador",
@@ -669,6 +688,7 @@ class AnalyticsRepository:
                 "🔭",
                 3,
                 species_observed,
+                False,
             ),
             (
                 "colecionador",
@@ -677,6 +697,7 @@ class AnalyticsRepository:
                 "📖",
                 5,
                 species_observed,
+                False,
             ),
             (
                 "naturalista",
@@ -685,6 +706,7 @@ class AnalyticsRepository:
                 "🌿",
                 10,
                 species_observed,
+                False,
             ),
             (
                 "madrugador",
@@ -693,6 +715,7 @@ class AnalyticsRepository:
                 "🌅",
                 1,
                 dawn_count,
+                False,
             ),
             (
                 "coruja",
@@ -701,6 +724,7 @@ class AnalyticsRepository:
                 "🌙",
                 1,
                 night_count,
+                False,
             ),
             (
                 "cacador_de_raridades",
@@ -709,6 +733,7 @@ class AnalyticsRepository:
                 "💎",
                 1,
                 rare_count,
+                False,
             ),
             (
                 "observador_de_chuva",
@@ -717,6 +742,7 @@ class AnalyticsRepository:
                 "🌧️",
                 1,
                 rain_count,
+                False,
             ),
             (
                 "dedicado",
@@ -725,6 +751,7 @@ class AnalyticsRepository:
                 "🏅",
                 100,
                 total_visits,
+                False,
             ),
             (
                 "constante",
@@ -733,6 +760,17 @@ class AnalyticsRepository:
                 "📅",
                 7,
                 active_days,
+                False,
+            ),
+            # --- Badge secreta: easter egg do "Modo Esquilo" -------------------
+            (
+                "ladrao_de_sementes",
+                "O Ladrão de Sementes",
+                "Flagre um esquilo saqueando o comedouro. 🥜",
+                "🐿️",
+                1,
+                squirrel_count,
+                True,
             ),
         ]
 
@@ -745,6 +783,89 @@ class AnalyticsRepository:
                 "target": target,
                 "progress": min(progress, target),
                 "unlocked": progress >= target,
+                "secret": secret,
             }
-            for (badge_id, name, description, icon, target, progress) in definitions
+            for (badge_id, name, description, icon, target, progress, secret) in definitions
         ]
+
+    def wildlife_summary(self) -> dict[str, Any]:
+        """Painel dos **Visitantes Silvestres / Convidados Especiais**.
+
+        Resume as aparições de não-aves (esquilos, gatos, gambás…) no jardim:
+        total histórico, o que passou hoje, por grupo, e as estatísticas
+        divertidas do "Modo Esquilo" (sementes roubadas, badge secreta).
+        """
+        today_prefix = datetime.now(timezone.utc).date().isoformat()
+        with db_session(self.db_path) as conn:
+            totals = conn.execute(
+                """
+                SELECT
+                    COUNT(*) AS total_visits,
+                    MIN(detected_at) AS first_visit_at
+                FROM visits
+                WHERE visitor_kind != 'bird'
+                """
+            ).fetchone()
+            hoje = conn.execute(
+                f"""
+                SELECT
+                    COUNT(*) AS total,
+                    COUNT(DISTINCT COALESCE(visitor_group, 'visitante')) AS grupos,
+                    SUM(CASE WHEN visitor_group = 'esquilo' THEN 1 ELSE 0 END)
+                        AS esquilos
+                FROM visits
+                WHERE visitor_kind != 'bird' AND {SQL_DATA_LOCAL} = ?
+                """,
+                (today_prefix,),
+            ).fetchone()
+            group_rows = conn.execute(
+                """
+                SELECT
+                    COALESCE(visitor_group, 'visitante') AS grupo,
+                    COUNT(*) AS visits,
+                    MAX(detected_at) AS last_seen_at
+                FROM visits
+                WHERE visitor_kind != 'bird'
+                GROUP BY grupo
+                ORDER BY visits DESC, grupo ASC
+                """
+            ).fetchall()
+
+        total_visits = int(totals["total_visits"] or 0)
+        grupos: list[dict[str, Any]] = []
+        seeds_stolen_total = 0
+        for row in group_rows:
+            grupo = grupo_por_chave(row["grupo"])
+            visits = int(row["visits"])
+            consumo = visits * grupo.consumo_por_visita
+            seeds_stolen_total += consumo
+            grupos.append(
+                {
+                    "group": grupo.chave,
+                    "label": grupo.rotulo,
+                    "icon": grupo.icone,
+                    "gallery_category": grupo.categoria_galeria,
+                    "visits": visits,
+                    "last_seen_at": row["last_seen_at"],
+                    "estimated_consumption": consumo,
+                    "unit": grupo.unidade,
+                }
+            )
+
+        esquilos_hoje = int(hoje["esquilos"] or 0)
+        return {
+            "total_visits": total_visits,
+            "visits_today": int(hoje["total"] or 0),
+            "visitors_today": int(hoje["grupos"] or 0),
+            "squirrel_visits_today": esquilos_hoje,
+            "seeds_stolen_today": esquilos_hoje
+            * grupo_por_chave("esquilo").consumo_por_visita,
+            "seeds_stolen_total": seeds_stolen_total,
+            "first_visit_at": totals["first_visit_at"],
+            "has_visitors": total_visits > 0,
+            "squirrel_badge_unlocked": any(
+                item["group"] == "esquilo" for item in grupos
+            ),
+            "groups": grupos,
+            "generated_at": datetime.now(timezone.utc).isoformat() + "Z",
+        }
