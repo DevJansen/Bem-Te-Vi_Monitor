@@ -8,7 +8,13 @@ from pathlib import Path
 from typing import Any
 
 from app.infra.database.connection import db_session
-from app.infra.database.repository import _media_url, _optional_float
+from app.infra.database.repository import (
+    SQL_DATA_LOCAL,
+    SQL_HORA_LOCAL,
+    SQL_HORA_LOCAL_2D,
+    _media_url,
+    _optional_float,
+)
 from app.domain.avifauna_sul import descrever, info_especie
 from app.core.config import get_settings
 from app.services.weather_service import category_for_label
@@ -96,15 +102,15 @@ class AnalyticsRepository:
 
         with db_session(self.db_path) as conn:
             counts = conn.execute(
-                """
+                f"""
                 SELECT
                     COUNT(*) AS total_visits,
-                    SUM(CASE WHEN detected_at LIKE ? THEN 1 ELSE 0 END) AS visits_today,
+                    SUM(CASE WHEN {SQL_DATA_LOCAL} = ? THEN 1 ELSE 0 END) AS visits_today,
                     SUM(CASE WHEN detected_at >= ? THEN 1 ELSE 0 END) AS visits_last_7_days,
                     COALESCE(AVG(dwell_seconds), 0) AS average_duration_seconds
                 FROM visits
                 """,
-                (f"{today_prefix}%", week_start),
+                (today_prefix, week_start),
             ).fetchone()
             leader = conn.execute(
                 """
@@ -121,8 +127,8 @@ class AnalyticsRepository:
                 """
             ).fetchone()
             peak = conn.execute(
-                """
-                SELECT substr(detected_at, 12, 2) AS hour, COUNT(*) AS visit_count
+                f"""
+                SELECT {SQL_HORA_LOCAL_2D} AS hour, COUNT(*) AS visit_count
                 FROM visits
                 WHERE length(detected_at) >= 13
                 GROUP BY hour
@@ -183,9 +189,9 @@ class AnalyticsRepository:
                 """
             ).fetchall()
             hour_rows = conn.execute(
-                """
+                f"""
                 SELECT
-                    substr(detected_at, 12, 2) AS hour,
+                    {SQL_HORA_LOCAL_2D} AS hour,
                     COUNT(*) AS visits,
                     AVG(temperature) AS avg_temperature
                 FROM visits
@@ -269,8 +275,8 @@ class AnalyticsRepository:
     def hourly_distribution(self) -> list[dict[str, int | str]]:
         with db_session(self.db_path) as conn:
             rows = conn.execute(
-                """
-                SELECT substr(detected_at, 12, 2) AS hour, COUNT(*) AS visit_count
+                f"""
+                SELECT {SQL_HORA_LOCAL_2D} AS hour, COUNT(*) AS visit_count
                 FROM visits
                 WHERE length(detected_at) >= 13
                 GROUP BY hour
@@ -420,12 +426,12 @@ class AnalyticsRepository:
                 return None
 
             stats = conn.execute(
-                """
+                f"""
                 SELECT
                     COUNT(*) AS visits_count,
                     MIN(detected_at) AS first_seen_at,
                     MAX(detected_at) AS last_seen_at,
-                    COUNT(DISTINCT substr(detected_at, 1, 10)) AS active_days,
+                    COUNT(DISTINCT {SQL_DATA_LOCAL}) AS active_days,
                     AVG(dwell_seconds) AS average_dwell_seconds,
                     AVG(temperature) AS avg_temperature,
                     MIN(temperature) AS min_temperature,
@@ -437,9 +443,9 @@ class AnalyticsRepository:
                 (species_id,),
             ).fetchone()
             hourly_rows = conn.execute(
-                """
+                f"""
                 SELECT
-                    substr(detected_at, 12, 2) AS hour,
+                    {SQL_HORA_LOCAL_2D} AS hour,
                     COUNT(*) AS visits,
                     AVG(temperature) AS avg_temperature
                 FROM visits
@@ -595,26 +601,26 @@ class AnalyticsRepository:
         """
         with db_session(self.db_path) as conn:
             totals = conn.execute(
-                """
+                f"""
                 SELECT
                     COUNT(*) AS total_visits,
                     COUNT(DISTINCT species_id) AS species_observed,
-                    COUNT(DISTINCT substr(detected_at, 1, 10)) AS active_days
+                    COUNT(DISTINCT {SQL_DATA_LOCAL}) AS active_days
                 FROM visits
                 """
             ).fetchone()
             dawn_count = conn.execute(
-                """
+                f"""
                 SELECT COUNT(*) AS c FROM visits
                 WHERE length(detected_at) >= 13
-                    AND CAST(substr(detected_at, 12, 2) AS INTEGER) < 6
+                    AND {SQL_HORA_LOCAL} < 6
                 """
             ).fetchone()["c"]
             night_count = conn.execute(
-                """
+                f"""
                 SELECT COUNT(*) AS c FROM visits
                 WHERE length(detected_at) >= 13
-                    AND CAST(substr(detected_at, 12, 2) AS INTEGER) >= 20
+                    AND {SQL_HORA_LOCAL} >= 20
                 """
             ).fetchone()["c"]
             rain_count = conn.execute(

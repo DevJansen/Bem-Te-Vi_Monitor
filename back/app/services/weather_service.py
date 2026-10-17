@@ -127,6 +127,20 @@ def weather_category(code: int | None) -> str:
     return CATEGORY_OTHER
 
 
+def wmo_label(code: int | None) -> str:
+    """Rótulo legível em pt-BR para um código WMO (ex.: 61 → "Chuva leve")."""
+    if code is None:
+        return "Sem dados"
+    return _WMO_LABELS.get(code, "Condição desconhecida")
+
+
+def wmo_icon(code: int | None) -> str:
+    """Emoji do céu para um código WMO (ex.: 0 → ☀️)."""
+    if code is None:
+        return "🌡️"
+    return _WMO_ICONS.get(code, "🌡️")
+
+
 # Categoria a partir do rótulo persistido (o rótulo é o que vai para o SQLite).
 _LABEL_CATEGORY: dict[str, str] = {
     label: weather_category(code) for code, label in _WMO_LABELS.items()
@@ -240,14 +254,14 @@ class WeatherService:
         except (TypeError, ValueError):
             code = None
 
-        condition = _WMO_LABELS.get(code, "Condição desconhecida") if code is not None else "Sem dados"
+        condition = wmo_label(code)
         return WeatherSnapshot(
             temperature=_as_float(current.get("temperature_2m")),
             humidity=_as_float(current.get("relative_humidity_2m")),
             code=code,
             condition=condition,
             category=weather_category(code),
-            icon=_WMO_ICONS.get(code, "🌡️") if code is not None else "🌡️",
+            icon=wmo_icon(code),
             wind_speed=_as_float(current.get("wind_speed_10m")),
             fetched_at=datetime.now(timezone.utc).isoformat(),
             source="open-meteo",

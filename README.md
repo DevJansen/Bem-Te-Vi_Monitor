@@ -306,11 +306,21 @@ Se o painel mostrar “Não foi possível conectar à API”, confirme se a jane
 3. Para uma câmera IP, stream externo ou **live do YouTube**, cole a **URL do
    Stream ao Vivo** (`rtsp://…`, `https://…/stream.m3u8`, `http://…`,
    `https://www.youtube.com/watch?v=…`). O tipo (RTSP/HLS/HTTP/WebRTC) é
-   **detectado automaticamente** a partir do link. O campo **Local**
-   identifica onde a câmera está (ex.: "Bebedouro do vizinho").
+   **detectado automaticamente** a partir do link.
 4. **Login e senha são opcionais.** Links públicos/abertos conectam direto, sem
    credenciais. Se a câmera exigir autenticação, abra a seção
    **"Esta câmera exige login e senha? (Opcional)"** e preencha usuário/senha.
+5. **Localização global (opcional).** Para câmeras fora do seu fuso — lives do
+   YouTube e streams de outros países — abra a seção **"Localização & fuso
+   horário (Opcional)"**: informe a **Localidade / Cidade / País** (ex.:
+   *Costa Rica - Comedouro de Beija-Flores*) e use **Buscar** para resolver a
+   cidade em **coordenadas e fuso IANA** automaticamente (seletor de cidade
+   inteligente), ou preencha latitude/longitude/fuso à mão. A partir daí o
+   painel daquela câmera exibe o **clima e o horário locais do jardim** em tempo
+   real (temperatura, condição e a hora exata de lá — ex.: sol na Costa Rica
+   enquanto é noite no Brasil) e os **gráficos de horário de pico** passam a usar
+   o fuso da câmera, evitando distorções nas estatísticas (ver
+   `back\app\services\camera_weather.py`).
 
 As credenciais (usuário/senha) são armazenadas criptografadas localmente com
 **Fernet**. A chave mestra vem de `ENCRYPTION_KEY` no `.env`; se não definida,
@@ -553,6 +563,14 @@ visitas** e agregam a nova mídia ao card existente (sem duplicatas); espécies
 **novas** ganham automaticamente um card no Álbum de Conquistas, com a melhor
 foto tratada e o status ecológico regional.
 
+**8. Horário local por câmera (fuso global).** Cada visita guarda a **hora e a
+data locais do jardim** (fuso IANA cadastrado na câmera — migração 8). Com isso,
+os histogramas de horário de pico, o "pico do dia" e as medalhas de
+madrugada/noite do Alaris Core são calculados pelo **relógio do jardim**, e não
+pelo UTC: uma visita às 10h na Costa Rica não aparece mais como "madrugada" no
+Brasil. Câmeras sem fuso cadastrado continuam usando o UTC (comportamento
+anterior, sem quebrar o histórico).
+
 **6. IA visível — Alaris Core.** O motor de IA do AviaWatch assina como
 **Alaris Core v1.0** (a assinatura aparece em `GET /api/ai/status` e nos metadados
 de cada visita). O painel ganha um **Núcleo de IA** (widget futurista em Dark Mode
@@ -773,6 +791,8 @@ aviawatch/
 | GET/POST | `/api/cameras` | Listar / criar câmeras (cada item inclui `night_mode`, se a visão noturna está ativa) |
 | GET/PUT/DELETE | `/api/cameras/{id}` | Detalhe / atualizar / remover |
 | GET/PUT | `/api/cameras/{id}/zones` | Carregar / salvar polígonos de inclusão e exclusão |
+| GET | `/api/cameras/{id}/weather` | Clima e horário **locais** do jardim da câmera (Open-Meteo; requer coordenadas) |
+| GET | `/api/weather/geocode?q=` | Seletor de cidade inteligente: nome → coordenadas + fuso IANA |
 | GET | `/api/settings/roi?camera_id={id}` | Ler as Zonas de Interesse (ROI) retangulares da câmera |
 | POST | `/api/settings/roi` | Salvar as ROI retangulares (`{camera_id, zones:[{type, x1, y1, x2, y2}]}`) e aplicar em runtime |
 | GET | `/api/visits` | Eventos de aves |

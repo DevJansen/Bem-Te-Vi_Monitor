@@ -1,6 +1,17 @@
-import type { ReactNode } from "react";
-import { Crosshair, Frame, Moon, Plus, Trash2, Wifi, WifiOff } from "lucide-react";
-import type { Camera } from "@/types";
+import { useEffect, useState, type ReactNode } from "react";
+import {
+  Clock,
+  Crosshair,
+  Frame,
+  Globe2,
+  Moon,
+  Plus,
+  Trash2,
+  Wifi,
+  WifiOff,
+} from "lucide-react";
+import type { Camera, CameraWeather } from "@/types";
+import { getCameraWeather } from "@/services/api";
 import { StatusDot } from "@/components/common/StatusDot";
 import { statusLabel } from "@/utils/format";
 import { cn } from "@/utils/cn";
@@ -112,6 +123,9 @@ export function CameraGrid({
                   ) : null}
                 </div>
 
+                {/* Clima e horário locais do jardim (câmeras globais/remotas). */}
+                <CameraLocalWeather camera={camera} />
+
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-dark-700 pt-3">
                   <label className="flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
                     <input
@@ -176,5 +190,77 @@ function Badge({
     >
       {children}
     </span>
+  );
+}
+
+/**
+ * Faixa de clima/horário **locais** do jardim de uma câmera remota.
+ *
+ * Só aparece quando a câmera tem coordenadas cadastradas. Busca o clima da
+ * Open-Meteo (temperatura, condição e a hora local exata) — se a câmera ainda
+ * não tiver clima disponível (offline), mostra apenas a localidade e o fuso.
+ */
+function CameraLocalWeather({ camera }: { camera: Camera }) {
+  const [weather, setWeather] = useState<CameraWeather | null>(null);
+  const temCoordenadas =
+    camera.latitude != null && camera.longitude != null;
+
+  useEffect(() => {
+    if (!temCoordenadas) return;
+    let ativo = true;
+    void (async () => {
+      try {
+        const dados = await getCameraWeather(camera.id);
+        if (ativo) setWeather(dados);
+      } catch {
+        // Silencioso: o widget apenas não exibe o clima (a câmera segue normal).
+      }
+    })();
+    return () => {
+      ativo = false;
+    };
+  }, [camera.id, camera.latitude, camera.longitude, temCoordenadas]);
+
+  if (!temCoordenadas) return null;
+
+  if (!weather || !weather.available) {
+    return (
+      <div className="mt-3 flex items-center gap-2 rounded-lg border border-dark-700 bg-dark-900 px-2.5 py-1.5 text-[11px] text-[var(--color-text-muted)]">
+        <Globe2 className="h-3.5 w-3.5 shrink-0 text-sky-400" />
+        <span className="min-w-0 truncate">
+          {camera.location_label || camera.country || "Local remoto"}
+        </span>
+        {camera.timezone ? (
+          <span className="ml-auto shrink-0 font-mono text-[10px]">
+            {camera.timezone}
+          </span>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-sky-500/20 bg-sky-500/5 px-2.5 py-1.5 text-[11px] text-sky-100">
+      <span className="inline-flex items-center gap-1 font-medium">
+        <span className="text-sm leading-none">
+          {weather.is_day === false ? "🌙" : weather.icon}
+        </span>
+        {weather.temperature != null
+          ? `${Math.round(weather.temperature)}°C`
+          : "—"}
+      </span>
+      <span className="min-w-0 truncate">{weather.condition}</span>
+      {weather.local_time_label ? (
+        <span className="inline-flex items-center gap-1 font-mono">
+          <Clock className="h-3 w-3" />
+          {weather.local_time_label} local
+        </span>
+      ) : null}
+      {camera.timezone ? (
+        <span className="ml-auto shrink-0 font-mono text-[10px] text-sky-300/80">
+          {camera.timezone}
+        </span>
+      ) : null}
+    </div>
   );
 }

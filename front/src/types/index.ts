@@ -69,6 +69,12 @@ export type Camera = {
   source_type: SourceType;
   stream_url: string;
   location_label: string | null;
+  /** Coordenadas do jardim (câmeras globais/remotas), quando cadastradas. */
+  latitude?: number | null;
+  longitude?: number | null;
+  /** Fuso horário IANA da câmera (ex.: "America/Costa_Rica"). */
+  timezone?: string | null;
+  country?: string | null;
   has_credentials: boolean;
   is_active: boolean;
   zones: Zone[];
@@ -84,6 +90,10 @@ export type CameraCreatePayload = {
   source_type: SourceType;
   stream_url: string;
   location_label?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  timezone?: string | null;
+  country?: string | null;
   username?: string | null;
   password?: string | null;
   enabled?: boolean;
@@ -95,11 +105,49 @@ export type CameraUpdatePayload = {
   source_type?: SourceType;
   stream_url?: string;
   location_label?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  timezone?: string | null;
+  country?: string | null;
   username?: string | null;
   password?: string | null;
   enabled?: boolean;
   zones?: Zone[];
   clear_credentials?: boolean;
+  /** Apaga a localização geográfica da câmera. */
+  clear_location?: boolean;
+};
+
+/** Clima e horário **locais** de uma câmera global/remota (Open-Meteo). */
+export type CameraWeather = {
+  available: boolean;
+  latitude: number | null;
+  longitude: number | null;
+  timezone: string | null;
+  utc_offset_seconds: number | null;
+  local_time: string | null;
+  local_time_label: string | null;
+  temperature: number | null;
+  humidity: number | null;
+  wind_speed: number | null;
+  condition: string;
+  category: string;
+  icon: string;
+  weather_code: number | null;
+  is_day: boolean | null;
+  fetched_at: string | null;
+  source: string;
+};
+
+/** Localidade candidata do "seletor de cidade inteligente". */
+export type GeoLocation = {
+  name: string;
+  country: string | null;
+  admin1: string | null;
+  latitude: number;
+  longitude: number;
+  timezone: string | null;
+  label: string;
 };
 
 /** Estado em tempo real de um stream (Alaris Core distribuído). */

@@ -66,6 +66,7 @@ from app.services.ai_telemetry import (
 )
 from app.services.anomaly_log import registrar_retorno_especie
 from app.services.calibration import get_calibration_service
+from app.services.camera_weather import local_time_fields
 from app.services.ornithological_annotation import montar_analise_ia
 from app.services.species_catalog import match_or_create_species
 from app.services.system_context import ajustar_sensibilidade
@@ -122,6 +123,10 @@ class CameraPipeline(threading.Thread):
         self._configured_zones: list[ZoneConfig] = []
         # Zonas de interesse (ROI) retangulares: incluir (monitorar) ou excluir.
         self._roi_zones: list[RoiZone] = []
+        # Fuso horário IANA da câmera (None = usa UTC). Recarregado junto com as
+        # zonas; alimenta os gráficos de horário de pico pelo horário local do
+        # jardim (ver app/services/camera_weather.py).
+        self._camera_timezone: str | None = None
         self._post_frames_remaining = 0
         self._pending_event: dict[str, Any] | None = None
         self._post_collected: list[np.ndarray] = []
@@ -183,9 +188,12 @@ class CameraPipeline(threading.Thread):
         row = self.camera_repo.get(self.camera_id)
         if not row:
             self._configured_zones = []
+            self._camera_timezone = None
             self.zone_validator.set_zones([])
             self._load_roi()
             return
+        # Fuso da câmera: usado para gravar a hora/data local de cada visita.
+        self._camera_timezone = row.get("timezone") or None
         try:
             data = json.loads(row.get("zones_json") or '{"zones":[]}')
             zones = [ZoneConfig.model_validate(z) for z in data.get("zones", [])]
@@ -197,6 +205,14 @@ class CameraPipeline(threading.Thread):
             [zone for zone in self._configured_zones if zone.mode == ZoneMode.INCLUDE]
         )
         self._load_roi()
+
+    def _campos_hora_local(self, detected_at: str) -> tuple[int | None, str | None]:
+        """(hora local, data local) da visita no fuso da câmera.
+
+        Câmeras sem fuso cadastrado devolvem ``(None, None)`` e a análise cai
+        para o UTC — o comportamento anterior, sem distorcer o histórico.
+        """
+        return local_time_fields(detected_at, self._camera_timezone)
 
     def _load_roi(self) -> None:
         """Carrega as zonas de interesse (ROI) retangulares da câmera."""
@@ -802,6 +818,10 @@ class CameraPipeline(threading.Thread):
 
         visit_id = event["visit_id"]
         detected_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        # Horário local do jardim: corrige os gráficos de horário de pico pelo
+        # fuso da câmera (câmeras globais em fusos diferentes não distorcem as
+        # estatísticas — ex.: 10h da manhã na Costa Rica, não madrugada no BR).
+        local_hour, local_date = self._campos_hora_local(detected_at)
         # Tarja de identificação do Alaris gravada no clipe: o vídeo salvo já
         # mostra a espécie e a confiança, mesmo fora do painel.
         overlay_fn = self._clip_overlay(event, detected_at, frames)
@@ -968,6 +988,8 @@ class CameraPipeline(threading.Thread):
                 bbox=event["detection"].as_list(),
                 zone_id=event["zone_id"],
                 metadata=metadata,
+                local_hour=local_hour,
+                local_date=local_date,
             )
         except Exception:
             logger.exception("Failed to persist visit for camera %s", self.camera_id)

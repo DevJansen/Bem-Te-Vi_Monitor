@@ -19,10 +19,12 @@ import type {
   Camera,
   CameraCreatePayload,
   CameraUpdatePayload,
+  CameraWeather,
   CurrentWeather,
   EnvironmentIntegration,
   EnvironmentSettings,
   EnvironmentSettingsUpdate,
+  GeoLocation,
   HealthResponse,
   HistoryDeletionResult,
   HourlyDistribution,
@@ -103,6 +105,30 @@ export async function updateCamera(
 export async function getCameraZones(id: string): Promise<Zone[]> {
   const { data } = await api.get<{ zones: Zone[] }>(`/cameras/${id}/zones`);
   return data.zones;
+}
+
+/**
+ * Clima e horário **locais** do jardim de uma câmera global/remota.
+ *
+ * Devolve `available: false` quando a câmera não tem coordenadas cadastradas ou
+ * quando não há internet — o painel apenas oculta o widget nesse caso.
+ */
+export async function getCameraWeather(id: string): Promise<CameraWeather> {
+  const { data } = await api.get<CameraWeather>(
+    `/cameras/${encodeURIComponent(id)}/weather`,
+  );
+  return data;
+}
+
+/**
+ * Seletor de cidade inteligente: resolve um nome de cidade/país em coordenadas
+ * e fuso horário (IANA) via Open-Meteo. Devolve `[]` quando nada é encontrado.
+ */
+export async function geocodeLocation(query: string): Promise<GeoLocation[]> {
+  const { data } = await api.get<GeoLocation[]>("/weather/geocode", {
+    params: { q: query },
+  });
+  return data;
 }
 
 export async function saveCameraZones(id: string, zones: Zone[]): Promise<Zone[]> {

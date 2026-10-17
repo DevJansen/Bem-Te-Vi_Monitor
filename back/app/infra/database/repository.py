@@ -41,6 +41,24 @@ def _optional_float(value: Any) -> float | None:
         return None
 
 
+# Expressões SQL que respeitam o **fuso local da câmera** (migração 8). Usam a
+# hora/data local gravada em cada visita e, na ausência dela (câmeras sem fuso
+# cadastrado), caem para o horário UTC — preservando o comportamento anterior.
+#   SQL_HORA_LOCAL    → hora local como número inteiro (0..23)
+#   SQL_HORA_LOCAL_2D → hora local como texto de 2 dígitos ("05")
+#   SQL_DATA_LOCAL    → data local no formato ISO (YYYY-MM-DD)
+#
+# Atenção: o texto de 2 dígitos usa CASE (e não COALESCE(printf(...))), pois
+# ``printf('%02d', NULL)`` devolve "00" no SQLite — o que impediria o fallback.
+SQL_HORA_LOCAL = "COALESCE(local_hour, CAST(substr(detected_at, 12, 2) AS INTEGER))"
+SQL_HORA_LOCAL_2D = (
+    "CASE WHEN local_hour IS NULL "
+    "THEN substr(detected_at, 12, 2) "
+    "ELSE printf('%02d', local_hour) END"
+)
+SQL_DATA_LOCAL = "COALESCE(local_date, substr(detected_at, 1, 10))"
+
+
 def _media_url(relative: str | None) -> str | None:
     if not relative:
         return None
@@ -92,14 +110,17 @@ class CameraRepository:
         camera_id = str(uuid.uuid4())
         zones_json = CameraZones(zones=payload.zones).model_dump_json()
         location_label = (payload.location_label or "").strip() or None
+        timezone_name = (payload.timezone or "").strip() or None
+        country = (payload.country or "").strip() or None
         with db_session(self.db_path) as conn:
             conn.execute(
                 """
                 INSERT INTO cameras (
                     id, name, source_type, stream_url, location_label,
+                    latitude, longitude, timezone, country,
                     username, password_encrypted, is_active,
                     zones_json, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     camera_id,
@@ -107,6 +128,10 @@ class CameraRepository:
                     payload.source_type.value,
                     payload.stream_url,
                     location_label,
+                    payload.latitude,
+                    payload.longitude,
+                    timezone_name,
+                    country,
                     username_enc,
                     password_enc,
                     1 if payload.enabled else 0,
@@ -145,6 +170,30 @@ class CameraRepository:
             if payload.location_label is not None
             else existing.get("location_label")
         )
+        # Localização geográfica opcional (câmeras globais/remotas).
+        if payload.clear_location:
+            latitude = longitude = timezone_name = country = None
+        else:
+            latitude = (
+                payload.latitude
+                if payload.latitude is not None
+                else existing.get("latitude")
+            )
+            longitude = (
+                payload.longitude
+                if payload.longitude is not None
+                else existing.get("longitude")
+            )
+            timezone_name = (
+                (payload.timezone or "").strip() or None
+                if payload.timezone is not None
+                else existing.get("timezone")
+            )
+            country = (
+                (payload.country or "").strip() or None
+                if payload.country is not None
+                else existing.get("country")
+            )
         is_active = (
             (1 if payload.enabled else 0)
             if payload.enabled is not None
@@ -168,6 +217,7 @@ class CameraRepository:
                 """
                 UPDATE cameras SET
                     name = ?, source_type = ?, stream_url = ?, location_label = ?,
+                    latitude = ?, longitude = ?, timezone = ?, country = ?,
                     username = ?, password_encrypted = ?, is_active = ?,
                     zones_json = ?, updated_at = ?
                 WHERE id = ?
@@ -177,6 +227,10 @@ class CameraRepository:
                     source_type,
                     stream_url,
                     location_label,
+                    latitude,
+                    longitude,
+                    timezone_name,
+                    country,
                     username_enc,
                     password_enc,
                     is_active,
@@ -206,6 +260,10 @@ class CameraRepository:
             source_type=SourceType(row["source_type"]),
             stream_url=redact_url(row["stream_url"]),
             location_label=row.get("location_label"),
+            latitude=_optional_float(row.get("latitude")),
+            longitude=_optional_float(row.get("longitude")),
+            timezone=row.get("timezone"),
+            country=row.get("country"),
             has_credentials=bool(row.get("username") or row.get("password_encrypted")),
             is_active=bool(row["is_active"]),
             zones=zones,
@@ -238,6 +296,8 @@ class VisitRepository:
         humidity: float | None = None,
         weather_code: str | None = None,
         wind_speed: float | None = None,
+        local_hour: int | None = None,
+        local_date: str | None = None,
     ) -> dict[str, Any]:
         vid = visit_id or str(uuid.uuid4())
         # Registra as condições do tempo no momento da visita. Quando o chamador
@@ -258,8 +318,9 @@ class VisitRepository:
                 INSERT INTO visits (
                     id, camera_id, species, confidence, detected_at, dwell_seconds,
                     clip_path, thumbnail_path, bbox_json, zone_id, metadata_json,
-                    temperature, humidity, weather_code, wind_speed
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    temperature, humidity, weather_code, wind_speed,
+                    local_hour, local_date
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     vid,
@@ -277,6 +338,8 @@ class VisitRepository:
                     humidity,
                     weather_code,
                     wind_speed,
+                    local_hour,
+                    local_date,
                 ),
             )
         visit = self.get(vid)
@@ -521,8 +584,8 @@ class VisitRepository:
         with db_session(self.db_path) as conn:
             total = conn.execute("SELECT COUNT(*) AS c FROM visits").fetchone()["c"]
             today = conn.execute(
-                "SELECT COUNT(*) AS c FROM visits WHERE detected_at LIKE ?",
-                (f"{today_prefix}%",),
+                f"SELECT COUNT(*) AS c FROM visits WHERE {SQL_DATA_LOCAL} = ?",
+                (today_prefix,),
             ).fetchone()["c"]
             species_rows = conn.execute(
                 """
@@ -534,14 +597,14 @@ class VisitRepository:
                 """
             ).fetchall()
             hour_rows = conn.execute(
-                """
-                SELECT substr(detected_at, 12, 2) AS hour, COUNT(*) AS c
+                f"""
+                SELECT {SQL_HORA_LOCAL_2D} AS hour, COUNT(*) AS c
                 FROM visits
-                WHERE detected_at LIKE ?
+                WHERE {SQL_DATA_LOCAL} = ?
                 GROUP BY hour
                 ORDER BY hour
                 """,
-                (f"{today_prefix}%",),
+                (today_prefix,),
             ).fetchall()
             last = conn.execute(
                 "SELECT detected_at FROM visits ORDER BY detected_at DESC LIMIT 1"

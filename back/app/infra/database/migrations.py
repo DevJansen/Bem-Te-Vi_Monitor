@@ -192,6 +192,27 @@ MIGRATIONS: list[tuple[int, str]] = [
         ALTER TABLE bird_species ADD COLUMN ai_consult_json TEXT;
         """,
     ),
+    (
+        8,
+        """
+        -- Câmeras globais/remotas: localização geográfica opcional para exibir
+        -- o clima e o horário locais do jardim (Open-Meteo) e para corrigir os
+        -- gráficos de horário de pico pelo fuso da câmera.
+        --   latitude/longitude: coordenadas do jardim (WGS84).
+        --   timezone: identificador IANA (ex.: "America/Costa_Rica").
+        --   country: país resolvido pelo geocodificador (ex.: "Costa Rica").
+        ALTER TABLE cameras ADD COLUMN latitude REAL;
+        ALTER TABLE cameras ADD COLUMN longitude REAL;
+        ALTER TABLE cameras ADD COLUMN timezone TEXT;
+        ALTER TABLE cameras ADD COLUMN country TEXT;
+
+        -- Horário local da câmera no instante da visita: garante que os
+        -- histogramas/relatórios do Alaris Core reflitam o fuso do jardim, e
+        -- não o UTC. Nulos (câmeras sem fuso) caem para o UTC original.
+        ALTER TABLE visits ADD COLUMN local_hour INTEGER;
+        ALTER TABLE visits ADD COLUMN local_date TEXT;
+        """,
+    ),
 ]
 
 

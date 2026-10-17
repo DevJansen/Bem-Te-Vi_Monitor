@@ -111,6 +111,15 @@ class CameraCreate(BaseModel):
     )
     # Rótulo de localização (ex.: "Bebedouro do vizinho", "Sitio").
     location_label: str | None = Field(default=None, max_length=160)
+    # Localização geográfica opcional (câmeras globais/remotas). Permite exibir
+    # o clima e o horário locais do jardim e corrigir os gráficos de pico pelo
+    # fuso da câmera.
+    latitude: float | None = Field(default=None, ge=-90.0, le=90.0)
+    longitude: float | None = Field(default=None, ge=-180.0, le=180.0)
+    # Identificador IANA do fuso (ex.: "America/Costa_Rica").
+    timezone: str | None = Field(default=None, max_length=64)
+    # País resolvido pelo geocodificador (ex.: "Costa Rica").
+    country: str | None = Field(default=None, max_length=80)
     username: str | None = None
     password: str | None = None
     enabled: bool = True
@@ -124,17 +133,43 @@ class CameraCreate(BaseModel):
             raise ValueError("stream_url is required")
         return cleaned
 
+    @model_validator(mode="after")
+    def _validar_coordenadas(self) -> "CameraCreate":
+        """Exige latitude e longitude juntas (ou nenhuma das duas)."""
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValueError(
+                "Informe latitude e longitude juntas (ou deixe ambas vazias)."
+            )
+        return self
+
 
 class CameraUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     source_type: SourceType | None = None
     stream_url: str | None = None
     location_label: str | None = Field(default=None, max_length=160)
+    latitude: float | None = Field(default=None, ge=-90.0, le=90.0)
+    longitude: float | None = Field(default=None, ge=-180.0, le=180.0)
+    timezone: str | None = Field(default=None, max_length=64)
+    country: str | None = Field(default=None, max_length=80)
     username: str | None = None
     password: str | None = None
     enabled: bool | None = None
     zones: list[ZoneConfig] | None = None
     clear_credentials: bool = False
+    # Quando verdadeiro, apaga a localização geográfica da câmera.
+    clear_location: bool = False
+
+    @model_validator(mode="after")
+    def _validar_coordenadas(self) -> "CameraUpdate":
+        """Exige latitude e longitude juntas quando uma delas é informada."""
+        if not self.clear_location and (
+            self.latitude is None
+        ) != (self.longitude is None):
+            raise ValueError(
+                "Informe latitude e longitude juntas (ou use clear_location)."
+            )
+        return self
 
 
 class CameraOut(BaseModel):
@@ -143,6 +178,10 @@ class CameraOut(BaseModel):
     source_type: SourceType
     stream_url: str
     location_label: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    timezone: str | None = None
+    country: str | None = None
     has_credentials: bool = False
     is_active: bool
     zones: list[ZoneConfig] = Field(default_factory=list)
@@ -665,6 +704,50 @@ class EnvironmentConnectionTest(BaseModel):
     ai_external_base_url: str | None = Field(default=None, max_length=2048)
     ai_external_model: str | None = Field(default=None, max_length=128)
     ai_external_provider: str | None = Field(default=None, max_length=32)
+
+
+class CameraWeatherOut(BaseModel):
+    """Clima e horário **locais** de uma câmera global/remota.
+
+    Diferente do widget do alimentador local, aqui o jardim pode estar em outro
+    país: além do clima, devolvemos a hora local exata da câmera (``local_time``)
+    para o painel mostrar, por exemplo, o sol da Costa Rica enquanto é noite no
+    Brasil. Quando a câmera não tem coordenadas ou a internet falha, devolve
+    ``available=False`` sem quebrar a interface.
+    """
+
+    available: bool = False
+    latitude: float | None = None
+    longitude: float | None = None
+    timezone: str | None = None
+    utc_offset_seconds: int | None = None
+    # Hora local do jardim (ISO, ex.: "2026-10-16T14:49") e rótulo "HH:MM".
+    local_time: str | None = None
+    local_time_label: str | None = None
+    temperature: float | None = None
+    humidity: float | None = None
+    wind_speed: float | None = None
+    condition: str = "Sem dados"
+    category: str = "Sem dados"
+    icon: str = "🌡️"
+    weather_code: int | None = None
+    # Dia (True) ou noite (False) no jardim, segundo a Open-Meteo.
+    is_day: bool | None = None
+    fetched_at: str | None = None
+    source: str = "open-meteo"
+
+
+class GeoLocationOut(BaseModel):
+    """Localidade candidata do "seletor de cidade inteligente"."""
+
+    name: str
+    country: str | None = None
+    admin1: str | None = None
+    latitude: float
+    longitude: float
+    timezone: str | None = None
+    # Rótulo amigável pronto para exibir (ex.: "San José, San José, Costa Rica").
+    label: str
 
 
 class CurrentWeatherOut(BaseModel):

@@ -15,6 +15,10 @@ birdnetlib>=0.18.1
 librosa>=0.10.2
 audioread>=3.0.1
 audioop-lts>=0.2.2; python_version >= "3.13"
+# Base de dados de fusos horários (IANA) para o `zoneinfo` da stdlib. No Windows
+# o sistema não traz tzdata, então este pacote é necessário para calcular o
+# horário local das câmeras globais (ver app/services/camera_weather.py).
+tzdata>=2024.1
 # sqlite3 is part of the Python standard library — no pip install required
 # onvif-zeep is optional for ONVIF device discovery
 # Runtime TFLite usado pelo BirdNET. O ai-edge-litert é o runtime oficial atual

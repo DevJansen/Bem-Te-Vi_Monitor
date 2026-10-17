@@ -8,11 +8,18 @@ from fastapi import APIRouter, HTTPException, status
 
 from app.core.config import get_settings
 from app.core.redact import extrair_credenciais_da_url
-from app.domain.models import CameraCreate, CameraOut, CameraUpdate, CameraZones
+from app.domain.models import (
+    CameraCreate,
+    CameraOut,
+    CameraUpdate,
+    CameraWeatherOut,
+    CameraZones,
+)
 from app.infra.ai.pipeline import get_pipeline_supervisor
 from app.infra.camera.crypto import encrypt_secret
 from app.infra.camera.manager import get_camera_manager
 from app.infra.database.repository import CameraRepository
+from app.services.camera_weather import get_camera_weather_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/cameras", tags=["cameras"])
@@ -49,6 +56,57 @@ async def get_camera(camera_id: str) -> CameraOut:
         row,
         status=get_camera_manager().get_status(camera_id),
         night_mode=get_camera_manager().get_night_mode(camera_id),
+    )
+
+
+@router.get("/{camera_id}/weather", response_model=CameraWeatherOut)
+async def get_camera_weather(camera_id: str) -> CameraWeatherOut:
+    """Clima e horário **locais** do jardim onde a câmera está instalada.
+
+    Requer coordenadas cadastradas (ver a seção de localização do cadastro).
+    Sem coordenadas — ou sem internet — devolve ``available=False`` em vez de
+    erro, para o painel apenas ocultar o widget sem quebrar a interface.
+    """
+    row = _repo().get(camera_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    latitude = row.get("latitude")
+    longitude = row.get("longitude")
+    if latitude is None or longitude is None:
+        return CameraWeatherOut(available=False)
+
+    snapshot = get_camera_weather_service().current_for(
+        float(latitude),
+        float(longitude),
+        timezone_name=row.get("timezone"),
+    )
+    if snapshot is None:
+        return CameraWeatherOut(
+            available=False,
+            latitude=float(latitude),
+            longitude=float(longitude),
+            timezone=row.get("timezone"),
+        )
+
+    return CameraWeatherOut(
+        available=snapshot.available,
+        latitude=float(latitude),
+        longitude=float(longitude),
+        timezone=snapshot.timezone or row.get("timezone"),
+        utc_offset_seconds=snapshot.utc_offset_seconds,
+        local_time=snapshot.local_time,
+        local_time_label=snapshot.local_time_label,
+        temperature=snapshot.temperature,
+        humidity=snapshot.humidity,
+        wind_speed=snapshot.wind_speed,
+        condition=snapshot.condition,
+        category=snapshot.category,
+        icon=snapshot.icon,
+        weather_code=snapshot.code,
+        is_day=snapshot.is_day,
+        fetched_at=snapshot.fetched_at,
+        source=snapshot.source,
     )
 
 

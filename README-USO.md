@@ -90,6 +90,7 @@ O menu lateral tem seis telas. Vamos explicar cada uma como se estivéssemos jun
 Onde você **cadastra e cuida** das câmeras.
 
 - **Adicionar câmera:** escolha o tipo (webcam `USB`, ou câmera IP `RTSP`/`ONVIF`) e preencha o endereço e, se houver, usuário e senha.
+- **Localização global (opcional):** para câmeras em outros países (lives do YouTube, streams externos), abra **Localização & fuso horário**, informe a **cidade/país** e toque em **Buscar**. O AviaWatch descobre as coordenadas e o fuso sozinho — e o card da câmera passa a mostrar o **clima e o horário locais do jardim**.
 - **Ligar/desligar** cada câmera com um toque.
 - **Desenhar zonas** (veja abaixo).
 - **Análise de Cartão de Memória** para analisar vídeos antigos (veja abaixo).
@@ -326,6 +327,12 @@ e pergunta: *"Que espécie é essa?"* Ele responde com o nome comum e o científ
 
 O AviaWatch consulta o tempo no seu endereço (via Open-Meteo) e cruza com as visitas.
 Assim você descobre, por exemplo, se choveu mais no dia em que os pássaros sumiram.
+
+**Câmeras em outros países:** se você cadastrou a localização de uma câmera
+remota (aba **Câmeras → Localização & fuso horário**), o card dela mostra o
+**clima e o horário do jardim** naquele instante — pode ser sol lá enquanto é
+noite aqui. Os **gráficos de horário de pico** também passam a usar o **fuso
+local da câmera**, então as visitas aparecem na hora certa do jardim.
 
 Na aba **Estatísticas**, a seção **Insights Comportamentais & Clima** mostra tudo isso
 de forma automática, em cards e gráficos fáceis de ler:

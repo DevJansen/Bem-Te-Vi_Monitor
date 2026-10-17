@@ -3,16 +3,20 @@ import {
   ChevronDown,
   Eye,
   EyeOff,
+  Globe2,
   KeyRound,
   Link2,
+  LoaderCircle,
   Lock,
   MapPin,
   Plus,
+  Search,
   Webcam,
   X,
   Youtube,
 } from "lucide-react";
-import type { CameraCreatePayload, SourceType } from "@/types";
+import type { CameraCreatePayload, GeoLocation, SourceType } from "@/types";
+import { geocodeLocation } from "@/services/api";
 import { cn } from "@/utils/cn";
 
 type Props = {
@@ -51,7 +55,6 @@ const TIPO_LABEL: Record<SourceType, string> = {
 export function AddCameraModal({ open, onClose, onSubmit }: Props) {
   const [modo, setModo] = useState<Modo>("stream");
   const [name, setName] = useState("");
-  const [location, setLocation] = useState("");
   const [url, setUrl] = useState("");
   const [usbIndex, setUsbIndex] = useState("0");
   const [username, setUsername] = useState("");
@@ -62,16 +65,28 @@ export function AddCameraModal({ open, onClose, onSubmit }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // --- Localização & fuso horário (opcional, câmeras globais/remotas) ---
+  const [mostrarLocalizacao, setMostrarLocalizacao] = useState(false);
+  const [location, setLocation] = useState("");
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
+  const [timezone, setTimezone] = useState("");
+  const [country, setCountry] = useState("");
+  const [geocodeResults, setGeocodeResults] = useState<GeoLocation[]>([]);
+  const [geocodeLoading, setGeocodeLoading] = useState(false);
+  const [geocodeError, setGeocodeError] = useState<string | null>(null);
+  const [geocodeFeito, setGeocodeFeito] = useState(false);
+
   const tipoDetectado = useMemo(() => detectarTipo(url), [url]);
   const linkComCredenciais = /\/\/[^/@\s]+:[^/@\s]+@/.test(url);
   const linkYouTube = useMemo(() => isYouTubeLink(url), [url]);
+  const temCoordenadas = latitude.trim() !== "" && longitude.trim() !== "";
 
   if (!open) return null;
 
   const reset = () => {
     setModo("stream");
     setName("");
-    setLocation("");
     setUrl("");
     setUsbIndex("0");
     setUsername("");
@@ -80,6 +95,16 @@ export function AddCameraModal({ open, onClose, onSubmit }: Props) {
     setMostrarCredenciais(false);
     setEnabled(true);
     setError(null);
+    setMostrarLocalizacao(false);
+    setLocation("");
+    setLatitude("");
+    setLongitude("");
+    setTimezone("");
+    setCountry("");
+    setGeocodeResults([]);
+    setGeocodeLoading(false);
+    setGeocodeError(null);
+    setGeocodeFeito(false);
   };
 
   const handleClose = () => {
@@ -88,11 +113,72 @@ export function AddCameraModal({ open, onClose, onSubmit }: Props) {
     onClose();
   };
 
+  /** Aplica uma localidade escolhida no seletor de cidade inteligente. */
+  const aplicarLocalizacao = (local: GeoLocation) => {
+    setLatitude(String(local.latitude));
+    setLongitude(String(local.longitude));
+    setTimezone(local.timezone ?? "");
+    setCountry(local.country ?? "");
+    if (!location.trim()) setLocation(local.label);
+    setGeocodeResults([]);
+    setGeocodeFeito(false);
+  };
+
+  const limparLocalizacao = () => {
+    setLatitude("");
+    setLongitude("");
+    setTimezone("");
+    setCountry("");
+    setGeocodeResults([]);
+    setGeocodeFeito(false);
+  };
+
+  /** Busca a localidade digitada (cidade/país) e mostra as opções. */
+  const handleGeocode = async () => {
+    const consulta = location.trim();
+    if (consulta.length < 2) {
+      setGeocodeError("Digite ao menos 2 letras (ex.: Costa Rica).");
+      return;
+    }
+    setGeocodeLoading(true);
+    setGeocodeError(null);
+    setGeocodeFeito(false);
+    try {
+      const resultados = await geocodeLocation(consulta);
+      setGeocodeResults(resultados);
+      setGeocodeFeito(true);
+      // Se houver apenas um resultado, já preenche tudo automaticamente.
+      if (resultados.length === 1) aplicarLocalizacao(resultados[0]);
+    } catch (err) {
+      setGeocodeError(
+        err instanceof Error ? err.message : "Falha ao buscar a localidade",
+      );
+    } finally {
+      setGeocodeLoading(false);
+    }
+  };
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
     setSubmitting(true);
     try {
+      const lat = latitude.trim();
+      const lon = longitude.trim();
+      if ((lat === "") !== (lon === "")) {
+        throw new Error(
+          "Preencha latitude e longitude juntas (ou deixe ambas vazias).",
+        );
+      }
+      const latitudeNum = lat === "" ? null : Number(lat);
+      const longitudeNum = lon === "" ? null : Number(lon);
+      if (
+        (latitudeNum !== null && !Number.isFinite(latitudeNum)) ||
+        (longitudeNum !== null && !Number.isFinite(longitudeNum))
+      ) {
+        throw new Error("Latitude/longitude inválidas.");
+      }
+
       const usarCredenciais =
         modo === "stream" && mostrarCredenciais && (username || password);
       const payload: CameraCreatePayload = {
@@ -101,6 +187,10 @@ export function AddCameraModal({ open, onClose, onSubmit }: Props) {
         enabled,
         source_type: modo === "usb" ? "usb" : tipoDetectado,
         stream_url: modo === "usb" ? usbIndex.trim() : url.trim(),
+        latitude: latitudeNum,
+        longitude: longitudeNum,
+        timezone: timezone.trim() || null,
+        country: country.trim() || null,
         username: usarCredenciais && username ? username : null,
         password: usarCredenciais && password ? password : null,
       };
@@ -126,7 +216,7 @@ export function AddCameraModal({ open, onClose, onSubmit }: Props) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="add-camera-title"
-        className="relative z-10 w-full max-w-lg overflow-hidden rounded-xl border border-dark-700 bg-dark-800 shadow-2xl"
+        className="relative z-10 max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-xl border border-dark-700 bg-dark-800 shadow-2xl"
       >
         <div className="flex items-center justify-between border-b border-dark-700 px-5 py-4">
           <div>
@@ -189,21 +279,9 @@ export function AddCameraModal({ open, onClose, onSubmit }: Props) {
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ex.: Bebedouro do vizinho"
+              placeholder="Ex.: Comedouro de Beija-Flores"
               className={inputClass}
             />
-          </Field>
-
-          <Field label="Local" hint="Ex.: Casa vizinha · Sitio · Parque (opcional)">
-            <div className="relative">
-              <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
-              <input
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="Onde esta câmera está instalada?"
-                className={`${inputClass} pl-9`}
-              />
-            </div>
           </Field>
 
           {modo === "stream" ? (
@@ -319,6 +397,166 @@ export function AddCameraModal({ open, onClose, onSubmit }: Props) {
               />
             </Field>
           )}
+
+          {/* Seção opcional: localização & fuso horário (câmeras globais/remotas) */}
+          <div className="rounded-lg border border-dark-700 bg-dark-900/60">
+            <button
+              type="button"
+              onClick={() => setMostrarLocalizacao((v) => !v)}
+              aria-expanded={mostrarLocalizacao}
+              className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left"
+            >
+              <span className="inline-flex items-center gap-2 text-xs font-medium text-[var(--color-text-muted)]">
+                <Globe2 className="h-3.5 w-3.5 text-sky-400" />
+                Localização & fuso horário{" "}
+                <span className="text-[var(--color-text-muted)]/60">(Opcional)</span>
+              </span>
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 shrink-0 text-[var(--color-text-muted)] transition-transform",
+                  mostrarLocalizacao && "rotate-180",
+                )}
+              />
+            </button>
+
+            {mostrarLocalizacao ? (
+              <div className="space-y-3 border-t border-dark-700 px-3 py-3">
+                <p className="text-[11px] leading-snug text-[var(--color-text-muted)]">
+                  Informe onde o jardim está. Câmeras em outros países passam a
+                  exibir o <strong>clima</strong> e o <strong>horário locais</strong>{" "}
+                  (ex.: sol na Costa Rica enquanto é noite no Brasil) e os gráficos
+                  de horário de pico usam o fuso da câmera.
+                </p>
+
+                <Field
+                  label="Localidade / Cidade / País"
+                  hint="Ex.: Costa Rica - Comedouro de Beija-Flores"
+                >
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
+                      <input
+                        value={location}
+                        onChange={(e) => setLocation(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            void handleGeocode();
+                          }
+                        }}
+                        placeholder="Ex.: San José, Costa Rica"
+                        className={`${inputClass} pl-9`}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleGeocode()}
+                      disabled={geocodeLoading}
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-xs font-medium text-sky-200 transition hover:bg-sky-500/20 disabled:opacity-60"
+                    >
+                      {geocodeLoading ? (
+                        <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Search className="h-3.5 w-3.5" />
+                      )}
+                      Buscar
+                    </button>
+                  </div>
+                </Field>
+
+                {geocodeError ? (
+                  <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+                    {geocodeError}
+                  </p>
+                ) : null}
+
+                {geocodeResults.length > 0 ? (
+                  <ul className="space-y-1 rounded-lg border border-dark-700 bg-dark-800 p-1">
+                    {geocodeResults.map((local) => (
+                      <li key={`${local.latitude}-${local.longitude}-${local.label}`}>
+                        <button
+                          type="button"
+                          onClick={() => aplicarLocalizacao(local)}
+                          className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs transition hover:bg-dark-700"
+                        >
+                          <span className="min-w-0 truncate text-[var(--color-text-primary)]">
+                            {local.label}
+                          </span>
+                          <span className="shrink-0 font-mono text-[10px] text-[var(--color-text-muted)]">
+                            {local.timezone ?? "—"}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : geocodeFeito ? (
+                  <p className="text-[11px] text-amber-300">
+                    Nenhuma localidade encontrada. Ajuste o nome ou informe as
+                    coordenadas manualmente.
+                  </p>
+                ) : null}
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Latitude">
+                    <input
+                      value={latitude}
+                      onChange={(e) => setLatitude(e.target.value)}
+                      inputMode="decimal"
+                      placeholder="-23.5505"
+                      className={`${inputClass} font-mono text-[13px]`}
+                    />
+                  </Field>
+                  <Field label="Longitude">
+                    <input
+                      value={longitude}
+                      onChange={(e) => setLongitude(e.target.value)}
+                      inputMode="decimal"
+                      placeholder="-46.6333"
+                      className={`${inputClass} font-mono text-[13px]`}
+                    />
+                  </Field>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Fuso horário (IANA)" hint="Preenchido pela busca.">
+                    <input
+                      value={timezone}
+                      onChange={(e) => setTimezone(e.target.value)}
+                      placeholder="America/Costa_Rica"
+                      className={`${inputClass} font-mono text-[13px]`}
+                    />
+                  </Field>
+                  <Field label="País">
+                    <input
+                      value={country}
+                      onChange={(e) => setCountry(e.target.value)}
+                      placeholder="Costa Rica"
+                      className={inputClass}
+                    />
+                  </Field>
+                </div>
+
+                {temCoordenadas ? (
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-sky-500/20 bg-sky-500/5 px-3 py-2 text-[11px] text-sky-200">
+                    <span className="inline-flex min-w-0 items-center gap-1.5">
+                      <Globe2 className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">
+                        Clima e horário locais ativados
+                        {timezone ? ` · ${timezone}` : ""}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={limparLocalizacao}
+                      className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-sky-300 underline-offset-2 hover:underline"
+                    >
+                      Limpar
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
 
           <label className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
             <input
