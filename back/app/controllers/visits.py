@@ -29,6 +29,8 @@ router = APIRouter(prefix="/api/visits", tags=["visits"])
 # Rótulos genéricos do detector que NÃO são um nome de espécie de verdade.
 _GENERIC_SPECIES = {
     "bird",
+    "passaro",
+    "passaro desconhecido",
     "ave",
     "ave (genérica)",
     "ave nao identificada",

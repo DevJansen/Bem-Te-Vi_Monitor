@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 # não faz sentido considerar "espécie nova" no modo de alerta por novas espécies.
 _GENERIC_SPECIES_LABELS = {
     "bird",
+    "passaro",
+    "passaro desconhecido",
     "ave",
     "aves",
     "ave (genérica)",

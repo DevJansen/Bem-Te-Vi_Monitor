@@ -32,7 +32,7 @@ BIRD_CLASS_NAME = "bird"
 
 # Nomes amigáveis em pt-BR para as classes do COCO usadas no monitoramento.
 CLASS_LABELS_PT: dict[str, str] = {
-    "bird": "Pássaro",
+    "bird": "Passaro",
     "cat": "Gato",
     "dog": "Cachorro",
     "bear": "Urso",

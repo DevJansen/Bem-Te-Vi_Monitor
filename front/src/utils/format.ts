@@ -27,13 +27,13 @@ export function formatPercent(value: number): string {
 }
 
 export function formatSpeciesLabel(species: string): string {
-  if (!species || species === "bird") return "Ave (genérica)";
+  if (!species || species === "bird") return "Passaro Desconhecido";
   return species.charAt(0).toUpperCase() + species.slice(1);
 }
 
-/** Rótulo curto de espécie para selos compactos (ex.: `bird` → "Ave"). */
+/** Rótulo curto de espécie para selos compactos (ex.: `bird` → "Passaro"). */
 export function formatSpeciesShort(species: string): string {
-  if (!species || species === "bird") return "Ave";
+  if (!species || species === "bird") return "Passaro";
   return species.charAt(0).toUpperCase() + species.slice(1);
 }
 

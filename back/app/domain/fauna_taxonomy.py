@@ -264,6 +264,8 @@ _CHAVES_MAMIFERO = (
 # Rótulos genéricos do detector que significam apenas "ave não identificada".
 _GENERICOS_AVE = {
     "bird",
+    "passaro",
+    "passaro desconhecido",
     "ave",
     "aves",
     "passaro",

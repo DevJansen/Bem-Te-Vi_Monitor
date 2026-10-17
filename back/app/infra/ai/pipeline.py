@@ -952,7 +952,9 @@ class CameraPipeline(threading.Thread):
 
         # Status ecológico regional, quando a espécie já é conhecida na captura.
         especie_evento = str(event.get("species") or "")
-        tem_especie = bool(especie_evento) and especie_evento.lower() != "bird"
+        tem_especie = bool(especie_evento) and especie_evento.lower() not in {
+            "bird", "passaro", "passaro desconhecido",
+        }
 
         # --- Taxonomia do Alaris Core (o "anti-esquilo") ---------------------
         # Pós-processamento do rótulo: decide se o bicho é uma **ave** (fluxo
@@ -1164,7 +1166,7 @@ class CameraPipeline(threading.Thread):
             valor = extras.get(chave)
             if valor:
                 return str(valor)
-        if especie and especie.lower() != "bird":
+        if especie and especie.lower() not in {"bird", "passaro", "passaro desconhecido"}:
             info = info_especie(common_name=especie)
             if info is not None:
                 return info.scientific_name
@@ -1214,7 +1216,7 @@ class CameraPipeline(threading.Thread):
         # 2) Identificação da espécie + status ecológico + comportamento.
         eco = ecological or {}
         rotulo = eco.get("label")
-        if species and species.lower() != "bird":
+        if species and species.lower() not in {"bird", "passaro", "passaro desconhecido"}:
             partes = [valor for valor in (rotulo, behavior_label) if valor]
             sufixo = f" ({' / '.join(partes)})" if partes else ""
             mensagem_id = f"Espécie identificada com sucesso: {species}{sufixo}."

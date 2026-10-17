@@ -89,7 +89,7 @@ class BioacousticsService:
             especie_visual = row["visual_species"]
             # Se a espécie vista é diferente da ouvida, registra ambas.
             especies = {especie_audio}
-            if especie_visual and especie_visual != "bird":
+            if especie_visual and especie_visual.lower() not in {"bird", "passaro", "passaro desconhecido"}:
                 especies.add(especie_visual)
             confianca_combinada = max(
                 row["confidence"] or 0.0, row["visual_confidence"] or 0.0

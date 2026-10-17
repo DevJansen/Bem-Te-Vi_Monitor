@@ -119,7 +119,7 @@ class AnalyticsRepository:
                 f"""
                 SELECT COALESCE(
                     bs.common_name,
-                    NULLIF(v.species, 'bird'),
+                    NULLIF(NULLIF(v.species, 'bird'), 'passaro'),
                     'Ave (genérica)'
                 ) AS species_name, COUNT(*) AS visit_count
                 FROM visits v
@@ -319,7 +319,7 @@ class AnalyticsRepository:
                     v.weather_code,
                     COALESCE(
                         bs.common_name,
-                        NULLIF(v.species, 'bird'),
+                        NULLIF(NULLIF(v.species, 'bird'), 'passaro'),
                         'Ave (genérica)'
                     ) AS species_name,
                     bs.scientific_name AS scientific_name

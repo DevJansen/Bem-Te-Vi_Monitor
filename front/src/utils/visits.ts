@@ -12,6 +12,8 @@ import { formatSpeciesLabel } from "@/utils/format";
 /** Espécies genéricas (fallback do YOLO) que ainda não foram identificadas. */
 const GENERIC_SPECIES = new Set([
   "bird",
+  "passaro",
+  "passaro desconhecido",
   "ave",
   "ave (genérica)",
   "ave nao identificada",

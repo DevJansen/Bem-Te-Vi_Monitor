@@ -86,7 +86,7 @@ def registrar_retorno_especie(
     if not bool(settings.anomaly_log_enabled):
         return None
     nome = str(species or "").strip()
-    if not nome or nome.lower() == "bird":
+    if not nome or nome.lower() in {"bird", "passaro", "passaro desconhecido"}:
         # Sem espécie confiável (ainda genérica), não há como avaliar.
         return None
 
