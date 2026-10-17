@@ -18,6 +18,33 @@ type Props = {
 const inputClass =
   "mt-1 block w-full rounded-lg border border-dark-700 bg-dark-900 px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-emerald-500/50";
 
+/**
+ * Miniatura da foto de referência do card.
+ *
+ * Mostra a imagem tratada da espécie e, se o arquivo estiver ausente/corrompido,
+ * cai para o aviso "Sem foto de referência" — nunca deixa um ícone quebrado.
+ */
+function ReferenceThumb({ url, name }: { url: string | null; name: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!url || failed) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 text-[var(--color-text-muted)]">
+        <Bird className="h-9 w-9 text-emerald-400/70" />
+        <span className="text-xs">Sem foto de referência</span>
+      </div>
+    );
+  }
+  return (
+    <img
+      src={url}
+      alt={`Foto de referência: ${name}`}
+      onError={() => setFailed(true)}
+      className="h-full w-full object-cover"
+      loading="lazy"
+    />
+  );
+}
+
 export function SpeciesCatalog({
   species,
   loading,
@@ -153,19 +180,10 @@ export function SpeciesCatalog({
                 className="absolute inset-0 z-10 cursor-pointer"
               />
               <div className="aspect-[4/3] bg-dark-900">
-                {item.reference_image_url ? (
-                  <img
-                    src={item.reference_image_url}
-                    alt={`Foto de referência: ${item.common_name}`}
-                    className="h-full w-full object-cover"
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="flex h-full flex-col items-center justify-center gap-2 text-[var(--color-text-muted)]">
-                    <Bird className="h-9 w-9 text-emerald-400/70" />
-                    <span className="text-xs">Sem foto de referência</span>
-                  </div>
-                )}
+                <ReferenceThumb
+                  url={item.reference_image_url}
+                  name={item.common_name}
+                />
               </div>
               <div className="space-y-2 p-4">
                 <h3 className="font-medium text-[var(--color-text-primary)]">
