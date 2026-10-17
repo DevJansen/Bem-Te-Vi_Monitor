@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 # Cabeçalhos aplicados a TODA resposta HTTP da API.
 SECURITY_HEADERS: dict[str, str] = {
+    # HSTS: força HTTPS por 1 ano (em produção com TLS).
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
     # Impede que o navegador "adivinhe" o tipo de conteúdo (evita XSS por sniffing).
     "X-Content-Type-Options": "nosniff",
     # Impede o carregamento da API dentro de iframes (anti-clickjacking).

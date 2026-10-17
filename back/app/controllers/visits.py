@@ -7,7 +7,9 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
+
+from app.core.rate_limiter import limiter
 from fastapi.responses import FileResponse
 
 from app.core.config import get_settings
@@ -195,7 +197,9 @@ def _resolve_visit_image(row: dict) -> tuple[Path, str] | None:
 
 
 @router.post("/{visit_id}/identify-external", response_model=VisitOut)
+@limiter.limit("5/minute")
 def identify_visit_external(
+    request: Request,
     visit_id: str,
     add_to_catalog: bool = Query(
         default=False,

@@ -15,10 +15,13 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from app.core.rate_limiter import limiter, rate_limit_exceeded_handler
 from app.core.security_middleware import (
     LocalAccessGuardMiddleware,
     SecurityHeadersMiddleware,
 )
+from app.services.log_sanitizer import instalar_sanitizador
+from slowapi.errors import RateLimitExceeded
 
 # Ensure `back/` is on sys.path when running as `python -m app.main`
 _BACK_DIR = Path(__file__).resolve().parents[1]
@@ -31,6 +34,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
+instalar_sanitizador()
 logger = logging.getLogger("aviawatch")
 
 
@@ -144,6 +148,10 @@ app = FastAPI(
     version="0.2.0",
     lifespan=lifespan,
 )
+
+# Rate limiting (slowapi) — proteção contra brute force em rotas sensíveis.
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,

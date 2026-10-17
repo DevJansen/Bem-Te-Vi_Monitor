@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
+
+from app.core.rate_limiter import limiter
 
 from app.core.config import get_settings
 from app.core.redact import extrair_credenciais_da_url
@@ -141,11 +143,19 @@ async def save_camera_zones(camera_id: str, payload: CameraZones) -> CameraZones
 
 
 @router.post("", response_model=CameraOut, status_code=status.HTTP_201_CREATED)
-async def create_camera(payload: CameraCreate) -> CameraOut:
+@limiter.limit("10/minute")
+async def create_camera(request: Request, payload: CameraCreate) -> CameraOut:
     try:
         # Smart Stream Resolver (entrada): o usuário pode simplesmente colar o
         # link. Se ele já trouxer usuário/senha embutidos, separamos da URL para
         # criptografar em repouso; se for público/aberto, segue sem credenciais.
+        # Validação SSRF: bloqueia URLs que apontem para recursos internos.
+        try:
+            from app.services.url_validator import UrlInvalidaError, validar_url_stream
+
+            validar_url_stream(payload.stream_url)
+        except UrlInvalidaError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         url_limpa, usuario_url, senha_url = extrair_credenciais_da_url(payload.stream_url)
         if url_limpa != payload.stream_url:
             payload = payload.model_copy(update={"stream_url": url_limpa})
