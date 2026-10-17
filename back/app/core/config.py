@@ -83,6 +83,13 @@ class Settings(BaseModel):
     camera_backoff_max_sec: float = Field(default=30.0, ge=1.0, le=300.0)
     # Quadros/segundo entregues pelo proxy MJPEG seguro.
     camera_proxy_fps: int = Field(default=15, ge=5, le=30)
+    # --- YouTube Live (tradutor de links → stream direto via yt-dlp) ---
+    # Quando ligado, links do YouTube (youtube.com/youtu.be) cadastrados como
+    # câmera são traduzidos para o stream HLS direto antes do OpenCV abrir.
+    youtube_resolver_enabled: bool = True
+    # Tempo (s) de cache do link direto extraído (lives renovam o token com o
+    # tempo; a reconexão força uma re-extração quando o stream cai).
+    youtube_resolver_cache_sec: float = Field(default=90.0, ge=0.0, le=3600.0)
     media_retention_days: int = Field(default=30, ge=1)
     # Localização do alimentador (latitude/longitude), usada pela integração
     # meteorológica com a Open-Meteo. Padrão: São Paulo/SP.
@@ -347,6 +354,16 @@ class Settings(BaseModel):
             ),
             camera_proxy_fps=min(
                 30, max(5, int(os.getenv("CAMERA_PROXY_FPS", "15")))
+            ),
+            youtube_resolver_enabled=os.getenv(
+                "YOUTUBE_RESOLVER_ENABLED", "true"
+            )
+            .strip()
+            .lower()
+            not in {"0", "false", "no", "off", "não", "nao"},
+            youtube_resolver_cache_sec=min(
+                3600.0,
+                max(0.0, float(os.getenv("YOUTUBE_RESOLVER_CACHE_SEC", "90"))),
             ),
             media_retention_days=int(os.getenv("MEDIA_RETENTION_DAYS", "30")),
             latitude=min(

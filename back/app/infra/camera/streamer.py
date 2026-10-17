@@ -15,6 +15,7 @@ import numpy as np
 
 from app.domain.models import SourceType
 from app.infra.camera.onvif_helper import build_rtsp_url, resolve_onvif_rtsp
+from app.services.stream_resolver import resolver_url_direta
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,8 @@ class CameraStreamer:
     _consecutive_failures: int = field(default=0, init=False)
     # Indica se o pipeline está entregando quadros em visão noturna (IR/baixa luz).
     _night_mode: bool = field(default=False, init=False)
+    # Na próxima abertura, força a re-extração de links do YouTube (token expira).
+    _forcar_resolver: bool = field(default=False, init=False)
 
     @property
     def status(self) -> StreamStatus:
@@ -154,25 +157,50 @@ class CameraStreamer:
         return str(target)
 
     def open(self) -> bool:
+        # 1) Resolve o alvo de captura FORA do lock: a tradução de links do
+        #    YouTube (yt-dlp) e a descoberta ONVIF podem levar alguns segundos e
+        #    não devem bloquear as leituras/streaming em andamento.
+        forcar = self._forcar_resolver
+        self._forcar_resolver = False
+        try:
+            target = self.resolve_capture_target()
+            captura: str | int = target
+            if isinstance(target, str):
+                # Smart URL Resolver: traduz o link do YouTube para o stream
+                # direto (m3u8/URL de mídia) antes de abrir. Na reconexão,
+                # "forcar" re-extrai o link, pois o token da live expira.
+                captura = resolver_url_direta(target, forcar=forcar)
+            # Rótulo público (sem tokens) para logs/estado da câmera.
+            rotulo = self._redact(target)
+        except Exception as exc:
+            with self._lock:
+                self._status = StreamStatus.ERROR
+                self._last_error = str(exc)
+                self._consecutive_failures += 1
+            logger.exception(
+                "Error resolving capture target for camera %s", self.config.camera_id
+            )
+            return False
+
+        # 2) Abre a captura com o alvo já resolvido.
         with self._lock:
             self._status = StreamStatus.CONNECTING
             self._release_unlocked()
             try:
-                target = self.resolve_capture_target()
-                self._opened_uri = self._redact(target)
+                self._opened_uri = rotulo
                 logger.info(
                     "Opening camera %s (%s) → %s",
                     self.config.camera_id,
                     self.config.name,
-                    self._opened_uri,
+                    rotulo,
                 )
-                if isinstance(target, int):
-                    cap = cv2.VideoCapture(target, cv2.CAP_DSHOW)
+                if isinstance(captura, int):
+                    cap = cv2.VideoCapture(captura, cv2.CAP_DSHOW)
                     if not cap.isOpened():
                         cap.release()
-                        cap = cv2.VideoCapture(target)
+                        cap = cv2.VideoCapture(captura)
                 else:
-                    cap = cv2.VideoCapture(target, cv2.CAP_FFMPEG)
+                    cap = cv2.VideoCapture(captura, cv2.CAP_FFMPEG)
                     try:
                         cap.set(cv2.CAP_PROP_BUFFERSIZE, 2)
                     except Exception:
@@ -217,6 +245,9 @@ class CameraStreamer:
         with self._lock:
             self._status = StreamStatus.RECONNECTING
             self._release_unlocked()
+            # Na reconexão, re-extrai o link direto (tokens de live do YouTube
+            # expiram após algumas horas). Sem efeito para fontes não-YouTube.
+            self._forcar_resolver = True
         # Backoff exponencial: dobra a cada falha, limitado ao teto configurado.
         atraso = min(
             self.config.backoff_base_sec * (2 ** self._consecutive_failures),

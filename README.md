@@ -289,9 +289,10 @@ Se o painel mostrar “Não foi possível conectar à API”, confirme se a jane
 
 1. Abra o painel → aba **Central de Câmeras** → **Adicionar câmera externa**.
 2. Para uma webcam, escolha **Webcam local (USB)** e informe o índice (ex.: `0`).
-3. Para uma câmera IP ou stream externo, cole a **URL do Stream ao Vivo**
-   (`rtsp://…`, `https://…/stream.m3u8`, `http://…`). O tipo (RTSP/HLS/HTTP/
-   WebRTC) é **detectado automaticamente** a partir do link. O campo **Local**
+3. Para uma câmera IP, stream externo ou **live do YouTube**, cole a **URL do
+   Stream ao Vivo** (`rtsp://…`, `https://…/stream.m3u8`, `http://…`,
+   `https://www.youtube.com/watch?v=…`). O tipo (RTSP/HLS/HTTP/WebRTC) é
+   **detectado automaticamente** a partir do link. O campo **Local**
    identifica onde a câmera está (ex.: "Bebedouro do vizinho").
 4. **Login e senha são opcionais.** Links públicos/abertos conectam direto, sem
    credenciais. Se a câmera exigir autenticação, abra a seção
@@ -320,6 +321,28 @@ tempo real do Alaris: status de conexão (Online 🟢 / Reconectando 🟡), FPS 
 contagem de aves ativas no bebedouro/comedouro. Se um stream externo cair, o
 worker se reconecta sozinho com **backoff exponencial** (sem derrubar o servidor).
 O estado por stream é exposto em `GET /api/streams`.
+
+### Lives do YouTube (tradução de link → stream direto)
+
+Além de câmeras IP, você pode cadastrar o link de uma **live do YouTube**
+(`https://www.youtube.com/watch?v=…`, `https://youtu.be/…` ou o atalho de canal
+`https://www.youtube.com/@canal/live`). O OpenCV/FFmpeg **não** abre a página web
+do YouTube, então o backend usa o **`yt-dlp`** para traduzir o link para o
+**stream HLS direto** (`m3u8`) antes de abrir a captura. O link direto é então
+consumido pelo worker da câmera normalmente — com Alaris Core, selos de status,
+FPS e contagem de aves.
+
+- A tradução fica em `app/services/stream_resolver.py` (`resolver_url_direta`).
+- Links que **não** são do YouTube (RTSP/HTTP/HLS) passam direto, sem alteração.
+- Como o token de acesso de uma live **expira após algumas horas**, a reconexão
+  do worker **re-extrai** automaticamente um link novo quando o stream cai
+  (backoff exponencial). O cache curto (`YOUTUBE_RESOLVER_CACHE_SEC`) evita
+  re-extrair a cada tentativa, mas é ignorado na reconexão.
+- Para desligar a tradução: `YOUTUBE_RESOLVER_ENABLED=false` no `.env`.
+
+> Dica: instale um runtime JavaScript (ex.: `deno`) para o `yt-dlp` acessar
+> **todos** os formatos do YouTube. Sem ele, o yt-dlp ainda entrega o vídeo da
+> live (HLS), mas alguns formatos podem ficar de fora.
 
 ### Desenhar zonas de leitura (ROI)
 

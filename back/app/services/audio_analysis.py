@@ -20,6 +20,7 @@ from app.infra.database.audio_repository import AudioDetectionRepository
 from app.infra.database.repository import CameraRepository, SettingsRepository
 from app.services.audio_devices import resolve_audio_input_args
 from app.services.birdnet_runtime import available_runtime, ensure_tflite_runtime
+from app.services.stream_resolver import resolver_url_direta
 
 logger = logging.getLogger(__name__)
 
@@ -212,6 +213,10 @@ class AudioCameraWorker(threading.Thread):
             backoff_max_sec=30.0,
         )
         target = CameraStreamer(config).resolve_capture_target()
+        if isinstance(target, str):
+            # O ffmpeg também não abre a página web do YouTube: traduz o link
+            # para o stream direto antes de montar o comando.
+            target = resolver_url_direta(target)
         if not isinstance(target, str):
             raise RuntimeError(
                 "A análise sonora exige uma câmera RTSP, ONVIF ou um "
