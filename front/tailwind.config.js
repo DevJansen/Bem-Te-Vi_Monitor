@@ -5,18 +5,25 @@ export default {
     extend: {
       colors: {
         dark: {
-          900: "#0a0f0d",
-          800: "#111816",
-          700: "#1a2420",
+          950: "#09090b",
+          900: "#0f0f12",
+          800: "#18181b",
+          700: "#27272a",
+          600: "#3f3f46",
         },
         accent: {
           500: "#10b981",
           400: "#34d399",
+          300: "#6ee7b7",
+        },
+        glass: {
+          light: "rgba(255, 255, 255, 0.05)",
+          border: "rgba(255, 255, 255, 0.1)",
         },
       },
       fontFamily: {
-        sans: ["IBM Plex Sans", "Segoe UI", "sans-serif"],
-        display: ["Space Grotesk", "Segoe UI", "sans-serif"],
+        sans: ["Inter", "system-ui", "-apple-system", "sans-serif"],
+        display: ["Inter", "system-ui", "-apple-system", "sans-serif"],
       },
       keyframes: {
         "fade-in-up": {

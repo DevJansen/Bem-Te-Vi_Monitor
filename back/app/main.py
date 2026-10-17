@@ -95,7 +95,7 @@ async def lifespan(app: FastAPI):
         supervisor.sync_from_db()
         audio_analysis.start()
         logger.info(
-            "AviaWatch ready — data dir=%s (local only, no cloud sync)",
+            "Bem-Ti-Vi ready — data dir=%s (local only, no cloud sync)",
             settings.app_data_dir,
         )
     except Exception:
@@ -143,7 +143,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="AviaWatch",
+    title="Bem-Ti-Vi",
     description="Sistema local de monitoramento de avifauna por IA",
     version="0.2.0",
     lifespan=lifespan,

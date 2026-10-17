@@ -16,7 +16,7 @@ DEFAULT_APP_DATA_DIR = BASE_DIR / "app-data"
 
 
 class Settings(BaseModel):
-    app_name: str = "AviaWatch"
+    app_name: str = "Bem-Ti-Vi"
     port: int = Field(default=8000)
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""

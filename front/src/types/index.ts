@@ -1,4 +1,4 @@
-/** Tipos do domínio AviaWatch (alinhados à API FastAPI local). */
+/** Tipos do domínio Bem-Ti-Vi (alinhados à API FastAPI local). */
 
 export type CameraId = string;
 

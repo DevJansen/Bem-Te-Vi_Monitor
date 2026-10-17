@@ -261,7 +261,7 @@ def test_environment_connection(
             )
 
         if not telegram.send_message(
-            "AviaWatch — teste de alerta.\n"
+            "Bem-Ti-Vi — teste de alerta.\n"
             "Se você recebeu esta mensagem, os alertas estão funcionando!"
         ):
             raise RuntimeError(
