@@ -160,6 +160,98 @@ def get_direct_youtube_stream(youtube_url: str) -> str | None:
     return None
 
 
+def get_direct_youtube_audio_stream(youtube_url: str) -> str | None:
+    """Extrai o link de stream de ÁUDIO direto (m3u8/URL de mídia crua) de uma live.
+
+    Usa o seletor de formato ``bestaudio`` para obter a faixa de áudio do YouTube,
+    que é necessária para o player de bioacústica. Retorna ``None`` em caso de
+    falha definitiva. **Nunca** levanta exceção.
+    """
+    try:
+        import yt_dlp
+    except ImportError:
+        logger.error("yt-dlp não está instalado.")
+        return None
+
+    opts_audio = {
+        "format": "bestaudio[protocol^=m3u8]/bestaudio/best",
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "noplaylist": True,
+        "nocheckcertificate": True,
+        "retries": 3,
+        "fragment_retries": 3,
+        "socket_timeout": 15,
+    }
+    cookies = getattr(get_settings(), "youtube_cookies_file", None)
+    if cookies and os.path.isfile(cookies):
+        opts_audio["cookiefile"] = cookies
+
+    for player_client in (None, _YDL_FALLBACK_CLIENTS):
+        try:
+            if player_client:
+                opts_audio["extractor_args"] = {"youtube": {"player_client": list(player_client)}}
+            with yt_dlp.YoutubeDL(opts_audio) as ydl:
+                info = ydl.extract_info(youtube_url, download=False)
+        except Exception as exc:
+            logger.debug("yt-dlp audio falhou (player_client=%s): %s", player_client, exc)
+            continue
+
+        if not info:
+            continue
+        if "entries" in info:
+            itens = [item for item in (info.get("entries") or []) if item]
+            if not itens:
+                continue
+            info = itens[0]
+
+        url_direta = info.get("url") or info.get("manifest_url")
+        if url_direta:
+            if player_client:
+                logger.info("YouTube áudio resolvido com player_client=%s.", player_client)
+            return url_direta
+
+    logger.warning("Falha ao extrair o áudio do YouTube: %s", youtube_url)
+    return None
+
+
+def resolver_url_audio(url: str, *, forcar: bool = False) -> str:
+    """Devolve uma URL de áudio pronta para o ffmpeg.
+
+    - Links do **YouTube** são traduzidos para o stream de áudio direto.
+    - Qualquer outra URL (RTSP/HTTP/HLS) é devolvida exatamente como veio.
+    """
+    if not is_youtube_url(url):
+        return url
+
+    settings = get_settings()
+    if not settings.youtube_resolver_enabled:
+        return url
+
+    agora = time.time()
+    cache_key = f"audio:{url}"
+    if not forcar:
+        with _cache_lock:
+            cacheado = _cache.get(cache_key)
+            if cacheado and cacheado[1] > agora:
+                return cacheado[0]
+
+    direta = get_direct_youtube_audio_stream(url)
+    if not direta:
+        with _cache_lock:
+            cacheado = _cache.get(cache_key)
+        if cacheado:
+            return cacheado[0]
+        return url
+
+    ttl = float(settings.youtube_resolver_cache_sec)
+    with _cache_lock:
+        _cache[cache_key] = (direta, agora + ttl)
+    logger.info("YouTube áudio traduzido para stream direto (cache %.0fs).", ttl)
+    return direta
+
+
 def resolver_url_direta(url: str, *, forcar: bool = False) -> str:
     """Devolve uma URL pronta para o ``cv2.VideoCapture``.
 

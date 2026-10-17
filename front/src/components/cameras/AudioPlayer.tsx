@@ -25,10 +25,17 @@ export function AudioPlayer({ cameraId }: Props) {
   }, [muted, volume]);
 
   const toggleMute = () => {
-    setMuted((prev) => !prev);
+    const audio = audioRef.current;
+    if (!audio) return;
     if (muted) {
-      // Ao desmutar, tenta iniciar a reprodução.
-      audioRef.current?.play().catch(() => {});
+      // Desmutar: atualiza o elemento diretamente antes de tocar.
+      audio.muted = false;
+      audio.volume = volume;
+      setMuted(false);
+      audio.play().catch((err) => console.warn("Audio play failed:", err));
+    } else {
+      audio.muted = true;
+      setMuted(true);
     }
   };
 
@@ -37,8 +44,10 @@ export function AudioPlayer({ cameraId }: Props) {
       <audio
         ref={audioRef}
         src={cameraAudioUrl(cameraId)}
-        preload="none"
+        preload="auto"
+        crossOrigin="anonymous"
         className="hidden"
+        onError={(e) => console.warn("Audio error:", e)}
       />
       <button
         type="button"

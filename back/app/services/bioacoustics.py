@@ -21,7 +21,7 @@ from app.domain.fauna_taxonomy import descrever_visitante
 from app.infra.database.audio_repository import AudioDetectionRepository
 from app.infra.database.connection import db_session
 from app.infra.database.repository import CameraRepository, VisitRepository
-from app.services.stream_resolver import resolver_url_direta
+from app.services.stream_resolver import resolver_url_audio
 
 logger = logging.getLogger(__name__)
 
@@ -161,16 +161,20 @@ class BioacousticsService:
         )
         target = CameraStreamer(config).resolve_capture_target()
         if isinstance(target, str):
-            # YouTube e outros links web precisam ser resolvidos para stream direto.
-            target = resolver_url_direta(target)
+            # YouTube e outros links web: resolve para stream de ÁUDIO direto.
+            target = resolver_url_audio(target)
         if not isinstance(target, str):
             return None
 
         # Argumentos de entrada conforme o protocolo do stream resolvido.
+        # Para streams HTTP/HLS (YouTube), adiciona headers para evitar 403.
         if target.startswith("rtsp"):
             input_args = ["-rtsp_transport", "tcp", "-i", target]
         else:
-            input_args = ["-i", target]
+            input_args = [
+                "-headers", "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\r\nReferer: https://www.youtube.com/\r\n",
+                "-i", target,
+            ]
 
         command = [
             shutil.which("ffmpeg") or "ffmpeg",
