@@ -526,6 +526,8 @@ class EnvironmentSettingsOut(BaseModel):
     # Provedor de IA compatível com a OpenAI (não são segredos).
     ai_external_base_url: str = "https://api.openai.com/v1"
     ai_external_model: str = "gpt-4o-mini"
+    # Provedor efetivo da IA externa: "google" (Gemini oficial) ou "openai".
+    ai_external_provider: str = "openai"
     telegram_bot_token_configured: bool
     telegram_chat_id_configured: bool
     discord_webhook_url_configured: bool
@@ -542,6 +544,7 @@ class EnvironmentSettingsUpdate(BaseModel):
     ai_external_api_key: str | None = Field(default=None, max_length=512)
     ai_external_base_url: str | None = Field(default=None, max_length=2048)
     ai_external_model: str | None = Field(default=None, max_length=128)
+    ai_external_provider: str | None = Field(default=None, max_length=32)
     clear_telegram: bool = False
     clear_discord: bool = False
     clear_ai_external: bool = False
@@ -555,6 +558,7 @@ class EnvironmentConnectionTest(BaseModel):
     ai_external_api_key: str | None = Field(default=None, max_length=512)
     ai_external_base_url: str | None = Field(default=None, max_length=2048)
     ai_external_model: str | None = Field(default=None, max_length=128)
+    ai_external_provider: str | None = Field(default=None, max_length=32)
 
 
 class CurrentWeatherOut(BaseModel):

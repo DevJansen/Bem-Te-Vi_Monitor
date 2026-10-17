@@ -39,6 +39,8 @@ type EnvironmentDraft = {
   aiExternalApiKey: string;
   aiExternalBaseUrl: string;
   aiExternalModel: string;
+  /** Provedor efetivo da IA externa: "google" (Gemini) ou "openai". */
+  aiExternalProvider: string;
   clearTelegram: boolean;
   clearDiscord: boolean;
   clearAiExternal: boolean;
@@ -51,19 +53,23 @@ const EMPTY_DRAFT: EnvironmentDraft = {
   aiExternalApiKey: "",
   aiExternalBaseUrl: "",
   aiExternalModel: "",
+  aiExternalProvider: "openai",
   clearTelegram: false,
   clearDiscord: false,
   clearAiExternal: false,
 };
 
 /**
- * Provedores de IA pré-configurados (todos compatíveis com a API de chat da
- * OpenAI). Ao escolher um provedor, a URL base é preenchida automaticamente e
- * os modelos sugeridos mudam de acordo com a seleção.
+ * Provedores de IA pré-configurados. Os provedores compatíveis com a OpenAI
+ * (OpenAI, OpenRouter, Groq, Ollama) usam a API de chat padrão; o **Google
+ * Gemini** usa o endpoint oficial `generateContent` do Google — por isso a URL
+ * base dele é fixa e o campo é preenchido/ignorado automaticamente.
  */
 type AiProviderPreset = {
   id: string;
   label: string;
+  /** Provedor efetivo enviado ao backend: "google" ou "openai". */
+  provider: string;
   baseUrl: string;
   defaultModel: string;
   models: string[];
@@ -74,6 +80,7 @@ const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
   {
     id: "openai",
     label: "OpenAI",
+    provider: "openai",
     baseUrl: "https://api.openai.com/v1",
     defaultModel: "gpt-4o-mini",
     models: ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1"],
@@ -82,6 +89,7 @@ const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
   {
     id: "openrouter",
     label: "OpenRouter",
+    provider: "openai",
     baseUrl: "https://openrouter.ai/api/v1",
     defaultModel: "openai/gpt-4o-mini",
     models: [
@@ -95,6 +103,7 @@ const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
   {
     id: "groq",
     label: "Groq",
+    provider: "openai",
     baseUrl: "https://api.groq.com/openai/v1",
     defaultModel: "meta-llama/llama-4-scout-17b-16e-instruct",
     models: [
@@ -104,16 +113,20 @@ const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
     keyPlaceholder: "gsk_...",
   },
   {
-    id: "gemini",
+    id: "google",
     label: "Google Gemini",
-    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
-    defaultModel: "gemini-2.0-flash",
-    models: ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash"],
+    provider: "google",
+    // Endpoint oficial do Google Generative Language (o backend acrescenta
+    // "/models/{modelo}:generateContent"). A URL é fixa e não editável.
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+    defaultModel: "gemini-2.5-flash",
+    models: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash"],
     keyPlaceholder: "AIza...",
   },
   {
     id: "ollama",
     label: "Ollama (local)",
+    provider: "openai",
     baseUrl: "http://localhost:11434/v1",
     defaultModel: "llava",
     models: ["llava", "llama3.2-vision", "minicpm-v", "qwen2.5vl"],
@@ -122,13 +135,31 @@ const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
 ];
 
 const CUSTOM_AI_PROVIDER = "custom";
+const GOOGLE_PROVIDER = "google";
 
-/** Descobre qual provedor corresponde à URL base informada (ou null). */
-function matchAiProvider(baseUrl: string): AiProviderPreset | null {
+/**
+ * Descobre qual provedor corresponde ao par (provedor explícito, URL base).
+ *
+ * O provedor explícito vence — assim o Google Gemini nunca cai na rota padrão
+ * da OpenAI. A URL base serve de pista para os demais provedores e para
+ * configurações antigas que só guardavam a URL (inclusive o endpoint
+ * OpenAI-compatível do Gemini).
+ */
+function matchAiProvider(
+  baseUrl: string,
+  provider?: string,
+): AiProviderPreset | null {
   const normalized = baseUrl.trim().replace(/\/+$/, "").toLowerCase();
+  if (
+    provider === GOOGLE_PROVIDER ||
+    normalized.includes("generativelanguage.googleapis.com")
+  ) {
+    return AI_PROVIDER_PRESETS.find((preset) => preset.provider === GOOGLE_PROVIDER) ?? null;
+  }
   return (
     AI_PROVIDER_PRESETS.find(
       (preset) =>
+        preset.provider !== GOOGLE_PROVIDER &&
         preset.baseUrl.replace(/\/+$/, "").toLowerCase() === normalized,
     ) ?? null
   );
@@ -178,6 +209,7 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
         ...current,
         aiExternalBaseUrl: env.ai_external_base_url,
         aiExternalModel: env.ai_external_model,
+        aiExternalProvider: env.ai_external_provider,
       }));
       onSettingsChange?.(data);
     } catch (err) {
@@ -259,6 +291,9 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
     ...(draft.aiExternalModel.trim()
       ? { ai_external_model: draft.aiExternalModel.trim() }
       : {}),
+    ...(draft.aiExternalProvider.trim()
+      ? { ai_external_provider: draft.aiExternalProvider.trim() }
+      : {}),
     ...(draft.clearTelegram ? { clear_telegram: true } : {}),
     ...(draft.clearDiscord ? { clear_discord: true } : {}),
     ...(draft.clearAiExternal ? { clear_ai_external: true } : {}),
@@ -334,6 +369,9 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
       if (draft.aiExternalModel.trim()) {
         credentials.ai_external_model = draft.aiExternalModel.trim();
       }
+      if (draft.aiExternalProvider.trim()) {
+        credentials.ai_external_provider = draft.aiExternalProvider.trim();
+      }
     }
     try {
       const result = await testEnvironmentConnection(integration, credentials);
@@ -382,16 +420,27 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
     }
   };
 
-  // Provedor de IA derivado da URL base (alimenta o seletor e as sugestões).
-  const aiProvider = matchAiProvider(draft.aiExternalBaseUrl);
+  // Provedor de IA derivado do par (provedor explícito, URL base) — alimenta o
+  // seletor, as sugestões de modelo e o modo somente-leitura da URL no Google.
+  const aiProvider = matchAiProvider(
+    draft.aiExternalBaseUrl,
+    draft.aiExternalProvider,
+  );
   const aiProviderId = aiProvider?.id ?? CUSTOM_AI_PROVIDER;
   const aiModelSuggestions = aiProvider?.models ?? [];
+  // O Google Gemini usa o endpoint oficial: a URL base é fixa e não editável.
+  const isGoogleProvider = draft.aiExternalProvider === GOOGLE_PROVIDER;
 
   const selectAiProvider = (providerId: string) => {
     setDraft((current) => {
       if (providerId === CUSTOM_AI_PROVIDER) {
-        // "Personalizado": libera a URL para digitação manual.
-        return { ...current, aiExternalBaseUrl: "" };
+        // "Personalizado": libera a URL para digitação manual (compatível com a
+        // API da OpenAI) e volta ao provedor padrão.
+        return {
+          ...current,
+          aiExternalProvider: "openai",
+          aiExternalBaseUrl: "",
+        };
       }
       const preset = AI_PROVIDER_PRESETS.find((item) => item.id === providerId);
       if (!preset) {
@@ -401,6 +450,7 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
       const keepModel = preset.models.includes(current.aiExternalModel.trim());
       return {
         ...current,
+        aiExternalProvider: preset.provider,
         aiExternalBaseUrl: preset.baseUrl,
         aiExternalModel: keepModel ? current.aiExternalModel : preset.defaultModel,
       };
@@ -618,7 +668,7 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
               onClearChange={(clearAiExternal) =>
                 setDraft({ ...draft, clearAiExternal })
               }
-              hint="Escolha o provedor: a URL base é preenchida automaticamente e o campo de modelo sugere opções. Todos usam a API de chat compatível com a OpenAI."
+              hint="Escolha o provedor: a URL base e o modelo são preenchidos automaticamente. O Google Gemini usa o endpoint oficial do Google; os demais usam a API de chat compatível com a OpenAI."
               fields={[
                 {
                   label: "Provedor",
@@ -639,6 +689,10 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
                   value: draft.aiExternalBaseUrl,
                   placeholder: aiProvider?.baseUrl ?? "https://api.openai.com/v1",
                   secret: false,
+                  disabled: isGoogleProvider,
+                  note: isGoogleProvider
+                    ? "Definida automaticamente pelo Google (endpoint oficial)."
+                    : undefined,
                   onChange: (aiExternalBaseUrl) =>
                     setDraft({ ...draft, aiExternalBaseUrl }),
                 },
@@ -924,6 +978,10 @@ type EnvironmentFieldProps = {
   options?: { value: string; label: string }[];
   /** Sugestões: campo de texto livre com lista de sugestões (datalist). */
   suggestions?: string[];
+  /** Campo somente-leitura (ex.: URL fixa do Google Gemini). */
+  disabled?: boolean;
+  /** Texto auxiliar exibido abaixo do campo. */
+  note?: string;
 };
 
 function EnvironmentField({
@@ -934,6 +992,8 @@ function EnvironmentField({
   onChange,
   options,
   suggestions,
+  disabled = false,
+  note,
 }: EnvironmentFieldProps) {
   const [visible, setVisible] = useState(false);
   const listId = useId();
@@ -960,15 +1020,20 @@ function EnvironmentField({
   return (
     <label className="block text-xs text-[var(--color-text-muted)]">
       {label}
-      <span className="mt-1 flex rounded-lg border border-dark-700 bg-dark-900 focus-within:border-emerald-500/50">
+      <span
+        className={`mt-1 flex rounded-lg border border-dark-700 bg-dark-900 focus-within:border-emerald-500/50 ${
+          disabled ? "opacity-60" : ""
+        }`}
+      >
         <input
           type={secret && !visible ? "password" : "text"}
           value={value}
           placeholder={placeholder}
           onChange={(event) => onChange(event.target.value)}
           autoComplete="off"
+          disabled={disabled}
           list={suggestions && suggestions.length > 0 ? listId : undefined}
-          className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)]"
+          className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)] disabled:cursor-not-allowed"
         />
         {suggestions && suggestions.length > 0 ? (
           <datalist id={listId}>
@@ -988,6 +1053,11 @@ function EnvironmentField({
           </button>
         ) : null}
       </span>
+      {note ? (
+        <span className="mt-1 block text-[10px] leading-snug text-[var(--color-text-muted)]">
+          {note}
+        </span>
+      ) : null}
     </label>
   );
 }

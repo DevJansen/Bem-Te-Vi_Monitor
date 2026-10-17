@@ -13,6 +13,7 @@ import {
 import type { Camera, StreamStats } from "@/types";
 import { fetchStreams, videoFeedUrl } from "@/services/api";
 import { cn } from "@/utils/cn";
+import { formatSpeciesShort } from "@/utils/format";
 import { abortMjpegStream } from "@/utils/stream";
 import { StatusDot } from "@/components/common/StatusDot";
 
@@ -105,8 +106,8 @@ export function LiveStreamView({
     activeSpecies.length === 0
       ? null
       : activeSpecies.length === 1
-        ? activeSpecies[0]
-        : `${activeSpecies[0]} +${activeSpecies.length - 1}`;
+        ? formatSpeciesShort(activeSpecies[0])
+        : `${formatSpeciesShort(activeSpecies[0])} +${activeSpecies.length - 1}`;
 
   /** Cancela uma reconexão agendada. */
   const clearRetry = useCallback(() => {

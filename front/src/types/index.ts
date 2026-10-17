@@ -484,6 +484,8 @@ export type EnvironmentSettings = {
   ai_external_api_key: string | null;
   ai_external_base_url: string;
   ai_external_model: string;
+  /** Provedor efetivo: "google" (Gemini oficial) ou "openai" (compatível). */
+  ai_external_provider: string;
   telegram_bot_token_configured: boolean;
   telegram_chat_id_configured: boolean;
   discord_webhook_url_configured: boolean;
@@ -500,6 +502,7 @@ export type EnvironmentSettingsUpdate = {
   ai_external_api_key?: string;
   ai_external_base_url?: string;
   ai_external_model?: string;
+  ai_external_provider?: string;
   clear_telegram?: boolean;
   clear_discord?: boolean;
   clear_ai_external?: boolean;

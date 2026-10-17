@@ -56,6 +56,7 @@ TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
 DISCORD_WEBHOOK_URL=
 AI_EXTERNAL_API_KEY=
+AI_EXTERNAL_PROVIDER=
 AI_EXTERNAL_BASE_URL=https://api.openai.com/v1
 AI_EXTERNAL_MODEL=gpt-4o-mini
 PORT=8000
@@ -91,8 +92,9 @@ O arquivo `back\.env.example` contém os nomes e os valores padrão. Copie-o par
 | `TELEGRAM_CHAT_ID` | Destino dos alertas no Telegram | ID da conversa, grupo ou canal acessível pelo bot |
 | `DISCORD_WEBHOOK_URL` | Envio de alertas ao Discord | URL secreta de um webhook do seu servidor |
 | `AI_EXTERNAL_API_KEY` | Identificação opcional de espécies | Chave do provedor de IA; necessária somente para identificação externa |
-| `AI_EXTERNAL_BASE_URL` | URL base do provedor de IA (compatível com OpenAI) | Padrão: `https://api.openai.com/v1`. Aceita OpenRouter, Groq, Ollama, Gemini etc. |
-| `AI_EXTERNAL_MODEL` | Modelo compatível com visão | Padrão: `gpt-4o-mini` |
+| `AI_EXTERNAL_PROVIDER` | Provedor da IA externa | `google` (Google Gemini, endpoint oficial) ou `openai` (compatível com a OpenAI). Vazio → detecta pela URL base |
+| `AI_EXTERNAL_BASE_URL` | URL base do provedor compatível com OpenAI | Padrão: `https://api.openai.com/v1`. Aceita OpenRouter, Groq, Ollama etc. **Ignorada no Google Gemini** (usa o endpoint oficial `generativelanguage.googleapis.com`) |
+| `AI_EXTERNAL_MODEL` | Modelo com suporte a visão | Padrão: `gpt-4o-mini`. Para o Gemini: `gemini-2.5-flash` ou `gemini-1.5-flash` |
 | `PORT` | Porta configurada na aplicação | Padrão: `8000`; os comandos de inicialização fornecidos usam a porta `8000` |
 | `YOLO_MODEL` | Arquivo/modelo de detecção | Padrão: `yolov8n.pt` |
 | `YOLO_CONFIDENCE` | Sensibilidade da detecção (menor = mais sensível) | Padrão: `0.22`; faixa: `0.05` a `1.0` |
@@ -155,12 +157,13 @@ O arquivo `back\.env.example` contém os nomes e os valores padrão. Copie-o par
 | `ALLOW_REMOTE_ACCESS` | Libera acesso à API fora do computador local | Padrão: `false` (somente loopback). Use `true` só com VPN/proxy autenticado |
 | `ALLOWED_HOSTS` | Hosts aceitos no cabeçalho `Host` | Padrão: `127.0.0.1,localhost` |
 
-O painel administra a integração de IA Externa por completo (chave, URL base e
-modelo), os segredos do Telegram e do Discord, e as preferências de alerta. A
-seção **Alertas e Notificações** permite ligar/desligar os avisos, escolher o modo
-(`all` ou `new_species`), informar token e chat do Telegram e disparar um teste de
-envio real. As demais opções avançadas continuam sendo ajustadas no arquivo `.env`;
-alterações manuais nesse arquivo exigem reiniciar o backend.
+O painel administra a integração de IA Externa por completo (provedor, chave,
+URL base e modelo), os segredos do Telegram e do Discord, e as preferências de
+alerta. A seção **Alertas e Notificações** permite ligar/desligar os avisos,
+escolher o modo (`all` ou `new_species`), informar token e chat do Telegram e
+disparar um teste de envio real. As demais opções avançadas continuam sendo
+ajustadas no arquivo `.env`; alterações manuais nesse arquivo exigem reiniciar o
+backend.
 
 ### Onde obter as credenciais
 
@@ -170,11 +173,18 @@ alterações manuais nesse arquivo exigem reiniciar o backend.
 - **Discord:** nas configurações do servidor/canal, crie um webhook em
   **Integrações → Webhooks** e guarde a URL completa em `DISCORD_WEBHOOK_URL`.
 - **IA externa:** use a chave do provedor de sua preferência. O AviaWatch aceita
-  qualquer API compatível com a de chat da OpenAI: a própria OpenAI, OpenRouter,
-  Groq, Ollama (local) ou o endpoint OpenAI-compatível do Gemini. Configure a
-  chave em `AI_EXTERNAL_API_KEY`, a URL em `AI_EXTERNAL_BASE_URL` e, em
-  `AI_EXTERNAL_MODEL`, um modelo do provedor com suporte a imagens. Também é
-  possível preencher tudo pela tela **Configurações → Variáveis de ambiente**.
+  dois modos:
+  - **Google Gemini** (`AI_EXTERNAL_PROVIDER=google`): usa o **endpoint oficial**
+    do Google Generative Language
+    (`https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent`),
+    com a chave na *query string*. A `AI_EXTERNAL_BASE_URL` é **ignorada** nesse
+    modo. Modelos: `gemini-2.5-flash`, `gemini-1.5-flash` etc.
+  - **Compatível com a OpenAI** (`AI_EXTERNAL_PROVIDER=openai`): a própria OpenAI,
+    OpenRouter, Groq ou Ollama (local), via `AI_EXTERNAL_BASE_URL`.
+
+  Se `AI_EXTERNAL_PROVIDER` ficar vazio, o provedor é detectado pela URL base.
+  Também é possível preencher tudo pela tela **Configurações → Variáveis de
+  ambiente** (basta escolher o provedor no seletor).
 
 Tokens de bot, URL de webhook e chaves de API funcionam como senhas: qualquer pessoa
 que os obtenha pode usar a integração associada. Revogue e gere uma nova credencial
@@ -402,9 +412,12 @@ sem reiniciar o backend.
   com os nomes comum e científico retornados.
 - A identificação usa a **imagem tratada** da visita — o recorte da ave ou a
   thumbnail oficial em alta definição geradas pelo pipeline —, enviada por HTTPS
-  à API configurada (`AI_EXTERNAL_BASE_URL`, `AI_EXTERNAL_MODEL`). O provedor é
-  compatível com OpenAI e também com OpenRouter, Groq, Ollama e o endpoint
-  OpenAI-compatível do **Google Gemini**; basta definir `AI_EXTERNAL_API_KEY`.
+  ao provedor configurado. No **Google Gemini** (`AI_EXTERNAL_PROVIDER=google`),
+  a chamada usa o endpoint oficial `generateContent` do Google (a chave vai na
+  URL e a `AI_EXTERNAL_BASE_URL` é ignorada). Nos demais provedores
+  (`openai`), usa-se a API de chat compatível com a OpenAI (`AI_EXTERNAL_BASE_URL`,
+  `AI_EXTERNAL_MODEL`) — OpenAI, OpenRouter, Groq ou Ollama. Basta definir
+  `AI_EXTERNAL_API_KEY`.
 - Ao identificar, o AviaWatch **cadastra automaticamente a espécie no Catálogo
   Local (Life List)** e associa a visita (a foto tratada vira a imagem de
   referência da espécie), sem gerar duplicatas. Pela API, o parâmetro
@@ -883,7 +896,7 @@ espaço.
 | Porta 8000 ou 5173 em uso | No PowerShell: `Get-NetTCPConnection -LocalPort 8000 -State Listen` e encerre o PID (`Stop-Process -Id <PID> -Force`). Depois rode `start.bat` de novo |
 | Front sem dados / 404 nas rotas | Confirme que a API em `:8000` é a do AviaWatch atual (`/docs` deve listar `/api/visits`, `/api/stats`, `/api/settings`). Outro processo antigo na porta 8000 causa 404 |
 | Front sem dados | Confirme http://127.0.0.1:8000/api/health e a janela do backend |
-| Identificação externa indisponível | Confira `AI_EXTERNAL_API_KEY`, `AI_EXTERNAL_BASE_URL`, o modelo com suporte a visão e o acesso de rede ao provedor escolhido |
+| Identificação externa indisponível | Confira `AI_EXTERNAL_API_KEY`, `AI_EXTERNAL_PROVIDER`, o modelo com suporte a visão e o acesso de rede ao provedor escolhido. No **Google Gemini** o provedor deve ser `google` (a URL base é ignorada); um **HTTP 404** indica que a chamada caiu numa rota padrão da OpenAI em vez do endpoint oficial do Google |
 | Importação de gravação rejeitada | Use MP4, AVI, MOV ou MKV com menos de 2 GB e associe o arquivo a uma câmera cadastrada |
 | Análise offline falhou | Confirme se o vídeo abre em outro player e se o modelo YOLO foi carregado; tente exportar novamente o arquivo do cartão |
 | Clipe não reproduz na Galeria | Os clipes novos usam H.264 (compatível com navegadores). Instale o `ffmpeg` e coloque-o no `PATH` para garantir a melhor compatibilidade. Clipes antigos em `mp4v` podem não abrir no player: use **Baixar clipe** |

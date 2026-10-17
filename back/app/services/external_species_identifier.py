@@ -1,8 +1,18 @@
-"""Identificação de aves sob demanda com uma API de visão compatível com a OpenAI.
+"""Identificação de aves sob demanda com APIs de visão externas.
 
-O provedor é configurável: por padrão usa a OpenAI, mas também aceita qualquer
-endpoint compatível com a API de chat da OpenAI (OpenRouter, Groq, Ollama, o
-endpoint OpenAI-compatível do Gemini etc.) através de ``AI_EXTERNAL_BASE_URL``.
+Dois modos de provedor:
+
+- **Google Gemini (oficial):** usa o endpoint REST do Google Generative
+  Language (``.../v1beta/models/{modelo}:generateContent``) com a chave na
+  *query string* (``?key=``). É o modo correto para o Gemini e evita o **HTTP
+  404** que acontece ao mandar a chave/modelo para uma rota padrão da OpenAI.
+- **Compatível com a OpenAI:** OpenAI, OpenRouter, Groq, Ollama e qualquer
+  endpoint de chat da OpenAI, configurado por ``AI_EXTERNAL_BASE_URL`` (o chat é
+  chamado em ``{base}/chat/completions``).
+
+O provedor efetivo é resolvido por :func:`detect_provider`, que aceita tanto o
+campo ``AI_EXTERNAL_PROVIDER`` quanto a própria URL base — mantendo a
+compatibilidade com configurações antigas que só guardavam a URL.
 """
 
 from __future__ import annotations
@@ -19,7 +29,19 @@ import requests
 from app.core.config import get_settings
 from app.core.redaction import redact_secrets
 
+# --- Provedores ---------------------------------------------------------- #
+PROVIDER_GOOGLE = "google"
+PROVIDER_OPENAI = "openai"
+
+# URL base e modelo padrão do endpoint oficial do Google Gemini.
+GOOGLE_DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+GOOGLE_DEFAULT_MODEL = "gemini-2.5-flash"
+GOOGLE_API_VERSION = "v1beta"
+
+# URL base e modelo padrão do provedor compatível com a OpenAI.
 DEFAULT_BASE_URL = "https://api.openai.com/v1"
+OPENAI_DEFAULT_MODEL = "gpt-4o-mini"
+
 IDENTIFICATION_PROMPT = (
     "Identifique qual é a espécie desta ave (comum no Brasil) e retorne "
     'o nome científico e popular em formato JSON, usando as chaves '
@@ -39,8 +61,38 @@ class SpeciesIdentification:
     common_name: str
 
 
+def detect_provider(provider: str | None, base_url: str | None = None) -> str:
+    """Resolve o provedor efetivo a partir do campo e/ou da URL base.
+
+    Um provedor explícito (``google``/``gemini`` → Google; qualquer outro →
+    compatível com a OpenAI) sempre vence. Quando ele está vazio, a URL base é
+    usada como pista — mantendo a compatibilidade com configurações antigas que
+    só guardavam a URL (ex.: ``generativelanguage.googleapis.com``).
+    """
+    cleaned = (provider or "").strip().lower()
+    if cleaned:
+        if cleaned in {PROVIDER_GOOGLE, "gemini"}:
+            return PROVIDER_GOOGLE
+        return PROVIDER_OPENAI
+    if "generativelanguage.googleapis.com" in (base_url or "").lower():
+        return PROVIDER_GOOGLE
+    return PROVIDER_OPENAI
+
+
+def is_google_provider(provider: str | None, base_url: str | None = None) -> bool:
+    """Atalho: o provedor efetivo é o Google Gemini?"""
+    return detect_provider(provider, base_url) == PROVIDER_GOOGLE
+
+
+def default_model_for(provider: str | None, base_url: str | None = None) -> str:
+    """Modelo padrão do provedor efetivo (Gemini x compatível com a OpenAI)."""
+    if is_google_provider(provider, base_url):
+        return GOOGLE_DEFAULT_MODEL
+    return OPENAI_DEFAULT_MODEL
+
+
 def normalize_base_url(base_url: str | None) -> str:
-    """Normaliza e valida a URL base do provedor de IA.
+    """Normaliza e valida a URL base do provedor compatível com a OpenAI.
 
     Aceita apenas ``http``/``https`` com host e remove barras finais (para não
     gerar ``//chat/completions``). Quando vazio, devolve o padrão (OpenAI).
@@ -55,8 +107,34 @@ def normalize_base_url(base_url: str | None) -> str:
     return cleaned
 
 
+def normalize_google_base_url(base_url: str | None) -> str:
+    """Devolve a base oficial do Google Gemini.
+
+    O endpoint do Google **não** usa a URL compatível com a OpenAI. Quando a URL
+    informada aponta para o Google, aproveitamos o host e garantimos a versão da
+    API no fim (removendo um eventual sufixo ``/openai``); caso contrário, a URL
+    é **ignorada** e usamos o endereço oficial do Google.
+    """
+    cleaned = (base_url or "").strip().rstrip("/")
+    if cleaned and "generativelanguage.googleapis.com" in cleaned.lower():
+        cleaned = re.sub(r"/openai$", "", cleaned, flags=re.IGNORECASE)
+        if not re.search(r"/v\d+[a-z]*\d*$", cleaned, flags=re.IGNORECASE):
+            cleaned = f"{cleaned}/{GOOGLE_API_VERSION}"
+        return cleaned
+    return GOOGLE_DEFAULT_BASE_URL
+
+
+def google_generate_content_url(
+    model: str | None, base_url: str | None = None
+) -> str:
+    """URL do endpoint oficial ``generateContent`` do Google Gemini."""
+    base = normalize_google_base_url(base_url)
+    modelo = (model or GOOGLE_DEFAULT_MODEL).strip()
+    return f"{base}/models/{modelo}:generateContent"
+
+
 def chat_completions_url(base_url: str | None = None) -> str:
-    """URL do endpoint de chat completions do provedor configurado."""
+    """URL do endpoint de chat completions do provedor compatível com OpenAI."""
     return f"{normalize_base_url(base_url)}/chat/completions"
 
 
@@ -71,9 +149,46 @@ def provider_error_detail(response: requests.Response) -> str:
     error = data.get("error")
     if isinstance(error, dict) and isinstance(error.get("message"), str):
         return error["message"].strip()[:_MAX_DETAIL]
+    if isinstance(error, str):
+        return error.strip()[:_MAX_DETAIL]
     if isinstance(data.get("message"), str):
         return data["message"].strip()[:_MAX_DETAIL]
     return ""
+
+
+def connection_test_request(
+    provider: str | None,
+    base_url: str | None,
+    model: str | None,
+    api_key: str,
+) -> tuple[str, dict[str, str], dict[str, str] | None, dict[str, object]]:
+    """Monta a requisição mínima para validar chave/URL/modelo do provedor.
+
+    Devolve ``(url, headers, params, payload)`` já no formato correto: o
+    endpoint oficial ``generateContent`` do Google (com a chave em ``key``) ou o
+    ``/chat/completions`` compatível com a OpenAI. A listagem ``/models`` não
+    serve para o teste: em vários provedores ela é pública e responde 200 mesmo
+    com uma chave inválida.
+    """
+    if is_google_provider(provider, base_url):
+        url = google_generate_content_url(model, base_url)
+        payload: dict[str, object] = {
+            "contents": [{"role": "user", "parts": [{"text": "ping"}]}],
+            "generationConfig": {"maxOutputTokens": 8},
+        }
+        return url, {"Content-Type": "application/json"}, {"key": api_key}, payload
+
+    url = chat_completions_url(base_url)
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": model or OPENAI_DEFAULT_MODEL,
+        "messages": [{"role": "user", "content": "ping"}],
+        "max_tokens": 1,
+    }
+    return url, headers, None, payload
 
 
 def _parse_identification(content: str) -> dict[str, object]:
@@ -89,11 +204,25 @@ def _post(
     url: str,
     api_key: str,
     payload: dict[str, object],
+    *,
+    google: bool = False,
 ) -> requests.Response:
+    """POST seguro ao provedor.
+
+    No Google a chave vai na *query string* (``?key=``) e **não** há cabeçalho
+    ``Authorization``; nos demais provedores usamos ``Bearer``.
+    """
+    headers: dict[str, str] = {"Content-Type": "application/json"}
+    params: dict[str, str] | None = None
+    if google:
+        params = {"key": api_key}
+    else:
+        headers["Authorization"] = f"Bearer {api_key}"
     try:
         return requests.post(
             url,
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=headers,
+            params=params,
             json=payload,
             timeout=(10, 45),
             allow_redirects=False,
@@ -104,7 +233,65 @@ def _post(
         ) from exc
 
 
+def _google_payload(image_base64: str) -> dict[str, object]:
+    """Corpo da requisição ``generateContent`` com a imagem em base64."""
+    return {
+        "contents": [
+            {
+                "role": "user",
+                "parts": [
+                    {"text": IDENTIFICATION_PROMPT},
+                    {
+                        "inline_data": {
+                            "mime_type": "image/jpeg",
+                            "data": image_base64,
+                        }
+                    },
+                ],
+            }
+        ],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "temperature": 0.0,
+        },
+    }
+
+
+def _google_text(response_data: dict[str, object]) -> str:
+    """Extrai o texto das ``candidates`` da resposta do Gemini."""
+    candidatos = response_data.get("candidates")
+    if not isinstance(candidatos, list) or not candidatos:
+        return ""
+    primeiro = candidatos[0]
+    if not isinstance(primeiro, dict):
+        return ""
+    conteudo = primeiro.get("content")
+    if not isinstance(conteudo, dict):
+        return ""
+    partes = conteudo.get("parts")
+    if not isinstance(partes, list):
+        return ""
+    return "".join(
+        str(parte.get("text", "")) for parte in partes if isinstance(parte, dict)
+    )
+
+
+def _openai_content(response_data: dict[str, object]) -> str:
+    """Extrai o conteúdo textual da resposta compatível com a OpenAI."""
+    escolhas = response_data["choices"]  # type: ignore[index]
+    conteudo = escolhas[0]["message"]["content"]  # type: ignore[index]
+    # Alguns provedores devolvem o conteúdo como lista de partes.
+    if isinstance(conteudo, list):
+        conteudo = "".join(
+            str(parte.get("text", ""))
+            for parte in conteudo
+            if isinstance(parte, dict)
+        )
+    return str(conteudo)
+
+
 def identify_bird_image(image_bytes: bytes) -> SpeciesIdentification:
+    """Identifica a espécie de uma imagem usando o provedor configurado."""
     settings = get_settings()
     if not settings.ai_external_api_key:
         raise ExternalIdentificationError(
@@ -113,42 +300,55 @@ def identify_bird_image(image_bytes: bytes) -> SpeciesIdentification:
     if not image_bytes:
         raise ExternalIdentificationError("O recorte da ave está vazio")
 
-    try:
-        url = chat_completions_url(settings.ai_external_base_url)
-    except ValueError as exc:
-        raise ExternalIdentificationError(str(exc)) from exc
-
+    provider = detect_provider(
+        settings.ai_external_provider, settings.ai_external_base_url
+    )
+    model = settings.ai_external_model or default_model_for(provider)
+    api_key = settings.ai_external_api_key
     image_base64 = base64.b64encode(image_bytes).decode("ascii")
-    payload: dict[str, object] = {
-        "model": settings.ai_external_model,
-        "response_format": {"type": "json_object"},
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": IDENTIFICATION_PROMPT},
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{image_base64}",
-                            "detail": "high",
-                        },
-                    },
-                ],
-            }
-        ],
-    }
 
-    response = _post(url, settings.ai_external_api_key, payload)
-    # Alguns provedores não suportam "response_format"; tenta novamente sem ele.
-    if response.status_code == 400 and "response_format" in response.text.lower():
-        payload.pop("response_format", None)
-        response = _post(url, settings.ai_external_api_key, payload)
+    if provider == PROVIDER_GOOGLE:
+        url = google_generate_content_url(model, settings.ai_external_base_url)
+        payload = _google_payload(image_base64)
+        response = _post(url, api_key, payload, google=True)
+        # Alguns proxies do Gemini não aceitam "responseMimeType"; tenta de novo.
+        if response.status_code == 400 and "responsemimetype" in response.text.lower():
+            config = payload.get("generationConfig")
+            if isinstance(config, dict):
+                config.pop("responseMimeType", None)
+            response = _post(url, api_key, payload, google=True)
+    else:
+        try:
+            url = chat_completions_url(settings.ai_external_base_url)
+        except ValueError as exc:
+            raise ExternalIdentificationError(str(exc)) from exc
+        payload = {
+            "model": model,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": IDENTIFICATION_PROMPT},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{image_base64}",
+                                "detail": "high",
+                            },
+                        },
+                    ],
+                }
+            ],
+        }
+        response = _post(url, api_key, payload)
+        # Alguns provedores não suportam "response_format"; tenta novamente sem ele.
+        if response.status_code == 400 and "response_format" in response.text.lower():
+            payload.pop("response_format", None)
+            response = _post(url, api_key, payload)
 
     if not 200 <= response.status_code < 300:
-        detail = redact_secrets(
-            provider_error_detail(response), [settings.ai_external_api_key]
-        )
+        detail = redact_secrets(provider_error_detail(response), [api_key])
         message = (
             f"A API externa de identificação respondeu com HTTP "
             f"{response.status_code}"
@@ -159,15 +359,12 @@ def identify_bird_image(image_bytes: bytes) -> SpeciesIdentification:
 
     try:
         response_data = response.json()
-        content = response_data["choices"][0]["message"]["content"]
-        # Alguns provedores devolvem o conteúdo como lista de partes.
-        if isinstance(content, list):
-            content = "".join(
-                str(part.get("text", ""))
-                for part in content
-                if isinstance(part, dict)
-            )
-        identification = _parse_identification(str(content))
+        content = (
+            _google_text(response_data)
+            if provider == PROVIDER_GOOGLE
+            else _openai_content(response_data)
+        )
+        identification = _parse_identification(content)
         scientific_name = str(identification["scientific_name"]).strip()
         common_name = str(identification["common_name"]).strip()
     except (KeyError, IndexError, TypeError, ValueError, AttributeError) as exc:
@@ -190,9 +387,9 @@ def identify_bird_image_file(path: Path | str) -> SpeciesIdentification:
 
     Pensado para reaproveitar a **foto otimizada** do pipeline de gravação — a
     thumbnail oficial em alta definição ou o recorte tratado da ave — como
-    entrada da identificação ultra-específica (ex.: Google Gemini Vision via
-    endpoint compatível com a OpenAI). Lê o arquivo do disco e delega para
-    :func:`identify_bird_image`, mantendo o mesmo tratamento de erros seguro.
+    entrada da identificação ultra-específica (ex.: Google Gemini Vision). Lê o
+    arquivo do disco e delega para :func:`identify_bird_image`, mantendo o mesmo
+    tratamento de erros seguro.
     """
     caminho = Path(path)
     try:

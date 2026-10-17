@@ -31,6 +31,12 @@ export function formatSpeciesLabel(species: string): string {
   return species.charAt(0).toUpperCase() + species.slice(1);
 }
 
+/** Rótulo curto de espécie para selos compactos (ex.: `bird` → "Ave"). */
+export function formatSpeciesShort(species: string): string {
+  if (!species || species === "bird") return "Ave";
+  return species.charAt(0).toUpperCase() + species.slice(1);
+}
+
 export function peakHourFromMap(visitsByHour: Record<string, number>): string {
   const entries = Object.entries(visitsByHour);
   if (entries.length === 0) return "—";

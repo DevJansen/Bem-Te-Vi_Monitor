@@ -13,6 +13,7 @@ import {
 import type { Camera, StreamStats } from "@/types";
 import { fetchStreams, streamProxyUrl } from "@/services/api";
 import { cn } from "@/utils/cn";
+import { formatSpeciesShort } from "@/utils/format";
 import { abortMjpegStream } from "@/utils/stream";
 
 type GridMode = 1 | 2 | 4;
@@ -250,7 +251,9 @@ function CameraTile({ camera, stats, focused, onToggleFocus }: TileProps) {
           {rastreando && especiesAtivas.length > 0 ? (
             <span className="inline-flex max-w-[60%] items-center gap-1 rounded-md bg-emerald-500/20 px-2 py-1 text-[10px] font-medium text-emerald-100 backdrop-blur-sm">
               <Sparkles className="h-3 w-3 shrink-0" />
-              <span className="truncate">{especiesAtivas.join(", ")}</span>
+              <span className="truncate">
+                {especiesAtivas.map(formatSpeciesShort).join(", ")}
+              </span>
             </span>
           ) : null}
           {stats?.backend ? (

@@ -21,7 +21,12 @@ from app.domain.models import (
 )
 from app.services.external_species_identifier import (
     DEFAULT_BASE_URL,
+    PROVIDER_GOOGLE,
+    connection_test_request,
+    default_model_for,
+    detect_provider,
     normalize_base_url,
+    normalize_google_base_url,
     provider_error_detail,
 )
 from app.services.notification_service import get_notification_service
@@ -36,8 +41,8 @@ _ENV_KEYS = {
     "ai_external_api_key": "AI_EXTERNAL_API_KEY",
     "ai_external_base_url": "AI_EXTERNAL_BASE_URL",
     "ai_external_model": "AI_EXTERNAL_MODEL",
+    "ai_external_provider": "AI_EXTERNAL_PROVIDER",
 }
-_DEFAULT_AI_MODEL = "gpt-4o-mini"
 
 
 def _read_env_file() -> dict[str, str]:
@@ -80,13 +85,22 @@ def read_environment_settings() -> EnvironmentSettingsOut:
     )
     discord_configured = bool(values.get("DISCORD_WEBHOOK_URL"))
     ai_external_configured = bool(values.get("AI_EXTERNAL_API_KEY"))
+    # Provedor efetivo: explícito (AI_EXTERNAL_PROVIDER) ou detectado pela URL.
+    provider = detect_provider(
+        values.get("AI_EXTERNAL_PROVIDER"), values.get("AI_EXTERNAL_BASE_URL")
+    )
+    base_url = values.get("AI_EXTERNAL_BASE_URL") or DEFAULT_BASE_URL
+    if provider == PROVIDER_GOOGLE:
+        # Para o Gemini, exibimos sempre o endpoint oficial do Google.
+        base_url = normalize_google_base_url(values.get("AI_EXTERNAL_BASE_URL"))
     return EnvironmentSettingsOut(
         telegram_bot_token=mask_secret(values.get("TELEGRAM_BOT_TOKEN")),
         telegram_chat_id=mask_secret(values.get("TELEGRAM_CHAT_ID")),
         discord_webhook_url=mask_url_secret(values.get("DISCORD_WEBHOOK_URL")),
         ai_external_api_key=mask_secret(values.get("AI_EXTERNAL_API_KEY")),
-        ai_external_base_url=values.get("AI_EXTERNAL_BASE_URL") or DEFAULT_BASE_URL,
-        ai_external_model=values.get("AI_EXTERNAL_MODEL") or _DEFAULT_AI_MODEL,
+        ai_external_base_url=base_url,
+        ai_external_model=values.get("AI_EXTERNAL_MODEL") or default_model_for(provider),
+        ai_external_provider=provider,
         telegram_bot_token_configured=bool(values.get("TELEGRAM_BOT_TOKEN")),
         telegram_chat_id_configured=bool(values.get("TELEGRAM_CHAT_ID")),
         discord_webhook_url_configured=bool(values.get("DISCORD_WEBHOOK_URL")),
@@ -112,6 +126,12 @@ def save_environment_settings(
     supplied = payload.model_fields_set
     values_to_save: dict[str, str] = {}
     current_values = _read_env_file()
+    # Provedor efetivo deste lote: o do payload vence; senão, o já salvo (ou a
+    # URL base). Define como normalizamos a URL e o modelo.
+    provider = detect_provider(
+        payload.ai_external_provider or current_values.get("AI_EXTERNAL_PROVIDER"),
+        current_values.get("AI_EXTERNAL_BASE_URL"),
+    )
     for field_name, env_name in _ENV_KEYS.items():
         value = getattr(payload, field_name)
         if field_name in supplied and value is not None:
@@ -121,11 +141,19 @@ def save_environment_settings(
                 continue
             if "\n" in cleaned or "\r" in cleaned or "\x00" in cleaned:
                 raise ValueError(f"Valor inválido para {env_name}")
-            # Normaliza a URL base e garante um modelo padrão quando vazio.
-            if field_name == "ai_external_base_url":
-                cleaned = normalize_base_url(cleaned)
+            # Normaliza provedor, URL base e modelo conforme o provedor efetivo.
+            if field_name == "ai_external_provider":
+                cleaned = detect_provider(cleaned)
+            elif field_name == "ai_external_base_url":
+                # Para o Gemini guardamos sempre o endpoint oficial do Google;
+                # para os demais, validamos a URL compatível com a OpenAI.
+                cleaned = (
+                    normalize_google_base_url(cleaned)
+                    if provider == PROVIDER_GOOGLE
+                    else normalize_base_url(cleaned)
+                )
             elif field_name == "ai_external_model":
-                cleaned = cleaned or _DEFAULT_AI_MODEL
+                cleaned = cleaned or default_model_for(provider)
             values_to_save[env_name] = cleaned
 
     clear_by_integration = {
@@ -276,31 +304,28 @@ def test_environment_connection(
     base_url = payload.ai_external_base_url or current.get(
         "AI_EXTERNAL_BASE_URL", ""
     )
-    try:
-        normalized_base = normalize_base_url(base_url)
-    except ValueError as exc:
-        raise ValueError(str(exc)) from exc
+    # Provedor efetivo: o do payload vence; senão, o salvo (ou detectado pela URL).
+    provider = detect_provider(
+        payload.ai_external_provider or current.get("AI_EXTERNAL_PROVIDER"),
+        base_url,
+    )
     model = (
         payload.ai_external_model
         or current.get("AI_EXTERNAL_MODEL", "")
-        or _DEFAULT_AI_MODEL
+        or default_model_for(provider)
     )
-    # Valida de fato chave/URL/modelo com uma requisição mínima de chat.
-    # A listagem "/models" não serve: em vários provedores (ex.: OpenRouter) ela
-    # é pública e responde 200 mesmo com uma chave inválida.
-    response = _request(
-        "POST",
-        f"{normalized_base}/chat/completions",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": model,
-            "messages": [{"role": "user", "content": "ping"}],
-            "max_tokens": 1,
-        },
-    )
+    # Monta a requisição mínima no formato do provedor: o endpoint oficial
+    # "generateContent" do Google (chave em ?key=) ou o "/chat/completions"
+    # compatível com a OpenAI. A listagem "/models" não serve para o teste: em
+    # vários provedores (ex.: OpenRouter) ela é pública e responde 200 mesmo com
+    # uma chave inválida.
+    try:
+        url, headers, params, body = connection_test_request(
+            provider, base_url, model, api_key
+        )
+    except ValueError as exc:
+        raise ValueError(str(exc)) from exc
+    response = _request("POST", url, headers=headers, params=params, json=body)
     if not 200 <= response.status_code < 300:
         detail = redact_secrets(provider_error_detail(response), [api_key])
         message = (

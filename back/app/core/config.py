@@ -24,9 +24,12 @@ class Settings(BaseModel):
     ai_external_api_key: str = ""
     ai_external_model: str = "gpt-4o-mini"
     # URL base do provedor de IA compatível com a API da OpenAI. Serve para
-    # OpenRouter, Groq, Ollama, o endpoint OpenAI-compatível do Gemini etc.
-    # O chat é chamado em "{base}/chat/completions".
+    # OpenRouter, Groq, Ollama etc. O chat é chamado em "{base}/chat/completions".
+    # Para o Google Gemini esta URL é IGNORADA (usa-se o endpoint oficial).
     ai_external_base_url: str = "https://api.openai.com/v1"
+    # Provedor efetivo da IA externa: "google" (Gemini oficial) ou "openai"
+    # (qualquer endpoint compatível com a OpenAI). Vazio → detecta pela URL base.
+    ai_external_provider: str = ""
     app_data_dir: Path = DEFAULT_APP_DATA_DIR
     # Chave mestra (Fernet) para criptografar as credenciais das câmeras em
     # repouso. Recomendado definir via ENCRYPTION_KEY no .env (base64-url de 32
@@ -311,6 +314,7 @@ class Settings(BaseModel):
             ai_external_base_url=os.getenv(
                 "AI_EXTERNAL_BASE_URL", "https://api.openai.com/v1"
             ),
+            ai_external_provider=os.getenv("AI_EXTERNAL_PROVIDER", "").strip().lower(),
             app_data_dir=Path(app_data) if app_data else DEFAULT_APP_DATA_DIR,
             encryption_key=os.getenv("ENCRYPTION_KEY", "").strip(),
             allow_remote_access=os.getenv("ALLOW_REMOTE_ACCESS", "false")
