@@ -146,12 +146,11 @@ class BioacousticsService:
         row = self.camera_repo.get(camera_id)
         if row is None or not row["is_active"]:
             return None
-        # Apenas RTSP/ONVIF têm áudio no stream. USB usa dispositivo local.
-        if row["source_type"] not in {"rtsp", "onvif"}:
-            return None
         from app.infra.camera.crypto import decrypt_secret
         from app.infra.camera.streamer import CameraStreamer, StreamConfig
+        from app.core.config import get_settings
 
+        settings = get_settings()
         config = StreamConfig(
             camera_id=row["id"],
             name=row["name"],
@@ -162,9 +161,17 @@ class BioacousticsService:
         )
         target = CameraStreamer(config).resolve_capture_target()
         if isinstance(target, str):
+            # YouTube e outros links web precisam ser resolvidos para stream direto.
             target = resolver_url_direta(target)
         if not isinstance(target, str):
             return None
+
+        # Argumentos de entrada conforme o protocolo do stream resolvido.
+        if target.startswith("rtsp"):
+            input_args = ["-rtsp_transport", "tcp", "-i", target]
+        else:
+            input_args = ["-i", target]
+
         command = [
             shutil.which("ffmpeg") or "ffmpeg",
             "-hide_banner",
@@ -172,19 +179,18 @@ class BioacousticsService:
             "error",
             "-threads",
             "1",
-            "-rtsp_transport",
-            "tcp",
-            "-i",
-            target,
+            *input_args,
             "-vn",
             "-ac",
             "1",
             "-ar",
-            str(SAMPLES_RATE),
+            str(SAMPLE_RATE),
             "-f",
-            "s16le",
+            "mp3",
             "-acodec",
-            "pcm_s16le",
+            "libmp3lame",
+            "-b:a",
+            "128k",
             "pipe:1",
         ]
         return subprocess.Popen(

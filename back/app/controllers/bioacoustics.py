@@ -75,6 +75,6 @@ def stream_audio(camera_id: str):
 
     return StreamingResponse(
         gerar_chunks(),
-        media_type="audio/L16;rate=48000;channels=1",
+        media_type="audio/mpeg",
         headers={"Cache-Control": "no-cache"},
     )

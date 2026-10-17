@@ -240,7 +240,12 @@ export function App() {
                 <label className="text-xs text-[var(--color-text-muted)]">Jardim:</label>
                 <select
                   value={metricsGarden ?? ""}
-                  onChange={(e) => setMetricsGarden(e.target.value === "" ? null : e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value === "" ? null : e.target.value;
+                    metricsGardenRef.current = val;
+                    setMetricsGarden(val);
+                    void metricsQuery.refresh();
+                  }}
                   className="rounded-md border border-dark-700 bg-dark-900/60 px-2 py-1.5 text-xs text-[var(--color-text-primary)]"
                 >
                   <option value="">Todos os jardins</option>
