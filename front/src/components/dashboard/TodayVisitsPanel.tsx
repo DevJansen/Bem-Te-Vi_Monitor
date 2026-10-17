@@ -11,7 +11,7 @@ import {
   Star,
 } from "lucide-react";
 import type { BirdSpecies, BirdVisit } from "@/types";
-import { fetchTodayVisits, getErrorMessage, resolveMediaUrl } from "@/services/api";
+import { fetchTodayVisits, getErrorMessage, resolveMediaUrl, visitCropUrl } from "@/services/api";
 import { usePolling } from "@/hooks/usePolling";
 import { cn } from "@/utils/cn";
 import { formatTime } from "@/utils/format";
@@ -239,7 +239,13 @@ function VisitRow({
   index: number;
   onOpen: () => void;
 }) {
-  const thumb = resolveMediaUrl(visit.thumbnail_url ?? visit.thumbnail_path);
+  const frame = resolveMediaUrl(visit.thumbnail_url ?? visit.thumbnail_path);
+  // A miniatura circular usa o **recorte (close-up) da ave** tratado pelo
+  // Alaris — bem mais nítido que o quadro inteiro. Se o recorte não existir ou
+  // falhar ao carregar, cai de volta para a thumbnail do quadro completo.
+  const crop = visit.metadata?.crop_path ? visitCropUrl(visit.id) : null;
+  const [cropFailed, setCropFailed] = useState(false);
+  const thumb = crop && !cropFailed ? crop : frame;
   const label = resolveVisitSpeciesLabel(visit);
   const names = resolveVisitNames(visit);
   const catalogEntry = visit.species_id
@@ -278,7 +284,9 @@ function VisitRow({
                 src={thumb}
                 alt={`Miniatura de ${label}`}
                 className="h-full w-full object-cover transition duration-500 group-hover:scale-110"
-                loading="lazy"
+                onError={() => {
+                  if (thumb === crop) setCropFailed(true);
+                }}
               />
             ) : (
               <span className="flex h-full w-full items-center justify-center bg-dark-900 text-[var(--color-text-muted)]">
