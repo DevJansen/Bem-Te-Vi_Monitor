@@ -15,9 +15,9 @@ a camada de acesso a dados (SQLite) e os pontos que servem arquivos ao navegador
 **Ponto crítico encontrado e tratado:** arquivos sensíveis (banco de dados,
 mídia de capturas e a **chave de criptografia de credenciais de câmera**) foram
 versionados por engano no commit inicial `f133209` e, embora tenham sido
-removidos do rastreamento no commit `430ae66`, **permanecem no histórico do Git**.
-Isso exige reescrita de histórico (Seção 5) — e a chave já foi rotacionada pelo
-mantenedor, o que é o correto.
+removidos do rastreamento no commit `430ae66`, **permaneciam no histórico do
+Git**. A reescrita de histórico foi **aplicada em 2026-10-16** (Seção 5) — e a
+chave já havia sido rotacionada pelo mantenedor, o que é o correto.
 
 As correções de código desta rodada **já estão aplicadas** no repositório:
 
@@ -193,6 +193,13 @@ real da imagem via OpenCV antes de salvar. Conforme.
 > `push --force`. Quem mais tiver clonado o repositório deve **apagar o clone e
 > clonar de novo** depois.
 
+> ✅ **Executado em 2026-10-16.** Rodado `git filter-repo --path back/app-data
+> --invert-paths` (backup prévio via `git bundle --all` + cópia do `.git`).
+> Verificação: `git log --all -- back/app-data` e
+> `git rev-list --objects --all | grep app-data` retornam **vazio** (zero
+> objetos). O `origin` foi reconectado e o `master` reenviado com `--force`.
+> Os comandos abaixo ficam como procedimento de referência.
+
 ### 5.1. Opção recomendada — `git filter-repo`
 
 ```bash
@@ -268,7 +275,7 @@ git rev-list --objects --all | grep app-data
 - [x] Segredos fora do código-fonte (env + dotenv).
 - [x] Mascaramento de segredos em respostas e logs.
 - [x] `.gitignore` bloqueando segredos, banco, logs e mídia.
-- [ ] Histórico do Git limpo (**ação pendente — Seção 5**).
+- [x] Histórico do Git limpo (reescrita aplicada em 2026-10-16 — Seção 5).
 - [x] SQL parametrizado.
 - [x] Proteção contra Path Traversal.
 - [x] CORS restrito.
