@@ -64,7 +64,7 @@ def main() -> int:
         {
             "name": "Teste Etapa4",
             "source_type": "usb",
-            "source_uri": "1",
+            "stream_url": "1",
             "enabled": False,
         },
     )

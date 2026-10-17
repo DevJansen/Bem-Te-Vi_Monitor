@@ -20,6 +20,7 @@ from app.domain.models import (
     VisitOut,
     ZoneConfig,
 )
+from app.core.redact import redact_url
 from app.infra.database.connection import db_session
 from app.services.weather_service import current_weather_for_storage
 
@@ -90,19 +91,22 @@ class CameraRepository:
         now = _utc_now()
         camera_id = str(uuid.uuid4())
         zones_json = CameraZones(zones=payload.zones).model_dump_json()
+        location_label = (payload.location_label or "").strip() or None
         with db_session(self.db_path) as conn:
             conn.execute(
                 """
                 INSERT INTO cameras (
-                    id, name, source_type, source_uri, username_enc, password_enc,
-                    enabled, zones_json, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    id, name, source_type, stream_url, location_label,
+                    username, password_encrypted, is_active,
+                    zones_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     camera_id,
                     payload.name,
                     payload.source_type.value,
-                    payload.source_uri,
+                    payload.stream_url,
+                    location_label,
                     username_enc,
                     password_enc,
                     1 if payload.enabled else 0,
@@ -133,13 +137,18 @@ class CameraRepository:
             if payload.source_type is not None
             else existing["source_type"]
         )
-        source_uri = (
-            payload.source_uri if payload.source_uri is not None else existing["source_uri"]
+        stream_url = (
+            payload.stream_url.strip() if payload.stream_url is not None else existing["stream_url"]
         )
-        enabled = (
+        location_label = (
+            (payload.location_label or "").strip() or None
+            if payload.location_label is not None
+            else existing.get("location_label")
+        )
+        is_active = (
             (1 if payload.enabled else 0)
             if payload.enabled is not None
-            else existing["enabled"]
+            else existing["is_active"]
         )
         zones_json = (
             CameraZones(zones=payload.zones).model_dump_json()
@@ -151,25 +160,26 @@ class CameraRepository:
             username_enc, password_enc = None, None
             update_credentials = True
         elif not update_credentials:
-            username_enc = existing["username_enc"]
-            password_enc = existing["password_enc"]
+            username_enc = existing["username"]
+            password_enc = existing["password_encrypted"]
 
         with db_session(self.db_path) as conn:
             conn.execute(
                 """
                 UPDATE cameras SET
-                    name = ?, source_type = ?, source_uri = ?,
-                    username_enc = ?, password_enc = ?, enabled = ?,
+                    name = ?, source_type = ?, stream_url = ?, location_label = ?,
+                    username = ?, password_encrypted = ?, is_active = ?,
                     zones_json = ?, updated_at = ?
                 WHERE id = ?
                 """,
                 (
                     name,
                     source_type,
-                    source_uri,
+                    stream_url,
+                    location_label,
                     username_enc,
                     password_enc,
-                    enabled,
+                    is_active,
                     zones_json,
                     _utc_now(),
                     camera_id,
@@ -194,9 +204,10 @@ class CameraRepository:
             id=row["id"],
             name=row["name"],
             source_type=SourceType(row["source_type"]),
-            source_uri=row["source_uri"],
-            has_credentials=bool(row.get("username_enc") or row.get("password_enc")),
-            enabled=bool(row["enabled"]),
+            stream_url=redact_url(row["stream_url"]),
+            location_label=row.get("location_label"),
+            has_credentials=bool(row.get("username") or row.get("password_encrypted")),
+            is_active=bool(row["is_active"]),
             zones=zones,
             status=status,
             night_mode=bool(night_mode),

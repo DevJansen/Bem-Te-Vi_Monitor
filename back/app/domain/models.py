@@ -14,6 +14,10 @@ class SourceType(str, Enum):
     USB = "usb"
     RTSP = "rtsp"
     ONVIF = "onvif"
+    # Fontes ao vivo externas (proxy seguro no backend; credenciais em memória).
+    HLS = "hls"
+    HTTP = "http"
+    WEBRTC = "webrtc"
 
 
 class ZoneMode(str, Enum):
@@ -102,27 +106,30 @@ class RoiSettings(BaseModel):
 class CameraCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     source_type: SourceType
-    source_uri: str = Field(
-        description="USB index (e.g. '0') or RTSP/ONVIF host/URL",
+    stream_url: str = Field(
+        description="URL/índice do stream ao vivo (USB, RTSP, HLS, HTTP, WebRTC)."
     )
+    # Rótulo de localização (ex.: "Bebedouro do vizinho", "Sitio").
+    location_label: str | None = Field(default=None, max_length=160)
     username: str | None = None
     password: str | None = None
     enabled: bool = True
     zones: list[ZoneConfig] = Field(default_factory=list)
 
-    @field_validator("source_uri")
+    @field_validator("stream_url")
     @classmethod
     def strip_uri(cls, value: str) -> str:
         cleaned = value.strip()
         if not cleaned:
-            raise ValueError("source_uri is required")
+            raise ValueError("stream_url is required")
         return cleaned
 
 
 class CameraUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     source_type: SourceType | None = None
-    source_uri: str | None = None
+    stream_url: str | None = None
+    location_label: str | None = Field(default=None, max_length=160)
     username: str | None = None
     password: str | None = None
     enabled: bool | None = None
@@ -134,9 +141,10 @@ class CameraOut(BaseModel):
     id: str
     name: str
     source_type: SourceType
-    source_uri: str
+    stream_url: str
+    location_label: str | None = None
     has_credentials: bool = False
-    enabled: bool
+    is_active: bool
     zones: list[ZoneConfig] = Field(default_factory=list)
     status: str = "idle"
     # Indica se a câmera está processando quadros em visão noturna (IR/baixa luz).
@@ -743,6 +751,7 @@ class AiResourcesOut(BaseModel):
 class AiStatusOut(BaseModel):
     """Retrato completo do motor de IA para o painel "AI Core"."""
 
+    signature: str = "Alaris Core v1.0"
     engine: AiEngineOut
     throughput: AiThroughputOut
     performance: AiPerformanceOut
@@ -777,3 +786,21 @@ class AiLogsOut(BaseModel):
     generated_at: str = Field(
         default_factory=lambda: datetime.utcnow().isoformat() + "Z"
     )
+
+
+class StreamStatsOut(BaseModel):
+    """Estado em tempo real de um stream (Alaris Core distribuído)."""
+
+    camera_id: str
+    name: str = ""
+    location_label: str | None = None
+    source_type: str | None = None
+    is_active: bool = True
+    # idle | connecting | online | reconnecting | error | stopped
+    status: str = "idle"
+    fps: float = 0.0
+    backend: str | None = None
+    active_birds: int = 0
+    individuals_peak: int = 0
+    inferences: int = 0
+    last_error: str | None = None

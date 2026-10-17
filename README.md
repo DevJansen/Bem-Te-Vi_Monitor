@@ -2,10 +2,11 @@
 
 Sistema **local** de monitoramento de avifauna por IA.
 
-O AviaWatch recebe vídeo de câmeras USB, RTSP ou ONVIF, detecta aves com YOLOv8 e
-registra visitas em SQLite. O painel web permite desenhar zonas de inclusão e
-exclusão por câmera, consultar snapshots e clipes e, opcionalmente, pedir a
-identificação de uma ave a uma API externa. Alertas pelo Telegram e Discord também
+O AviaWatch recebe vídeo de câmeras USB, RTSP, ONVIF, HLS, HTTP ou WebRTC —
+inclusive streams externos ao vivo (de outras casas/locais remotos) —, detecta
+aves com YOLOv8 e registra visitas em SQLite. O painel web permite desenhar zonas
+de inclusão e exclusão por câmera, consultar snapshots e clipes e, opcionalmente,
+pedir a identificação de uma ave a uma API externa. Alertas pelo Telegram e Discord também
 são opcionais. O processamento e os arquivos permanecem locais por padrão.
 
 > **Quer entender como usar sem precisar programar?** Leia o
@@ -286,13 +287,32 @@ Se o painel mostrar “Não foi possível conectar à API”, confirme se a jane
 
 ### Cadastrar câmeras
 
-1. Abra o painel → aba **Câmeras** → **Nova câmera**.
+1. Abra o painel → aba **Central de Câmeras** → **Adicionar câmera externa**.
 2. Para uma webcam, escolha tipo `USB` e URI `0`.
-3. Para uma câmera IP, escolha `RTSP` ou `ONVIF` e informe endereço e, se necessário,
-   usuário e senha.
+3. Para uma câmera IP ou stream externo, escolha `RTSP`, `HLS`, `HTTP` ou `WebRTC`
+   e informe a URL do stream ao vivo e, se necessário, usuário e senha. O campo
+   **Local** identifica onde a câmera está (ex.: "Bebedouro do vizinho").
 
-As credenciais de câmeras IP são armazenadas criptografadas localmente com Fernet.
-O estado aparece no painel como conectado, reconectando ou offline.
+As credenciais (usuário/senha) são armazenadas criptografadas localmente com
+**Fernet**. A chave mestra vem de `ENCRYPTION_KEY` no `.env`; se não definida,
+uma chave é gerada em `back\app-data\secrets\camera_key.fernet`. A URL real e as
+credenciais **nunca** chegam ao navegador: o vídeo é entregue por um **proxy
+seguro** (`GET /api/streams/proxy/{id}`), que descriptografa em memória e
+retransmite os quadros. A URL exibida na interface tem a userInfo mascarada
+(`****:****@host`). O estado aparece no painel como conectado, reconectando ou
+offline.
+
+### Mural multi-câmera (Alaris Core distribuído)
+
+No painel principal, o **Mural de Câmeras** exibe 1, 2 ou 4 câmeras simultâneas
+(lado a lado) ou uma em foco. Cada fluxo roda em seu **próprio worker** (thread de
+captura + IA), com **Alaris Core independente** por câmera: buffer temporal de
+~6 s (3 s antes + 3 s depois), cálculo de nitidez (variância do Laplaciano) e
+gravação dos melhores quadros no bebedouro/comedouro. Cada feed traz selos em
+tempo real do Alaris: status de conexão (Online 🟢 / Reconectando 🟡), FPS e a
+contagem de aves ativas no bebedouro/comedouro. Se um stream externo cair, o
+worker se reconecta sozinho com **backoff exponencial** (sem derrubar o servidor).
+O estado por stream é exposto em `GET /api/streams`.
 
 ### Desenhar zonas de leitura (ROI)
 
@@ -458,13 +478,16 @@ acima do que o usuário configurou.
 movimento**) e **log de anomalias**: se uma espécie que não era registrada há
 mais de 6 meses reaparecer, um alerta é criado no painel (`GET /api/anomalies`).
 
-**6. IA visível (AI Core).** O painel ganha um **Núcleo de IA** (widget futurista
-em Dark Mode com pulsos neon) que mostra em tempo real o estado do modelo, o FPS
-do stream, a latência da inferência, o número de inferências/detecções (hoje e
-total), o uso de CPU/RAM, o backend em uso (TensorRT/ONNX/PyTorch) e o tempo de
-atividade. Ao lado, um **terminal de logs cognitivos** lista os "pensamentos" da
-IA conforme acontecem (detecção, nitidez do quadro escolhido, identificação da
-espécie, auto-calibração por clima, bandos e anomalias). A **Galeria** passa a
+**6. IA visível — Alaris Core.** O motor de IA do AviaWatch assina como
+**Alaris Core v1.0** (a assinatura aparece em `GET /api/ai/status` e nos metadados
+de cada visita). O painel ganha um **Núcleo de IA** (widget futurista em Dark Mode
+com pulsos neon, selo "Potencializado por Alaris AI") que mostra em tempo real o
+estado do modelo, o FPS do stream, a latência da inferência, o número de
+inferências/detecções (hoje e total), o uso de CPU/RAM, o backend em uso
+(TensorRT/ONNX/PyTorch) e o tempo de atividade. Ao lado, um **terminal de logs
+cognitivos** lista os "pensamentos" da Alaris conforme acontecem (detecção,
+nitidez do quadro escolhido, identificação da espécie, auto-calibração por clima,
+bandos e anomalias), cada linha assinada com `[Alaris]`. A **Galeria** passa a
 exibir, em cada card, um **Índice de Certeza da IA** (barra 0–100%) e a
 **anotação ornitológica** gerada automaticamente (ex.: "Espécie identificada:
 Tangara sayaca (Nativa) — alimentando-se em grupo de 3 indivíduos, sob
@@ -644,8 +667,10 @@ aviawatch/
 | GET | `/api/anomalies` | Log de anomalias acústico-visuais (ex.: espécie que reaparece após meses); aceita `limit` e `only_pending` |
 | GET | `/api/anomalies/pending-count` | Quantidade de anomalias ainda não reconhecidas (badge do painel) |
 | POST | `/api/anomalies/{id}/acknowledge` | Marca uma anomalia como reconhecida |
-| GET | `/api/ai/status` | **AI Core**: estado do motor, FPS, latência da inferência, inferências hoje/total, detecções, recursos (CPU/RAM), modelo/backend/dispositivo e tempo de atividade |
-| GET | `/api/ai/logs?limit=&since_id=` | **Logs cognitivos da IA**: "pensamentos" em tempo real (detecção, nitidez do frame, espécie identificada, auto-calibração por clima, anomalias); `since_id` habilita polling incremental |
+| GET | `/api/ai/status` | **Alaris Core**: estado do motor (`signature: "Alaris Core v1.0"`), FPS, latência da inferência, inferências hoje/total, detecções, recursos (CPU/RAM), modelo/backend/dispositivo e tempo de atividade |
+| GET | `/api/ai/logs?limit=&since_id=` | **Logs cognitivos da Alaris**: "pensamentos" em tempo real assinados com `[Alaris]` (detecção, nitidez do frame, espécie identificada, auto-calibração por clima, anomalias); `since_id` habilita polling incremental |
+| GET | `/api/streams` | **Multi-câmera**: estado em tempo real de cada stream (status de conexão, FPS, backend, aves ativas no comedouro, pico de indivíduos e inferências) |
+| GET | `/api/streams/proxy/{id}` | **Proxy seguro de vídeo (MJPEG)**: anonimiza a URL e as credenciais da câmera externa — o navegador nunca as vê |
 | GET | `/api/analytics/weather-correlation` | Relação entre o clima (chuva/temperatura/vento) e as visitas |
 | GET | `/api/analytics/weather-insights` | Insights automáticos cruzando clima e hábitos: faixas de temperatura, chuva × seco, horário no frio × no calor e horário por espécie |
 | GET | `/api/analytics/timelapses` | Lista os resumos do dia (time-lapses) já gerados |

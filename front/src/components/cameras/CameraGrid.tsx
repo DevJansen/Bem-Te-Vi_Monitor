@@ -32,7 +32,7 @@ export function CameraGrid({
             Câmeras
           </h2>
           <p className="text-sm text-[var(--color-text-muted)]">
-            Fontes USB, RTSP e ONVIF com credenciais locais criptografadas
+            Fontes USB, RTSP, HLS, HTTP e WebRTC · credenciais criptografadas
           </p>
         </div>
         <button
@@ -41,7 +41,7 @@ export function CameraGrid({
           className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-3 py-2 text-sm font-semibold text-dark-900 transition hover:bg-emerald-400"
         >
           <Plus className="h-4 w-4" />
-          Nova câmera
+          Adicionar câmera externa
         </button>
       </div>
 
@@ -80,6 +80,7 @@ export function CameraGrid({
                     </div>
                     <p className="mt-1 text-xs uppercase tracking-wide text-[var(--color-text-muted)]">
                       {camera.source_type} · {statusLabel(String(camera.status))}
+                      {camera.location_label ? ` · ${camera.location_label}` : ""}
                     </p>
                   </div>
                   {online ? (
@@ -90,12 +91,12 @@ export function CameraGrid({
                 </div>
 
                 <p className="mt-3 truncate rounded-lg bg-dark-900 px-2 py-1.5 font-mono text-[11px] text-[var(--color-text-muted)]">
-                  {camera.source_uri}
+                  {camera.stream_url}
                 </p>
 
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
-                  <Badge tone={camera.enabled ? "ok" : "muted"}>
-                    {camera.enabled ? "Monitorando" : "Pausada"}
+                  <Badge tone={camera.is_active ? "ok" : "muted"}>
+                    {camera.is_active ? "Monitorando" : "Pausada"}
                   </Badge>
                   {camera.has_credentials ? (
                     <Badge tone="ok">Credenciais OK</Badge>
@@ -115,7 +116,7 @@ export function CameraGrid({
                   <label className="flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
                     <input
                       type="checkbox"
-                      checked={camera.enabled}
+                      checked={camera.is_active}
                       onChange={(e) => onToggle(camera, e.target.checked)}
                       className="accent-emerald-500"
                     />

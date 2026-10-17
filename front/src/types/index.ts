@@ -2,8 +2,6 @@
 
 export type CameraId = string;
 
-export type SourceType = "usb" | "rtsp" | "onvif";
-
 export type CameraStatus =
   | "idle"
   | "connecting"
@@ -12,6 +10,8 @@ export type CameraStatus =
   | "error"
   | "stopped"
   | "disabled";
+
+export type SourceType = "usb" | "rtsp" | "onvif" | "hls" | "http" | "webrtc";
 
 export type AppTab =
   | "dashboard"
@@ -67,9 +67,10 @@ export type Camera = {
   id: CameraId;
   name: string;
   source_type: SourceType;
-  source_uri: string;
+  stream_url: string;
+  location_label: string | null;
   has_credentials: boolean;
-  enabled: boolean;
+  is_active: boolean;
   zones: Zone[];
   status: CameraStatus | string;
   /** Indica se a câmera está processando quadros em visão noturna (IR/baixa luz). */
@@ -81,7 +82,8 @@ export type Camera = {
 export type CameraCreatePayload = {
   name: string;
   source_type: SourceType;
-  source_uri: string;
+  stream_url: string;
+  location_label?: string | null;
   username?: string | null;
   password?: string | null;
   enabled?: boolean;
@@ -91,12 +93,29 @@ export type CameraCreatePayload = {
 export type CameraUpdatePayload = {
   name?: string;
   source_type?: SourceType;
-  source_uri?: string;
+  stream_url?: string;
+  location_label?: string | null;
   username?: string | null;
   password?: string | null;
   enabled?: boolean;
   zones?: Zone[];
   clear_credentials?: boolean;
+};
+
+/** Estado em tempo real de um stream (Alaris Core distribuído). */
+export type StreamStats = {
+  camera_id: string;
+  name: string;
+  location_label: string | null;
+  source_type: string | null;
+  is_active: boolean;
+  status: string;
+  fps: number;
+  backend: string | null;
+  active_birds: number;
+  individuals_peak: number;
+  inferences: number;
+  last_error: string | null;
 };
 
 export type OfflineJobStatus = "queued" | "processing" | "completed" | "error";
@@ -205,6 +224,8 @@ export type BirdVisit = {
     };
     /** Análise enriquecida gerada pela IA ("laudo" da visita + anotação). */
     ai_analysis?: {
+      /** Motor de IA que gerou a análise (assinatura Alaris). */
+      engine?: string;
       species?: string | null;
       scientific_name?: string | null;
       individuals_peak?: number | null;
@@ -652,6 +673,7 @@ export type AiResources = {
 
 /** Retrato completo do motor de IA (endpoint GET /api/ai/status). */
 export type AiStatusSnapshot = {
+  signature?: string;
   engine: AiEngine;
   throughput: AiThroughput;
   performance: AiPerformance;

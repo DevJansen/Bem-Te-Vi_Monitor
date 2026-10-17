@@ -146,6 +146,44 @@ MIGRATIONS: list[tuple[int, str]] = [
             ON anomaly_events(species);
         """,
     ),
+    (
+        6,
+        """
+        -- Central de Câmeras: rebuild da tabela para novos campos e tipos de fonte.
+        -- Renomeia colunas (source_uri→stream_url, password_enc→password_encrypted,
+        -- enabled→is_active), adiciona location_label e amplia o CHECK de
+        -- source_type para HLS/HTTP/WebRTC. FKs ficam OFF durante a transação.
+        PRAGMA foreign_keys=OFF;
+        BEGIN TRANSACTION;
+        CREATE TABLE cameras_new (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            source_type TEXT NOT NULL CHECK (source_type IN
+                ('usb','rtsp','onvif','hls','http','webrtc')),
+            stream_url TEXT NOT NULL,
+            location_label TEXT,
+            username TEXT,
+            password_encrypted TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            zones_json TEXT NOT NULL DEFAULT '{"zones":[]}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        INSERT INTO cameras_new
+            (id, name, source_type, stream_url, location_label,
+             username, password_encrypted, is_active, zones_json,
+             created_at, updated_at)
+        SELECT
+            id, name, source_type, source_uri, NULL,
+            username_enc, password_enc, enabled, zones_json,
+            created_at, updated_at
+        FROM cameras;
+        DROP TABLE cameras;
+        ALTER TABLE cameras_new RENAME TO cameras;
+        COMMIT;
+        PRAGMA foreign_keys=ON;
+        """,
+    ),
 ]
 
 

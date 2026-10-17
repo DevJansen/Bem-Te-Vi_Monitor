@@ -33,11 +33,14 @@ class StreamConfig:
     camera_id: str
     name: str
     source_type: SourceType
-    source_uri: str
+    stream_url: str
     username: str | None = None
     password: str | None = None
     reconnect_delay_sec: float = 3.0
     read_timeout_sec: float = 10.0
+    # Backoff exponencial de reconexão (segundos).
+    backoff_base_sec: float = 1.0
+    backoff_max_sec: float = 30.0
 
 
 @dataclass
@@ -78,7 +81,7 @@ class CameraStreamer:
 
     def resolve_capture_target(self) -> str | int:
         st = self.config.source_type
-        uri = self.config.source_uri.strip()
+        uri = self.config.stream_url.strip()
 
         if st == SourceType.USB:
             try:
@@ -95,10 +98,30 @@ class CameraStreamer:
                 return discovered
             return build_rtsp_url(uri, username, password)
 
-        # RTSP
-        if uri.lower().startswith("rtsp://"):
-            return build_rtsp_url(uri, username, password)
+        # HTTP/HLS: o ffmpeg do OpenCV abre .m3u8 e URLs http(s) diretamente.
+        if st in (SourceType.HTTP, SourceType.HLS):
+            return self._inject_http_auth(uri, username, password)
+
+        # RTSP (e WebRTC tratado como fluxo externo via ffmpeg, quando possível).
         return build_rtsp_url(uri, username, password)
+
+    @staticmethod
+    def _inject_http_auth(
+        uri: str, username: str | None, password: str | None
+    ) -> str:
+        """Injeta credenciais basic-auth em uma URL HTTP/HLS (em memória)."""
+        if not username:
+            return uri
+        from urllib.parse import quote, urlparse, urlunparse
+
+        parsed = urlparse(uri)
+        user = quote(username, safe="")
+        pwd = quote(password or "", safe="")
+        host = parsed.hostname or ""
+        if parsed.port:
+            host = f"{host}:{parsed.port}"
+        netloc = f"{user}:{pwd}@{host}"
+        return urlunparse(parsed._replace(netloc=netloc))
 
     @staticmethod
     def _redact(target: str | int) -> str:
@@ -177,11 +200,12 @@ class CameraStreamer:
         with self._lock:
             self._status = StreamStatus.RECONNECTING
             self._release_unlocked()
-        delay = min(
-            self.config.reconnect_delay_sec * (1 + self._consecutive_failures),
-            30.0,
+        # Backoff exponencial: dobra a cada falha, limitado ao teto configurado.
+        atraso = min(
+            self.config.backoff_base_sec * (2 ** self._consecutive_failures),
+            self.config.backoff_max_sec,
         )
-        time.sleep(delay)
+        time.sleep(atraso)
         return self.open()
 
     def read(self) -> tuple[bool, np.ndarray | None]:
@@ -260,6 +284,6 @@ class CameraStreamer:
             "status": self._status.value,
             "fps": self.fps,
             "last_error": self._last_error,
-            "source": self._opened_uri or self.config.source_uri,
+            "source": self._opened_uri or self.config.stream_url,
             "night_mode": self._night_mode,
         }

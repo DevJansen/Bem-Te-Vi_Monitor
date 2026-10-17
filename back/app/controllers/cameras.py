@@ -89,7 +89,7 @@ async def create_camera(payload: CameraCreate) -> CameraOut:
             username_enc=encrypt_secret(payload.username),
             password_enc=encrypt_secret(payload.password),
         )
-        if row["enabled"]:
+        if row["is_active"]:
             get_pipeline_supervisor().start_camera(row["id"])
         return CameraRepository.to_out(
             row, status=get_camera_manager().get_status(row["id"])
@@ -117,9 +117,9 @@ async def update_camera(camera_id: str, payload: CameraUpdate) -> CameraOut:
             if existing is None:
                 raise HTTPException(status_code=404, detail="Camera not found")
             if payload.username is None:
-                username_enc = existing.get("username_enc")
+                username_enc = existing.get("username")
             if payload.password is None:
-                password_enc = existing.get("password_enc")
+                password_enc = existing.get("password_encrypted")
 
         row = _repo().update(
             camera_id,

@@ -187,7 +187,7 @@ class AudioCameraWorker(threading.Thread):
           (microfone USB/webcam), definido em ``audio_input_device``.
         """
         row = self._camera_repo.get(self.camera_id)
-        if row is None or not row["enabled"]:
+        if row is None or not row["is_active"]:
             raise RuntimeError("Câmera indisponível ou desativada.")
 
         if row["source_type"] == SourceType.USB.value:
@@ -204,10 +204,12 @@ class AudioCameraWorker(threading.Thread):
             camera_id=row["id"],
             name=row["name"],
             source_type=SourceType(row["source_type"]),
-            source_uri=row["source_uri"],
-            username=decrypt_secret(row.get("username_enc")),
-            password=decrypt_secret(row.get("password_enc")),
+            stream_url=row["stream_url"],
+            username=decrypt_secret(row.get("username")),
+            password=decrypt_secret(row.get("password_encrypted")),
             reconnect_delay_sec=2.0,
+            backoff_base_sec=1.0,
+            backoff_max_sec=30.0,
         )
         target = CameraStreamer(config).resolve_capture_target()
         if not isinstance(target, str):
@@ -410,7 +412,7 @@ class AudioAnalysisService(threading.Thread):
         eligible: dict[str, dict[str, Any]] = {}
         usb_assigned = False
         for row in rows:
-            if not row["enabled"]:
+            if not row["is_active"]:
                 continue
             source_type = row["source_type"]
             if source_type in {"rtsp", "onvif"}:

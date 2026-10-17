@@ -1,4 +1,13 @@
-"""Lightweight local credential encryption (Fernet, key never leaves the machine)."""
+"""Criptografia local de credenciais (Fernet — chave nunca sai da máquina).
+
+Ordem de obtenção da chave mestra:
+1. ``ENCRYPTION_KEY`` do ``.env`` (recomendado em produção — permite rotação e
+   backup controlado pela equipe).
+2. Chave persistida em ``secrets/camera_key.fernet`` (gerada na 1ª execução).
+
+A URL descriptografada e a senha existem **apenas em memória**, no instante de
+abrir o ``VideoCapture`` — nunca são gravadas em log, banco ou resposta de API.
+"""
 
 from __future__ import annotations
 
@@ -21,11 +30,31 @@ def _key_path() -> Path:
     return settings.secrets_dir / _KEY_FILENAME
 
 
+def _fernet_from_key(key: str) -> Fernet | None:
+    """Valita uma chave Fernet vinda do ambiente (32 bytes base64-url)."""
+    cleaned = (key or "").strip()
+    if not cleaned:
+        return None
+    try:
+        return Fernet(cleaned.encode("ascii"))
+    except Exception:
+        logger.error("ENCRYPTION_KEY inválida — usando chave em arquivo (se existir)")
+        return None
+
+
 def _load_or_create_fernet() -> Fernet:
     global _fernet
     if _fernet is not None:
         return _fernet
 
+    settings = get_settings()
+    # 1) Chave mestra via .env (preferencial).
+    if settings.encryption_key:
+        _fernet = _fernet_from_key(settings.encryption_key)
+        if _fernet is not None:
+            return _fernet
+
+    # 2) Chave persistida localmente (fallback).
     path = _key_path()
     try:
         if path.exists():

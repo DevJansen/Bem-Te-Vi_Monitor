@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Activity, Cpu, RefreshCw } from "lucide-react";
+import { Activity, Cpu, RefreshCw, Sparkles } from "lucide-react";
 import type { AiStatus, Metrics } from "@/types";
 import { formatDateTime } from "@/utils/format";
 import { cn } from "@/utils/cn";
@@ -32,9 +32,15 @@ export function Header({
     <header className="sticky top-0 z-30 border-b border-dark-700 bg-dark-900/90 backdrop-blur-md">
       <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-4">
         <div>
-          <h1 className="font-display text-xl font-semibold text-[var(--color-text-primary)]">
-            {title}
-          </h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="font-display text-xl font-semibold text-[var(--color-text-primary)]">
+              {title}
+            </h1>
+            <span className="inline-flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-300">
+              <Sparkles className="h-3 w-3" />
+              Potencializado por Alaris AI
+            </span>
+          </div>
           {subtitle ? (
             <p className="mt-0.5 text-sm text-[var(--color-text-muted)]">{subtitle}</p>
           ) : null}

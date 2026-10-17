@@ -39,6 +39,7 @@ from app.infra.ai.species_classifier import SpeciesClassifier, get_default_speci
 from app.infra.ai.zone_validator import ZoneValidator, point_in_polygon
 from app.infra.camera.manager import get_camera_manager
 from app.infra.camera.streamer import CameraStreamer, StreamStatus
+from app.infra.streams.registry import get_stream_registry
 from app.infra.database.repository import CameraRepository, SettingsRepository, VisitRepository
 from app.infra.media.storage import (
     relative_to_captures,
@@ -135,6 +136,8 @@ class CameraPipeline(threading.Thread):
         # Chave do último ajuste contextual registrado no log cognitivo (para só
         # anunciar mudanças de auto-calibração, evitando repetir a cada quadro).
         self._ultimo_ajuste_chave: tuple | None = None
+        # Contador de inferências executadas neste fluxo (Alaris Core por stream).
+        self._inferencias = 0
         # Executor dedicado ao pós-processamento (clipe + foto tratada). Rodar
         # fora do laço evita travar a leitura da câmera durante o ffmpeg e o
         # denoise da imagem.
@@ -158,6 +161,9 @@ class CameraPipeline(threading.Thread):
         """
         if not self.settings.ai_insights_enabled:
             return
+        mensagem = (
+            mensagem if mensagem.startswith("[Alaris]") else f"[Alaris] {mensagem}"
+        )
         registrar_pensamento(mensagem, nivel=nivel, origem=self.camera_id, **dados)
 
     def _load_zones(self) -> None:
@@ -387,6 +393,37 @@ class CameraPipeline(threading.Thread):
             adaptive_contrast=bool(ajuste.contraste_adaptativo),
             reasons=list(ajuste.motivos),
         )
+
+    def _reportar_stream(
+        self, streamer: CameraStreamer | None, detections: list[Detection]
+    ) -> None:
+        """Publica o estado do Alaris Core deste fluxo no registro de streams.
+
+        Alimenta os selos em tempo real do grid multi-câmera (status de conexão,
+        FPS, backend, aves ativas no comedouro e pico de indivíduos).
+        """
+        if streamer is None:
+            return
+        pico = 0
+        if self._contador is not None:
+            try:
+                pico = int(self._contador.resumo().get("pico_simultaneo", 0))
+            except Exception:
+                pico = 0
+        try:
+            get_stream_registry().update(
+                self.camera_id,
+                name=streamer.config.name,
+                status=streamer.status.value,
+                fps=round(streamer.fps, 1),
+                backend=self.detector.backend,
+                active_birds=len(detections),
+                individuals_peak=pico,
+                inferences=self._inferencias,
+                last_error=streamer.last_error,
+            )
+        except Exception:
+            logger.debug("Falha ao publicar estatísticas do stream", exc_info=True)
 
     def _especies_dos_tracks(
         self, frame: np.ndarray, detections: list[Detection]
@@ -945,8 +982,12 @@ class CameraPipeline(threading.Thread):
         if species and species.lower() != "bird":
             partes = [valor for valor in (rotulo, behavior_label) if valor]
             sufixo = f" ({' / '.join(partes)})" if partes else ""
+            mensagem_id = f"Espécie identificada com sucesso: {species}{sufixo}."
+            # Combina nitidez validada quando o quadro é nítido (cena ideal).
+            if sharpness is not None and sharpness >= 120:
+                mensagem_id += " | Nitidez ideal de frame validada"
             self._pensar(
-                f"Espécie identificada: {species}{sufixo}.",
+                mensagem_id,
                 nivel=NIVEL_SUCESSO,
                 species=species,
                 scientific_name=scientific_name,
@@ -989,7 +1030,7 @@ class CameraPipeline(threading.Thread):
             )
         else:
             self._pensar(
-                f"Motor de IA pronto ({self.detector.backend or 'pytorch'}) — "
+                f"Alaris Core pronto ({self.detector.backend or 'pytorch'}) — "
                 "monitorando o stream em tempo real.",
                 nivel=NIVEL_SUCESSO,
                 backend=self.detector.backend,
@@ -1101,6 +1142,7 @@ class CameraPipeline(threading.Thread):
                                 confianca_base=ajuste.confianca_efetiva,
                             ),
                         )
+                        self._inferencias += 1
                         idle_inference_skips = 0
                     else:
                         idle_inference_skips += 1
@@ -1114,6 +1156,7 @@ class CameraPipeline(threading.Thread):
                     for detection in detections
                     if self._is_detection_allowed(detection, w, h)
                 ]
+                self._reportar_stream(streamer, detections)
                 centers = [d.normalized_center(w, h) for d in detections]
                 triggers = self.zone_validator.update(centers)
                 if triggers and detections and self._pending_event is None:
@@ -1223,11 +1266,13 @@ class PipelineSupervisor:
             pipeline.stop()
             pipeline.join(timeout=5.0)
         get_camera_manager().remove_streamer(camera_id)
+        # Limpa o estado do Alaris Core deste stream no registro por câmera.
+        get_stream_registry().remove(camera_id)
 
     def restart_camera(self, camera_id: str) -> None:
         self.stop_camera(camera_id)
         row = CameraRepository(get_settings().db_path).get(camera_id)
-        if row and row["enabled"]:
+        if row and row["is_active"]:
             self.start_camera(camera_id)
 
     def reload_zones(self, camera_id: str | None = None) -> None:
@@ -1248,7 +1293,7 @@ class PipelineSupervisor:
     def sync_from_db(self) -> None:
         settings = get_settings()
         repo = CameraRepository(settings.db_path)
-        enabled_ids = {row["id"] for row in repo.list_all() if row["enabled"]}
+        enabled_ids = {row["id"] for row in repo.list_all() if row["is_active"]}
         with self._lock:
             running = set(self._pipelines.keys())
         for camera_id in running - enabled_ids:

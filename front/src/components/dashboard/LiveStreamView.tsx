@@ -24,7 +24,7 @@ export function LiveStreamView({
   onEditRoi,
   onDelete,
 }: Props) {
-  const enabled = cameras.filter((c) => c.enabled);
+  const enabled = cameras.filter((c) => c.is_active);
   const [selectedId, setSelectedId] = useState<string>("");
   const [showBoxes, setShowBoxes] = useState(true);
   const [fps, setFps] = useState(0);

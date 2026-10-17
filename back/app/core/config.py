@@ -28,6 +28,11 @@ class Settings(BaseModel):
     # O chat é chamado em "{base}/chat/completions".
     ai_external_base_url: str = "https://api.openai.com/v1"
     app_data_dir: Path = DEFAULT_APP_DATA_DIR
+    # Chave mestra (Fernet) para criptografar as credenciais das câmeras em
+    # repouso. Recomendado definir via ENCRYPTION_KEY no .env (base64-url de 32
+    # bytes). Vazio → usa/gera a chave em secrets/camera_key.fernet.
+    encryption_key: str = ""
+    # --- Multi-Câmera (Central de Câmeras / Alaris Core distribuído) ---
     # Acesso remoto: por padrão a API aceita SOMENTE conexões locais (loopback).
     # Defina ALLOW_REMOTE_ACCESS=true apenas se for expor a API na rede de forma
     # consciente (e idealmente atrás de um proxy reverso com autenticação).
@@ -71,6 +76,13 @@ class Settings(BaseModel):
     pre_record_seconds: float = Field(default=3.0, ge=3.0, le=30.0)
     post_record_seconds: float = 3.0
     camera_reconnect_delay_sec: float = 3.0
+    # Teto de workers simultâneos do pool multi-câmera (1 por câmera ativa).
+    camera_max_workers: int = Field(default=8, ge=1, le=16)
+    # Backoff exponencial de reconexão: base e teto (segundos).
+    camera_backoff_base_sec: float = Field(default=1.0, ge=0.5, le=30.0)
+    camera_backoff_max_sec: float = Field(default=30.0, ge=1.0, le=300.0)
+    # Quadros/segundo entregues pelo proxy MJPEG seguro.
+    camera_proxy_fps: int = Field(default=15, ge=5, le=30)
     media_retention_days: int = Field(default=30, ge=1)
     # Localização do alimentador (latitude/longitude), usada pela integração
     # meteorológica com a Open-Meteo. Padrão: São Paulo/SP.
@@ -272,6 +284,7 @@ class Settings(BaseModel):
                 "AI_EXTERNAL_BASE_URL", "https://api.openai.com/v1"
             ),
             app_data_dir=Path(app_data) if app_data else DEFAULT_APP_DATA_DIR,
+            encryption_key=os.getenv("ENCRYPTION_KEY", "").strip(),
             allow_remote_access=os.getenv("ALLOW_REMOTE_ACCESS", "false")
             .strip()
             .lower()
@@ -321,6 +334,19 @@ class Settings(BaseModel):
             post_record_seconds=float(os.getenv("POST_RECORD_SECONDS", "3.0")),
             camera_reconnect_delay_sec=float(
                 os.getenv("CAMERA_RECONNECT_DELAY_SEC", "3.0")
+            ),
+            camera_max_workers=min(
+                16, max(1, int(os.getenv("CAMERA_MAX_WORKERS", "8")))
+            ),
+            camera_backoff_base_sec=min(
+                30.0,
+                max(0.5, float(os.getenv("CAMERA_BACKOFF_BASE_SEC", "1.0"))),
+            ),
+            camera_backoff_max_sec=min(
+                300.0, max(1.0, float(os.getenv("CAMERA_BACKOFF_MAX_SEC", "30.0")))
+            ),
+            camera_proxy_fps=min(
+                30, max(5, int(os.getenv("CAMERA_PROXY_FPS", "15")))
             ),
             media_retention_days=int(os.getenv("MEDIA_RETENTION_DAYS", "30")),
             latitude=min(

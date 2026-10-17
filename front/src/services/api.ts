@@ -5,6 +5,7 @@ import type {
   AiStatusSnapshot,
   Anomaly,
   AppSettings,
+  StreamStats,
   AppSettingsUpdate,
   AnalyticsSummary,
   AudioAnalysisStatus,
@@ -133,6 +134,22 @@ export async function saveRoi(
 
 export async function deleteCamera(id: string): Promise<void> {
   await api.delete(`/cameras/${id}`);
+}
+
+/* ——— Multi-Câmera / Streams (Central de Câmeras) ——— */
+
+/** Estado em tempo real de cada stream (Alaris Core distribuído). */
+export async function fetchStreams(): Promise<StreamStats[]> {
+  const { data } = await api.get<StreamStats[]>("/streams");
+  return data;
+}
+
+/**
+ * URL do proxy seguro de vídeo. O front-end NUNCA usa a URL real da câmera:
+ * o backend descriptografa as credenciais em memória e retransmite os quadros.
+ */
+export function streamProxyUrl(cameraId: string): string {
+  return `/api/streams/proxy/${encodeURIComponent(cameraId)}`;
 }
 
 export async function uploadOfflineVideo(

@@ -1,5 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from "react";
-import { Lock, X } from "lucide-react";
+import { Eye, EyeOff, Link2, Lock, MapPin, Plus, X } from "lucide-react";
 import type { CameraCreatePayload, SourceType } from "@/types";
 import { cn } from "@/utils/cn";
 
@@ -12,29 +12,40 @@ type Props = {
 const SOURCE_OPTIONS: Array<{ value: SourceType; label: string; hint: string }> = [
   { value: "usb", label: "Webcam / USB", hint: "Índice do dispositivo (ex.: 0)" },
   { value: "rtsp", label: "RTSP", hint: "URL rtsp:// ou host:porta" },
+  { value: "hls", label: "HLS", hint: "URL http(s)://.../playlist.m3u8" },
+  { value: "http", label: "HTTP / MJPEG", hint: "URL http(s) de imagem ao vivo" },
+  { value: "webrtc", label: "WebRTC", hint: "Fluxo WebRTC (via navegador)" },
   { value: "onvif", label: "ONVIF", hint: "Host do dispositivo ONVIF" },
 ];
 
 export function AddCameraModal({ open, onClose, onSubmit }: Props) {
   const [name, setName] = useState("");
-  const [sourceType, setSourceType] = useState<SourceType>("usb");
-  const [sourceUri, setSourceUri] = useState("0");
+  const [location, setLocation] = useState("");
+  const [sourceType, setSourceType] = useState<SourceType>("rtsp");
+  const [sourceUri, setSourceUri] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [enabled, setEnabled] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (!open) return null;
 
-  const needsCreds = sourceType === "rtsp" || sourceType === "onvif";
+  const needsCreds =
+    sourceType === "rtsp" ||
+    sourceType === "onvif" ||
+    sourceType === "hls" ||
+    sourceType === "http";
 
   const reset = () => {
     setName("");
-    setSourceType("usb");
-    setSourceUri("0");
+    setLocation("");
+    setSourceType("rtsp");
+    setSourceUri("");
     setUsername("");
     setPassword("");
+    setShowPassword(false);
     setEnabled(true);
     setError(null);
   };
@@ -53,7 +64,8 @@ export function AddCameraModal({ open, onClose, onSubmit }: Props) {
       const payload: CameraCreatePayload = {
         name: name.trim(),
         source_type: sourceType,
-        source_uri: sourceUri.trim(),
+        stream_url: sourceUri.trim(),
+        location_label: location.trim() || undefined,
         enabled,
         username: needsCreds && username ? username : null,
         password: needsCreds && password ? password : null,
@@ -88,11 +100,14 @@ export function AddCameraModal({ open, onClose, onSubmit }: Props) {
               id="add-camera-title"
               className="font-display text-lg font-semibold text-[var(--color-text-primary)]"
             >
-              Adicionar câmera
+              <span className="inline-flex items-center gap-2">
+                <Link2 className="h-4 w-4 text-emerald-400" />
+                Adicionar câmera externa
+              </span>
             </h2>
             <p className="mt-0.5 flex items-center gap-1 text-xs text-[var(--color-text-muted)]">
               <Lock className="h-3 w-3 text-emerald-400" />
-              Credenciais criptografadas localmente (Fernet)
+              Credenciais criptografadas em repouso (Fernet · ENCRYPTION_KEY)
             </p>
           </div>
           <button
@@ -105,18 +120,30 @@ export function AddCameraModal({ open, onClose, onSubmit }: Props) {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 px-5 py-4">
-          <Field label="Nome">
+          <Field label="Nome da câmera">
             <input
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ex.: Bebedouro quintal"
+              placeholder="Ex.: Bebedouro do vizinho"
               className={inputClass}
             />
           </Field>
 
-          <Field label="Tipo de fonte">
-            <div className="grid grid-cols-3 gap-2">
+          <Field label="Local" hint="Ex.: Casa vizinha · Sitio · Parque">
+            <div className="relative">
+              <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
+              <input
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="Onde esta câmera está instalada?"
+                className={`${inputClass} pl-9`}
+              />
+            </div>
+          </Field>
+
+          <Field label="Tipo de stream ao vivo">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {SOURCE_OPTIONS.map((opt) => (
                 <button
                   key={opt.value}
@@ -139,16 +166,25 @@ export function AddCameraModal({ open, onClose, onSubmit }: Props) {
           </Field>
 
           <Field
-            label={sourceType === "usb" ? "Índice USB" : "Endereço / URI"}
+            label={sourceType === "usb" ? "Índice USB" : "URL do stream ao vivo"}
             hint={SOURCE_OPTIONS.find((o) => o.value === sourceType)?.hint}
           >
             <input
               required
               value={sourceUri}
               onChange={(e) => setSourceUri(e.target.value)}
-              placeholder={sourceType === "usb" ? "0" : "rtsp://192.168.0.50:554/..."}
+              placeholder={
+                sourceType === "usb"
+                  ? "0"
+                  : sourceType === "hls"
+                    ? "https://exemplo.com/stream.m3u8"
+                    : sourceType === "webrtc"
+                      ? "wss://..."
+                      : "rtsp://192.168.0.50:554/..."
+              }
               className={inputClass}
               autoComplete="off"
+              spellCheck={false}
             />
           </Field>
 
@@ -164,13 +200,27 @@ export function AddCameraModal({ open, onClose, onSubmit }: Props) {
                 />
               </Field>
               <Field label="Senha (criptografada)">
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className={inputClass}
-                  autoComplete="new-password"
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className={`${inputClass} pr-10`}
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-[var(--color-text-muted)] transition hover:text-emerald-400"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
               </Field>
             </div>
           ) : null}
@@ -191,21 +241,28 @@ export function AddCameraModal({ open, onClose, onSubmit }: Props) {
             </p>
           ) : null}
 
-          <div className="flex justify-end gap-2 border-t border-dark-700 pt-4">
-            <button
-              type="button"
-              onClick={handleClose}
-              className="rounded-lg border border-dark-700 px-4 py-2 text-sm text-[var(--color-text-muted)] hover:bg-dark-700"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-dark-900 transition hover:bg-emerald-400 disabled:opacity-60"
-            >
-              {submitting ? "Salvando…" : "Salvar câmera"}
-            </button>
+          <div className="flex items-center justify-between gap-2 border-t border-dark-700 pt-4">
+            <p className="hidden items-center gap-1 text-[11px] text-[var(--color-text-muted)] sm:flex">
+              <Lock className="h-3 w-3" />
+              Nunca expomos sua URL/senha no navegador
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={handleClose}
+                className="rounded-lg border border-dark-700 px-4 py-2 text-sm text-[var(--color-text-muted)] hover:bg-dark-700"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-dark-900 transition hover:bg-emerald-400 disabled:opacity-60"
+              >
+                <Plus className="h-4 w-4" />
+                {submitting ? "Salvando…" : "Salvar câmera"}
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -228,7 +285,9 @@ function Field({
         {label}
       </span>
       {children}
-      {hint ? <span className="mt-1 block text-[11px] text-[var(--color-text-muted)]">{hint}</span> : null}
+      {hint ? (
+        <span className="mt-1 block text-[11px] text-[var(--color-text-muted)]">{hint}</span>
+      ) : null}
     </label>
   );
 }

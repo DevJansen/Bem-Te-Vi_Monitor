@@ -37,7 +37,7 @@ class CameraManager:
             streamer = self._streamers.get(camera_id)
             if streamer is None:
                 row = self._repo.get(camera_id)
-                if row and not row["enabled"]:
+                if row and not row["is_active"]:
                     return "disabled"
                 return "idle"
             return streamer.status.value
@@ -53,10 +53,12 @@ class CameraManager:
             camera_id=row["id"],
             name=row["name"],
             source_type=SourceType(row["source_type"]),
-            source_uri=row["source_uri"],
-            username=decrypt_secret(row.get("username_enc")),
-            password=decrypt_secret(row.get("password_enc")),
+            stream_url=row["stream_url"],
+            username=decrypt_secret(row.get("username")),
+            password=decrypt_secret(row.get("password_encrypted")),
             reconnect_delay_sec=self._settings.camera_reconnect_delay_sec,
+            backoff_base_sec=self._settings.camera_backoff_base_sec,
+            backoff_max_sec=self._settings.camera_backoff_max_sec,
         )
 
     def upsert_streamer(self, camera_id: str) -> CameraStreamer | None:
@@ -70,7 +72,7 @@ class CameraManager:
             if existing is not None:
                 existing.close()
 
-            if not row["enabled"]:
+            if not row["is_active"]:
                 self._streamers.pop(camera_id, None)
                 return None
 
@@ -87,7 +89,7 @@ class CameraManager:
     def load_enabled(self) -> list[CameraStreamer]:
         loaded: list[CameraStreamer] = []
         for row in self._repo.list_all():
-            if not row["enabled"]:
+            if not row["is_active"]:
                 continue
             streamer = self.upsert_streamer(row["id"])
             if streamer is not None:

@@ -11,6 +11,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Query
 
+from app.core.branding import ALARIS_SIGNATURE
 from app.core.config import get_settings
 from app.domain.models import (
     AiEngineOut,
@@ -55,7 +56,7 @@ def ai_status() -> AiStatusOut:
         cameras_online = 0
         try:
             repo = CameraRepository(get_settings().db_path)
-            cameras_enabled = sum(1 for row in repo.list_all() if row["enabled"])
+            cameras_enabled = sum(1 for row in repo.list_all() if row["is_active"])
             status_map = get_camera_manager().status_map()
             cameras_online = sum(
                 1 for status in status_map.values() if status == "online"
@@ -64,6 +65,7 @@ def ai_status() -> AiStatusOut:
             logger.debug("Falha ao contar câmeras", exc_info=True)
 
         return AiStatusOut(
+            signature=ALARIS_SIGNATURE,
             engine=AiEngineOut(
                 state=retrato.get("state") or "Aguardando stream",
                 model=modelo.get("model"),

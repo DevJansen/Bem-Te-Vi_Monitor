@@ -13,6 +13,7 @@ from app.controllers import (
     settings,
     species,
     stats,
+    streams,
     video_feed,
     videos,
     visits,
@@ -21,6 +22,7 @@ from app.controllers import (
 
 api_router = APIRouter()
 api_router.include_router(ai.router)
+api_router.include_router(streams.router)
 api_router.include_router(anomalies.router)
 api_router.include_router(audio_detections.router)
 api_router.include_router(events.router)

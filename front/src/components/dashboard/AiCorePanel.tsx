@@ -6,6 +6,7 @@ import {
   Gauge,
   MemoryStick,
   Radio,
+  Sparkles,
   Timer,
   Zap,
 } from "lucide-react";
@@ -37,7 +38,7 @@ export function AiCorePanel() {
 
   return (
     <section
-      aria-label="Núcleo de IA"
+      aria-label="Alaris Core"
       className="relative overflow-hidden rounded-xl border border-emerald-500/25 bg-gradient-to-br from-dark-800 via-dark-800 to-dark-900"
     >
       {/* Brilho radial decorativo + linha de varredura (processamento neural). */}
@@ -92,8 +93,12 @@ export function AiCorePanel() {
           <div>
             <div className="flex items-center gap-2">
               <h2 className="font-display text-base font-semibold text-[var(--color-text-primary)]">
-                Núcleo de IA
+                Alaris Core
               </h2>
+              <span className="inline-flex items-center gap-1 rounded-full border border-violet-400/40 bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-300">
+                <Sparkles className="h-3 w-3" />
+                Potencializado por Alaris AI
+              </span>
               <span
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
@@ -108,11 +113,11 @@ export function AiCorePanel() {
                     online ? "bg-emerald-400 animate-pulse-soft" : "bg-red-400",
                   )}
                 />
-                {online ? "IA ativa" : "IA offline"}
+                {online ? "Alaris Core ativo" : "Alaris Core indisponível"}
               </span>
             </div>
             <p className="mt-0.5 text-sm text-[var(--color-text-muted)]">
-              {engine?.state ?? "Conectando ao motor de IA…"}
+              {engine?.state ?? "Conectando à Alaris Core…"}
             </p>
             <p className="mt-0.5 font-mono text-[11px] text-emerald-300/80">
               {engine?.model ?? "—"} · {backendLabel} · {engine?.device ?? "—"}
@@ -207,7 +212,7 @@ export function AiCorePanel() {
           <Zap className="h-3 w-3 text-emerald-400/80" />
           {engine?.notes && engine.notes.length > 0
             ? engine.notes.join(" · ")
-            : "Motor de inferência local (Edge AI)"}
+            : "Alaris Core — inferência Edge AI (YOLOv8)"}
         </span>
         <span className="inline-flex items-center gap-1.5">
           <Timer className="h-3 w-3" />

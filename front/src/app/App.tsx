@@ -4,6 +4,7 @@ import { Header } from "@/components/layout/Header";
 import { KPIBoard } from "@/components/dashboard/KPIBoard";
 import { AnomalyAlertsPanel } from "@/components/dashboard/AnomalyAlertsPanel";
 import { AiCorePanel } from "@/components/dashboard/AiCorePanel";
+import { CameraWall } from "@/components/dashboard/CameraWall";
 import { AiStreamLog } from "@/components/dashboard/AiStreamLog";
 import { LiveStreamView } from "@/components/dashboard/LiveStreamView";
 import { WeatherWidget } from "@/components/dashboard/WeatherWidget";
@@ -53,8 +54,8 @@ const TAB_META: Record<AppTab, { title: string; subtitle: string }> = {
     subtitle: "Visão geral do monitoramento local de avifauna",
   },
   cameras: {
-    title: "Câmeras",
-    subtitle: "Gerencie fontes USB, RTSP e ONVIF",
+    title: "Central de Câmeras",
+    subtitle: "Fontes locais e externas (RTSP, HLS, HTTP, WebRTC) com credenciais criptografadas",
   },
   gallery: {
     title: "Galeria",
@@ -108,7 +109,7 @@ export function App() {
     if (healthQuery.loading && !healthQuery.data) return "loading";
     if (healthQuery.error || !healthQuery.data) return "offline";
     const cams = camerasQuery.data ?? [];
-    const hasError = cams.some((c) => c.enabled && c.status === "error");
+    const hasError = cams.some((c) => c.is_active && c.status === "error");
     if (hasError) return "degraded";
     return "online";
   }, [healthQuery, camerasQuery.data]);
@@ -211,6 +212,7 @@ export function App() {
           {tab === "dashboard" ? (
             <div className="space-y-4">
               <AiCorePanel />
+              <CameraWall cameras={camerasQuery.data ?? []} />
               <WeatherWidget />
               <AnomalyAlertsPanel />
               <KPIBoard metrics={metricsQuery.data} loading={metricsQuery.loading} />
