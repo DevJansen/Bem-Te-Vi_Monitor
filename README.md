@@ -288,19 +288,26 @@ Se o painel mostrar “Não foi possível conectar à API”, confirme se a jane
 ### Cadastrar câmeras
 
 1. Abra o painel → aba **Central de Câmeras** → **Adicionar câmera externa**.
-2. Para uma webcam, escolha tipo `USB` e URI `0`.
-3. Para uma câmera IP ou stream externo, escolha `RTSP`, `HLS`, `HTTP` ou `WebRTC`
-   e informe a URL do stream ao vivo e, se necessário, usuário e senha. O campo
-   **Local** identifica onde a câmera está (ex.: "Bebedouro do vizinho").
+2. Para uma webcam, escolha **Webcam local (USB)** e informe o índice (ex.: `0`).
+3. Para uma câmera IP ou stream externo, cole a **URL do Stream ao Vivo**
+   (`rtsp://…`, `https://…/stream.m3u8`, `http://…`). O tipo (RTSP/HLS/HTTP/
+   WebRTC) é **detectado automaticamente** a partir do link. O campo **Local**
+   identifica onde a câmera está (ex.: "Bebedouro do vizinho").
+4. **Login e senha são opcionais.** Links públicos/abertos conectam direto, sem
+   credenciais. Se a câmera exigir autenticação, abra a seção
+   **"Esta câmera exige login e senha? (Opcional)"** e preencha usuário/senha.
 
 As credenciais (usuário/senha) são armazenadas criptografadas localmente com
 **Fernet**. A chave mestra vem de `ENCRYPTION_KEY` no `.env`; se não definida,
-uma chave é gerada em `back\app-data\secrets\camera_key.fernet`. A URL real e as
+uma chave é gerada em `back\app-data\secrets\camera_key.fernet`. Se você colar um
+link que **já contenha** usuário/senha (`rtsp://user:senha@host/…`), o backend os
+**extrai** da URL, criptografa e grava a URL **sem** as credenciais. O **Smart
+Stream Resolver** decide, no worker de captura, se injeta as credenciais na URI
+em memória (quando existem) ou usa a URL crua (quando é pública). A URL real e as
 credenciais **nunca** chegam ao navegador: o vídeo é entregue por um **proxy
-seguro** (`GET /api/streams/proxy/{id}`), que descriptografa em memória e
-retransmite os quadros. A URL exibida na interface tem a userInfo mascarada
-(`****:****@host`). O estado aparece no painel como conectado, reconectando ou
-offline.
+seguro** (`GET /api/streams/proxy/{id}`). A URL exibida na interface tem a
+userInfo mascarada (`****:****@host`). O estado aparece no painel como conectado,
+reconectando ou offline.
 
 ### Mural multi-câmera (Alaris Core distribuído)
 

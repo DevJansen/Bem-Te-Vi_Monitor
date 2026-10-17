@@ -80,6 +80,17 @@ class CameraStreamer:
         return max(self._fps, 1.0)
 
     def resolve_capture_target(self) -> str | int:
+        """**Smart Stream Resolver**: decide o alvo de captura de forma inteligente.
+
+        Regras:
+
+        - **USB** → índice inteiro do dispositivo.
+        - **ONVIF** → descobre a URL RTSP do dispositivo; se falhar, monta uma.
+        - **HTTP/HLS/RTSP/WebRTC** → se houver usuário/senha cadastrados, injeta-os
+          na URI em memória; se **não** houver (câmera pública/aberta), usa a URL
+          crua exatamente como o usuário colou. Isso garante "colar o link e
+          conectar" sem exigir credenciais.
+        """
         st = self.config.source_type
         uri = self.config.stream_url.strip()
 
@@ -103,18 +114,24 @@ class CameraStreamer:
             return self._inject_http_auth(uri, username, password)
 
         # RTSP (e WebRTC tratado como fluxo externo via ffmpeg, quando possível).
+        # Sem credenciais, build_rtsp_url devolve a URL crua (link público).
         return build_rtsp_url(uri, username, password)
 
     @staticmethod
     def _inject_http_auth(
         uri: str, username: str | None, password: str | None
     ) -> str:
-        """Injeta credenciais basic-auth em uma URL HTTP/HLS (em memória)."""
-        if not username:
-            return uri
+        """Injeta credenciais basic-auth em uma URL HTTP/HLS (em memória).
+
+        Se a câmera for pública (sem usuário) ou a URL já trouxer credenciais,
+        devolve a URL crua — preservando links abertos e evitando duplicação.
+        """
         from urllib.parse import quote, urlparse, urlunparse
 
         parsed = urlparse(uri)
+        if not username or parsed.username:
+            return uri
+
         user = quote(username, safe="")
         pwd = quote(password or "", safe="")
         host = parsed.hostname or ""

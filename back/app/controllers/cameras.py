@@ -7,6 +7,7 @@ import logging
 from fastapi import APIRouter, HTTPException, status
 
 from app.core.config import get_settings
+from app.core.redact import extrair_credenciais_da_url
 from app.domain.models import CameraCreate, CameraOut, CameraUpdate, CameraZones
 from app.infra.ai.pipeline import get_pipeline_supervisor
 from app.infra.camera.crypto import encrypt_secret
@@ -84,10 +85,19 @@ async def save_camera_zones(camera_id: str, payload: CameraZones) -> CameraZones
 @router.post("", response_model=CameraOut, status_code=status.HTTP_201_CREATED)
 async def create_camera(payload: CameraCreate) -> CameraOut:
     try:
+        # Smart Stream Resolver (entrada): o usuário pode simplesmente colar o
+        # link. Se ele já trouxer usuário/senha embutidos, separamos da URL para
+        # criptografar em repouso; se for público/aberto, segue sem credenciais.
+        url_limpa, usuario_url, senha_url = extrair_credenciais_da_url(payload.stream_url)
+        if url_limpa != payload.stream_url:
+            payload = payload.model_copy(update={"stream_url": url_limpa})
+        username = payload.username or usuario_url
+        password = payload.password or senha_url
+
         row = _repo().create(
             payload,
-            username_enc=encrypt_secret(payload.username),
-            password_enc=encrypt_secret(payload.password),
+            username_enc=encrypt_secret(username),
+            password_enc=encrypt_secret(password),
         )
         if row["is_active"]:
             get_pipeline_supervisor().start_camera(row["id"])
@@ -104,6 +114,19 @@ async def create_camera(payload: CameraCreate) -> CameraOut:
 @router.put("/{camera_id}", response_model=CameraOut)
 async def update_camera(camera_id: str, payload: CameraUpdate) -> CameraOut:
     try:
+        # Smart Stream Resolver (entrada): extrai credenciais embutidas no novo
+        # link (quando houver), tratando-as como fornecidas explicitamente.
+        if payload.stream_url:
+            url_limpa, usuario_url, senha_url = extrair_credenciais_da_url(
+                payload.stream_url
+            )
+            if url_limpa != payload.stream_url:
+                payload = payload.model_copy(update={"stream_url": url_limpa})
+            if payload.username is None and usuario_url is not None:
+                payload = payload.model_copy(update={"username": usuario_url})
+            if payload.password is None and senha_url is not None:
+                payload = payload.model_copy(update={"password": senha_url})
+
         update_creds = (
             payload.username is not None
             or payload.password is not None
