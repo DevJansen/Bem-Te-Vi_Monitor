@@ -7,6 +7,7 @@ from app.controllers import (
     ai,
     anomalies,
     audio_detections,
+    bioacoustics,
     cameras,
     events,
     offline,
@@ -38,5 +39,6 @@ api_router.include_router(video_feed.router)
 api_router.include_router(videos.router)
 api_router.include_router(weather.router)
 api_router.include_router(wildlife.router)
+api_router.include_router(bioacoustics.router)
 
 __all__ = ["api_router"]

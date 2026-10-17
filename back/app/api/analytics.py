@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException
 from app.core.config import get_settings
 from app.domain.models import (
     AchievementOut,
+    CollectorLevelOut,
     AnalyticsSummaryOut,
     HourlyDistributionOut,
     LifeListSpeciesOut,
@@ -87,6 +88,45 @@ def get_lifelist() -> list[LifeListSpeciesOut]:
         raise HTTPException(
             status_code=500,
             detail="Não foi possível carregar o álbum de espécies.",
+        ) from exc
+
+
+@router.get("/collector-level", response_model=CollectorLevelOut)
+def get_collector_level() -> CollectorLevelOut:
+    """Nível do Coletor baseado na quantidade de espécies descobertas."""
+    try:
+        return CollectorLevelOut(**_repository().collector_level())
+    except Exception as exc:
+        logger.exception("get_collector_level failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível calcular o nível do coletor.",
+        ) from exc
+
+
+@router.get("/report/pdf")
+def get_report_pdf():
+    """Gera e baixa o Laudo Ornitológico automatizado em PDF."""
+    from fastapi.responses import Response
+
+    from app.services.ornithological_report import gerar_laudo_pdf
+
+    try:
+        pdf_bytes = gerar_laudo_pdf(get_settings().db_path)
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": (
+                    "attachment; filename=laudo-ornitologico-aviawatch.pdf"
+                )
+            },
+        )
+    except Exception as exc:
+        logger.exception("get_report_pdf failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível gerar o laudo ornitológico.",
         ) from exc
 
 

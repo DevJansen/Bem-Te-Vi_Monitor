@@ -15,6 +15,7 @@ import {
   CalendarDays,
   Clock3,
   Eye,
+  FileText,
   RefreshCw,
   Sparkles,
   Timer,
@@ -24,15 +25,18 @@ import type { LucideIcon } from "lucide-react";
 import {
   fetchAchievements,
   fetchAnalyticsSummary,
+  fetchCollectorLevel,
   fetchHourlyDistribution,
   fetchLifeList,
   fetchWeatherCorrelation,
   fetchWeatherInsights,
   getErrorMessage,
+  laudoPdfUrl,
 } from "@/services/api";
 import type {
   Achievement,
   AnalyticsSummary,
+  CollectorLevel,
   HourlyDistribution,
   LifeListSpecies,
   WeatherCorrelation,
@@ -53,11 +57,12 @@ type AnalyticsData = {
   weather: WeatherCorrelation;
   weatherInsights: WeatherInsights;
   achievements: Achievement[];
+  collectorLevel: CollectorLevel | null;
 };
 
 async function loadAnalytics(): Promise<AnalyticsData> {
   try {
-    const [summary, hourly, lifeList, weather, weatherInsights, achievements] =
+    const [summary, hourly, lifeList, weather, weatherInsights, achievements, collectorLevel] =
       await Promise.all([
         fetchAnalyticsSummary(),
         fetchHourlyDistribution(),
@@ -65,6 +70,7 @@ async function loadAnalytics(): Promise<AnalyticsData> {
         fetchWeatherCorrelation(),
         fetchWeatherInsights(),
         fetchAchievements(),
+        fetchCollectorLevel().catch(() => null),
       ]);
     return {
       summary,
@@ -73,6 +79,7 @@ async function loadAnalytics(): Promise<AnalyticsData> {
       weather,
       weatherInsights,
       achievements,
+      collectorLevel,
     };
   } catch (error) {
     throw new Error(
@@ -171,6 +178,14 @@ export function AnalyticsDashboard() {
                   Resumo do histórico local de visitas
                 </p>
               </div>
+              <a
+                href={laudoPdfUrl()}
+                download="laudo-ornitologico-aviawatch.pdf"
+                className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/20"
+              >
+                <FileText className="h-4 w-4" />
+                Gerar Laudo (PDF)
+              </a>
               <button
                 type="button"
                 onClick={refresh}
@@ -335,7 +350,7 @@ export function AnalyticsDashboard() {
             {view === "album" ? (
               <LifeListAlbum species={data.lifeList} />
             ) : (
-              <AchievementsGrid achievements={data.achievements} />
+              <AchievementsGrid achievements={data.achievements} collectorLevel={data.collectorLevel} />
             )}
           </section>
         </>

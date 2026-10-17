@@ -227,6 +227,19 @@ class CameraPipeline(threading.Thread):
             logger.exception("Invalid ROI for camera %s", self.camera_id)
             self._roi_zones = []
 
+    def _scheduler_stride(self) -> int:
+        """Stride de inferência decidido pelo Agendamento Inteligente.
+
+        Horários de pico → 1 (todos os quadros). Fora do pico → 2. Madrugada
+        sem visão noturna → 4 (economia de CPU/GPU).
+        """
+        try:
+            from app.services.smart_scheduling import get_smart_scheduler
+
+            return get_smart_scheduler().decidir(self.camera_id).frame_stride
+        except Exception:
+            return 4
+
     def _apply_calibration(self, tracker: BoxTracker) -> None:
         """Lê a calibração ativa e aplica nos componentes do pipeline.
 
@@ -1259,7 +1272,7 @@ class CameraPipeline(threading.Thread):
             )
 
         self._load_zones()
-        infer_every_n = 4
+        infer_every_n = self._scheduler_stride()
         frame_idx = 0
         last_zone_reload = 0.0
         detections: list[Detection] = []

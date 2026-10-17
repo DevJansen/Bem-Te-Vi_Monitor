@@ -42,6 +42,9 @@ import type {
   WeatherCorrelation,
   WeatherInsights,
   WildlifeSummary,
+  CollectorLevel,
+  BioacousticsCross,
+  BioacousticsSummary,
   Zone,
 } from "@/types";
 
@@ -458,6 +461,44 @@ export async function fetchWildlifeSummary(): Promise<WildlifeSummary> {
 export async function fetchTodayByGarden(): Promise<TodayByGarden> {
   const { data } = await api.get<TodayByGarden>("/analytics/today");
   return data;
+}
+
+/** Nível do Coletor baseado na quantidade de espécies descobertas. */
+export async function fetchCollectorLevel(): Promise<CollectorLevel> {
+  const { data } = await api.get<CollectorLevel>("/analytics/collector-level");
+  return data;
+}
+
+/** Cruzamento bioacústico áudio × visual de uma câmera. */
+export async function fetchBioacousticsCross(
+  cameraId: string,
+  janelaMinutos = 30,
+): Promise<BioacousticsCross[]> {
+  const { data } = await api.get<BioacousticsCross[]>(
+    `/bioacoustics/cross/${cameraId}`,
+    { params: { janela_minutos: janelaMinutos } },
+  );
+  return data;
+}
+
+/** Resumo bioacústico: espécies ouvidas vs. vistas. */
+export async function fetchBioacousticsSummary(
+  cameraId: string,
+): Promise<BioacousticsSummary> {
+  const { data } = await api.get<BioacousticsSummary>(
+    `/bioacoustics/summary/${cameraId}`,
+  );
+  return data;
+}
+
+/** URL do stream de áudio ao vivo da câmera (player do painel). */
+export function cameraAudioUrl(cameraId: string): string {
+  return `/api/bioacoustics/audio/${cameraId}`;
+}
+
+/** URL de download do Laudo Ornitológico em PDF. */
+export function laudoPdfUrl(): string {
+  return "/api/analytics/report/pdf";
 }
 export async function fetchTodayVisits(
   limit = 50,

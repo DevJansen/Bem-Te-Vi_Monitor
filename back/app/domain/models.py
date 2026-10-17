@@ -585,6 +585,17 @@ class AchievementOut(BaseModel):
     secret: bool = False
 
 
+class CollectorLevelOut(BaseModel):
+    """Nível do Coletor baseado na quantidade de espécies descobertas."""
+
+    level: int
+    title: str
+    species_count: int
+    next_threshold: int | None = None
+    next_title: str | None = None
+    progress_to_next: float = Field(ge=0.0, le=1.0)
+
+
 class WildlifeVisitorStatOut(BaseModel):
     """Contagem de um grupo de Visitantes Especiais (ex.: Esquilos)."""
 

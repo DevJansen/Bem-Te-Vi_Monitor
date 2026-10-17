@@ -660,6 +660,25 @@ class AnalyticsRepository:
             squirrel_count = conn.execute(
                 "SELECT COUNT(*) AS c FROM visits WHERE visitor_group = 'esquilo'"
             ).fetchone()["c"]
+            # Badge "Fotógrafo Pro": foto com nitidez superior a 400.
+            sharpness_count = conn.execute(
+                """
+                SELECT COUNT(*) AS c FROM visits
+                WHERE {SQL_SO_AVES}
+                    AND CAST(
+                        json_extract(metadata_json, '$.best_frame_sharpness') AS REAL
+                    ) > 400
+                """.format(SQL_SO_AVES=SQL_SO_AVES)
+            ).fetchone()["c"]
+            # Badge "Explorador Global": câmeras em países diferentes.
+            global_count = conn.execute(
+                """
+                SELECT COUNT(DISTINCT c.country) AS c
+                FROM visits v
+                JOIN cameras c ON c.id = v.camera_id
+                WHERE {SQL_SO_AVES} AND c.country IS NOT NULL AND c.country != ''
+                """.format(SQL_SO_AVES=SQL_SO_AVES)
+            ).fetchone()["c"]
 
         total_visits = int(totals["total_visits"] or 0)
         species_observed = int(totals["species_observed"] or 0)
@@ -669,6 +688,8 @@ class AnalyticsRepository:
         rain_count = int(rain_count or 0)
         rare_count = int(rare_count or 0)
         squirrel_count = int(squirrel_count or 0)
+        sharpness_count = int(sharpness_count or 0)
+        global_count = int(global_count or 0)
 
         # (id, nome, descrição, ícone, alvo, progresso atual, secreta)
         definitions: list[tuple[str, str, str, str, int, int, bool]] = [
@@ -772,6 +793,25 @@ class AnalyticsRepository:
                 squirrel_count,
                 True,
             ),
+            # --- Badges especiais do pacote Master -----------------------------
+            (
+                "fotografo_pro",
+                "Fotógrafo Pro",
+                "Capture uma foto com nitidez superior a 400.",
+                "📸",
+                1,
+                sharpness_count,
+                False,
+            ),
+            (
+                "explorador_global",
+                "Explorador Global",
+                "Registre aves em câmeras de países diferentes.",
+                "🌍",
+                1,
+                global_count,
+                False,
+            ),
         ]
 
         return [
@@ -868,6 +908,51 @@ class AnalyticsRepository:
             ),
             "groups": grupos,
             "generated_at": datetime.now(timezone.utc).isoformat() + "Z",
+        }
+
+    def collector_level(self) -> dict[str, Any]:
+        """Nível do Coletor baseado na quantidade de espécies descobertas.
+
+        Níveis: Iniciante (0-2) ➔ Observador (3-5) ➔ Observador Sênior (6-9)
+        ➔ Ornitólogo (10-19) ➔ Ornitólogo Mestre (20+).
+        """
+        with db_session(self.db_path) as conn:
+            species_observed = int(
+                conn.execute(
+                    f"SELECT COUNT(DISTINCT species_id) AS c FROM visits WHERE {SQL_SO_AVES}"
+                ).fetchone()["c"]
+                or 0
+            )
+        niveis = [
+            (0, "Iniciante"),
+            (3, "Observador"),
+            (6, "Observador Sênior"),
+            (10, "Ornitólogo"),
+            (20, "Ornitólogo Mestre"),
+        ]
+        nivel_atual = 0
+        titulo_atual = niveis[0][1]
+        proximo_nivel = None
+        proximo_titulo = None
+        for limiar, titulo in niveis:
+            if species_observed >= limiar:
+                nivel_atual = limiar
+                titulo_atual = titulo
+            else:
+                proximo_nivel = limiar
+                proximo_titulo = titulo
+                break
+        progresso = 1.0
+        if proximo_nivel is not None:
+            faixa = proximo_nivel - nivel_atual
+            progresso = min(1.0, (species_observed - nivel_atual) / faixa)
+        return {
+            "level": nivel_atual,
+            "title": titulo_atual,
+            "species_count": species_observed,
+            "next_threshold": proximo_nivel,
+            "next_title": proximo_titulo,
+            "progress_to_next": round(progresso, 4),
         }
 
     def today_by_garden(self) -> dict[str, Any]:

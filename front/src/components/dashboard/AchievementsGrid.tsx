@@ -1,16 +1,17 @@
-import { LockKeyhole } from "lucide-react";
-import type { Achievement } from "@/types";
+import { LockKeyhole, TrendingUp } from "lucide-react";
+import type { Achievement, CollectorLevel } from "@/types";
 import { cn } from "@/utils/cn";
 
 type Props = {
   achievements: Achievement[];
+  collectorLevel: CollectorLevel | null;
 };
 
 /**
  * Seção de Conquistas: medalhas/marcos do observador. As conquistadas ganham
  * destaque colorido; as pendentes mostram uma barra de progresso até o alvo.
  */
-export function AchievementsGrid({ achievements }: Props) {
+export function AchievementsGrid({ achievements, collectorLevel }: Props) {
   const unlocked = achievements.filter((item) => item.unlocked).length;
 
   return (
@@ -28,6 +29,35 @@ export function AchievementsGrid({ achievements }: Props) {
           {unlocked}/{achievements.length} conquistadas
         </span>
       </div>
+
+      {/* Barra de Nível do Coletor */}
+      {collectorLevel ? (
+        <div className="mb-4 rounded-xl border border-dark-700 bg-dark-900/50 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-emerald-400" />
+              <span className="text-sm font-semibold text-[var(--color-text-primary)]">
+                Nível do Coletor
+              </span>
+            </div>
+            <span className="text-xs font-medium text-emerald-300">
+              {collectorLevel.title}
+            </span>
+          </div>
+          <div className="h-2.5 overflow-hidden rounded-full bg-dark-700">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-300 transition-all duration-700"
+              style={{ width: `${collectorLevel.progress_to_next * 100}%` }}
+            />
+          </div>
+          <p className="mt-1.5 text-[11px] text-[var(--color-text-muted)]">
+            {collectorLevel.species_count} espécies descobertas
+            {collectorLevel.next_title
+              ? ` — próximo nível: ${collectorLevel.next_title} (${collectorLevel.next_threshold} espécies)`
+              : " — nível máximo alcançado!"}
+          </p>
+        </div>
+      ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {achievements.map((item, index) => {

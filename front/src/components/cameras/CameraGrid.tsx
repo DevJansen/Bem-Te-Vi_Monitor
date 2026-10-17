@@ -14,6 +14,7 @@ import type { Camera, CameraWeather } from "@/types";
 import { getCameraWeather } from "@/services/api";
 import { StatusDot } from "@/components/common/StatusDot";
 import { statusLabel } from "@/utils/format";
+import { cameraAudioUrl } from "@/services/api";
 import { cn } from "@/utils/cn";
 
 type Props = {
@@ -125,6 +126,15 @@ export function CameraGrid({
 
                 {/* Clima e horário locais do jardim (câmeras globais/remotas). */}
                 <CameraLocalWeather camera={camera} />
+
+                {/* Player de áudio ao vivo do jardim (Bioacústica). */}
+                <audio
+                  controls
+                  muted
+                  src={cameraAudioUrl(camera.id)}
+                  className="mt-3 w-full rounded-lg"
+                  title="Som ambiente do jardim (ao vivo)"
+                />
 
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-dark-700 pt-3">
                   <label className="flex items-center gap-2 text-xs text-[var(--color-text-muted)]">

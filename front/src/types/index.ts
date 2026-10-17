@@ -515,6 +515,39 @@ export type Achievement = {
   secret: boolean;
 };
 
+export type CollectorLevel = {
+  level: number;
+  title: string;
+  species_count: number;
+  next_threshold: number | null;
+  next_title: string | null;
+  progress_to_next: number;
+};
+
+export type BioacousticsCross = {
+  id: string;
+  detected_at: string;
+  camera_id: string;
+  location_label: string | null;
+  especie_audio: string;
+  especie_visual: string | null;
+  especies: string[];
+  confianca_audio: number;
+  confianca_visual: number | null;
+  confianca_combinada: number;
+  linked_visit_id: string | null;
+  thumbnail_path: string | null;
+};
+
+export type BioacousticsSummary = {
+  camera_id: string;
+  total_deteccoes_audio: number;
+  especies_ouvida: string[];
+  especies_vista: string[];
+  especies_confirmadas: string[];
+  especies_so_audio: string[];
+};
+
 export type WildlifeVisitorStat = {
   group: string;
   label: string;
