@@ -4,23 +4,38 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 
 from app.core.config import get_settings
-from app.domain.models import VisitOut, VisitSpeciesAssignment
+from app.domain.avifauna_sul import info_especie
+from app.domain.models import SpeciesConsultOut, VisitOut, VisitSpeciesAssignment
 from app.infra.database.repository import VisitRepository
 from app.services.anomaly_log import registrar_retorno_especie
 from app.services.external_species_identifier import (
     ExternalIdentificationError,
+    consult_species_profile,
     identify_bird_image_file,
 )
-from app.services.species_catalog import find_or_create_species
+from app.services.species_catalog import match_or_create_species
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/visits", tags=["visits"])
+
+# Rótulos genéricos do detector que NÃO são um nome de espécie de verdade.
+_GENERIC_SPECIES = {
+    "bird",
+    "ave",
+    "ave (genérica)",
+    "ave nao identificada",
+    "ave não identificada",
+    "não identificada",
+    "nao identificada",
+    "unidentified",
+}
 
 
 def _repo() -> VisitRepository:
@@ -204,12 +219,15 @@ def identify_visit_external(
     catalog_species_id: str | None = None
     if add_to_catalog:
         try:
-            species_row = find_or_create_species(
+            # Alaris Core Smart Match: se a espécie já está na Life List, o card
+            # existente é reaproveitado (sem duplicar); se é nova, nasce um card
+            # estruturado no Álbum de Conquistas com a foto tratada.
+            match = match_or_create_species(
                 common_name=identification.common_name,
                 scientific_name=identification.scientific_name,
                 reference_image_source=image_path,
             )
-            catalog_species_id = str(species_row["id"])
+            catalog_species_id = str(match.species["id"])
         except Exception:
             logger.exception(
                 "Falha ao cadastrar a espécie no catálogo visit=%s", visit_id
@@ -233,3 +251,130 @@ def identify_visit_external(
         exclude_visit_id=visit_id,
     )
     return VisitRepository.to_out(updated)
+
+
+def _resolver_nomes_ia(visit: VisitOut) -> tuple[str, str]:
+    """Resolve o nome popular e o científico da visita para a consulta à IA.
+
+    Prioriza a espécie associada no catálogo, depois a identificação externa e,
+    por fim, a análise da IA — sempre ignorando os rótulos genéricos do detector
+    (ex.: ``bird``), que não são um nome de espécie de verdade.
+    """
+    meta = visit.metadata or {}
+    external = meta.get("external_identification")
+    analysis = meta.get("ai_analysis")
+    external = external if isinstance(external, dict) else {}
+    analysis = analysis if isinstance(analysis, dict) else {}
+
+    candidatos_popular = (
+        visit.assigned_species_common_name,
+        external.get("common_name"),
+        analysis.get("species"),
+        # Rótulo cru da visita: cobre identificações feitas por outros caminhos
+        # (ex.: associação manual no catálogo) que não deixam metadados de IA.
+        visit.species,
+    )
+    candidatos_cientifico = (
+        visit.assigned_species_scientific_name,
+        external.get("scientific_name"),
+        analysis.get("scientific_name"),
+    )
+
+    def _primeiro_valido(candidatos: tuple[object, ...]) -> str:
+        for candidato in candidatos:
+            if isinstance(candidato, str):
+                limpo = candidato.strip()
+                if limpo and limpo.casefold() not in _GENERIC_SPECIES:
+                    return limpo
+        return ""
+
+    popular = _primeiro_valido(candidatos_popular)
+    cientifico = _primeiro_valido(candidatos_cientifico)
+    # Sem nome científico informado, tenta a base regional (avifauna do Sul).
+    if popular and not cientifico:
+        info = info_especie(common_name=popular)
+        if info is not None:
+            cientifico = info.scientific_name
+    return popular, cientifico
+
+
+@router.post("/{visit_id}/ask-ai", response_model=SpeciesConsultOut)
+def ask_ai_about_visit(
+    visit_id: str,
+    refresh: bool = Query(
+        default=False,
+        description="Ignora a ficha em cache e consulta a IA externa novamente.",
+    ),
+) -> SpeciesConsultOut:
+    """Consulta detalhada da espécie na IA externa (Google Gemini / compatível).
+
+    Estrutura um *prompt* ornitológico rico (nome científico, família, status de
+    conservação, comportamento alimentar, habitat, curiosidades e dados
+    biogeográficos) e devolve a ficha formatada. O resultado fica em cache nos
+    metadados da visita; use ``refresh=true`` para forçar uma nova consulta.
+    """
+    repository = _repo()
+    row = repository.get(visit_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Visit not found")
+
+    visit = VisitRepository.to_out(row)
+
+    # Cache local: evita gastar chamadas de IA repetindo a mesma consulta.
+    if not refresh:
+        cached = visit.metadata.get("ai_consult")
+        if isinstance(cached, dict) and cached.get("common_name"):
+            return SpeciesConsultOut(**{**cached, "cached": True})
+
+    settings = get_settings()
+    if not settings.ai_external_api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="Configure AI_EXTERNAL_API_KEY para habilitar a consulta externa",
+        )
+
+    popular, cientifico = _resolver_nomes_ia(visit)
+    if not popular and not cientifico:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Identifique a espécie desta visita antes de pedir a ficha "
+                "ornitológica à IA externa."
+            ),
+        )
+
+    # Envia a imagem tratada (recorte/thumbnail) para enriquecer a resposta.
+    image_bytes: bytes | None = None
+    image_source: str | None = None
+    resolved = _resolve_visit_image(row)
+    if resolved is not None:
+        image_path, image_source = resolved
+        try:
+            image_bytes = image_path.read_bytes()
+        except OSError:
+            logger.debug(
+                "Imagem tratada ilegível para a consulta visit=%s", visit_id
+            )
+            image_bytes = None
+            image_source = None
+
+    try:
+        consult = consult_species_profile(
+            common_name=popular,
+            scientific_name=cientifico,
+            image_bytes=image_bytes,
+        )
+    except ExternalIdentificationError as exc:
+        logger.warning("Consulta externa falhou visit=%s: %s", visit_id, exc)
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    payload: dict[str, object] = {
+        **consult.as_dict(),
+        "provider": consult.provider,
+        "model": consult.model,
+        "image_source": image_source,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "cached": False,
+    }
+    repository.update_metadata(visit_id, {"ai_consult": payload})
+    return SpeciesConsultOut(**payload)

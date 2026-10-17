@@ -422,6 +422,17 @@ sem reiniciar o backend.
   Local (Life List)** e associa a visita (a foto tratada vira a imagem de
   referência da espécie), sem gerar duplicatas. Pela API, o parâmetro
   `add_to_catalog=false` desativa esse cadastro automático.
+- No cartão da **Galeria**, o **recorte tratado** da ave (close-up) aparece em
+  destaque como miniatura **Recorte** — dá para conferir a plumagem sem abrir o
+  registro. O recorte é servido por `GET /api/visits/{id}/crop` (arquivos em
+  `back\app-data\crops\`).
+- Depois de identificada, use **🔎 Ficha ornitológica (IA)** no cartão da Galeria
+  ou **Perguntar à IA Externa** no detalhe da visita para pedir uma **consulta
+  profunda** da espécie (`POST /api/visits/{id}/ask-ai`): nome científico,
+  família, ordem, status de conservação, dieta, comportamento alimentar, habitat,
+  distribuição, dados biogeográficos, migração, porte, longevidade e
+  curiosidades, exibidos em um modal formatado. A ficha fica em cache nos
+  metadados da visita; use **Atualizar** (ou `refresh=true`) para reconsultar.
 - Sem imagem tratada disponível ou chave configurada, a API informa o erro. Os
   recortes ficam em `back\app-data\crops\` e seguem a política de retenção de mídia.
 
@@ -529,6 +540,12 @@ acima do que o usuário configurou.
 movimento**) e **log de anomalias**: se uma espécie que não era registrada há
 mais de 6 meses reaparecer, um alerta é criado no painel (`GET /api/anomalies`).
 
+**7. Alaris Core Smart Match.** Toda identificação é comparada com a Life List
+antes de virar cadastro: espécies repetidas apenas **incrementam o contador de
+visitas** e agregam a nova mídia ao card existente (sem duplicatas); espécies
+**novas** ganham automaticamente um card no Álbum de Conquistas, com a melhor
+foto tratada e o status ecológico regional.
+
 **6. IA visível — Alaris Core.** O motor de IA do AviaWatch assina como
 **Alaris Core v1.0** (a assinatura aparece em `GET /api/ai/status` e nos metadados
 de cada visita). O painel ganha um **Núcleo de IA** (widget futurista em Dark Mode
@@ -602,6 +619,19 @@ de ser "invisível": ele passa a **desenhar a própria atuação** sobre o víde
 4. Para remover uma espécie, confirme a exclusão. A foto de referência também é
    removida. As visitas antigas são preservadas, mas deixam de apontar para a espécie
    removida.
+5. Clique em qualquer card (**Minhas Aves** ou **Álbum de Conquistas**) para abrir
+   a **ficha técnica** da espécie: histórico de avistagens, horários de pico no
+   comedouro, temperatura média preferida (cruzada com a Open-Meteo), notas
+   científicas e status ecológico regional (`GET /api/species/{id}/profile`).
+   A miniatura do card usa o **recorte tratado** da melhor visita (close-up).
+
+O **Alaris Core Smart Match** compara automaticamente cada identificação com a
+Life List antes de virar cadastro: se a espécie **já existe**, a visita é
+vinculada ao card existente (sem duplicar registros) — o contador de visitas sobe
+e a nova foto/vídeo passam a integrar a galeria daquela espécie; se é **nova**,
+um card estruturado é criado no Álbum de Conquistas, já com a melhor foto tratada
+e o status ecológico. Se o card ainda não tinha foto de referência, ela é
+preenchida com o recorte tratado desta captura.
 
 O catálogo fica na tabela `bird_species` do SQLite, com imagens em
 `back\app-data\reference_birds\`. A associação de visitas usa `species_id`; ela é
@@ -743,8 +773,10 @@ aviawatch/
 | GET | `/api/visits/{id}` | Detalhe de uma visita |
 | PUT | `/api/visits/{visit_id}/assign-species` | Associar ou desassociar visita a uma espécie (`{"species_id":"..."}`) |
 | POST | `/api/visits/{id}/identify-external` | Identificar sob demanda usando o recorte local da visita |
+| POST | `/api/visits/{id}/ask-ai` | Consulta ornitológica profunda na IA externa (ficha formatada; `refresh=true` reconsulta) |
 | GET | `/api/species` | Listar o catálogo local de aves |
 | POST | `/api/species` | Cadastrar uma espécie (multipart: `common_name`, `scientific_name`, `description`, `reference_image` opcional) |
+| GET | `/api/species/{id}/profile` | Ficha técnica da espécie (histórico, horários de pico, temperatura média, clima, notas e status ecológico) |
 | DELETE | `/api/species/{id}` | Excluir espécie e sua foto; preservar visitas sem associação |
 | POST | `/api/offline/upload` | Enviar MP4/AVI/MOV/MKV e iniciar a análise offline em background (multipart: `file`, `camera_id`, `recorded_at`) |
 | GET | `/api/offline/jobs` | Estado de todas as análises offline (em andamento e concluídas) com progresso, contagem de aves e detecções |

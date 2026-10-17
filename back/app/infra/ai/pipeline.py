@@ -8,6 +8,7 @@ import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any, Callable
 
 import cv2
@@ -66,6 +67,7 @@ from app.services.ai_telemetry import (
 from app.services.anomaly_log import registrar_retorno_especie
 from app.services.calibration import get_calibration_service
 from app.services.ornithological_annotation import montar_analise_ia
+from app.services.species_catalog import match_or_create_species
 from app.services.system_context import ajustar_sensibilidade
 
 logger = logging.getLogger(__name__)
@@ -988,6 +990,20 @@ class CameraPipeline(threading.Thread):
                     days_absent=anomalia.get("days_absent"),
                 )
 
+        # --- Alaris Core Smart Match ----------------------------------------
+        # Compara a identificação com a Life List ("Minhas Aves"): se a espécie
+        # já existe, apenas vincula a visita (incrementa o contador e agrega a
+        # foto/vídeo à galeria da espécie); se é nova, cria o card estruturado
+        # no Álbum de Conquistas.
+        if tem_especie:
+            self._smart_match_life_list(
+                visit_id=visit_id,
+                common_name=especie_evento,
+                scientific_name=nome_cientifico,
+                crop_path=crop_path,
+                thumbnail_rel=thumb_rel,
+            )
+
         visit_out = self.visit_repo.to_out(visit)
 
         if self.on_visit and self._notify_enabled():
@@ -996,6 +1012,71 @@ class CameraPipeline(threading.Thread):
                     self.on_visit(visit_out)
                 except Exception:
                     logger.exception("on_visit callback failed")
+
+    def _smart_match_life_list(
+        self,
+        *,
+        visit_id: str,
+        common_name: str,
+        scientific_name: str | None,
+        crop_path: str | None,
+        thumbnail_rel: str | None,
+    ) -> None:
+        """Alaris Core Smart Match: evita duplicar espécies na Life List.
+
+        Reaproveita o *match* do catálogo local (``match_or_create_species``) e
+        vincula a visita à espécie correspondente — o contador de visitas é
+        derivado desse vínculo e a nova mídia passa a integrar a galeria da
+        espécie. A foto tratada (recorte > thumbnail) vira a imagem de
+        referência quando o card ainda não tinha uma. Falhas são isoladas: nunca
+        derrubam a gravação da visita.
+        """
+        # Sem nome científico não há como deduplicar com segurança.
+        if not scientific_name:
+            return
+        try:
+            referencia = self._reference_image_path(crop_path, thumbnail_rel)
+            match = match_or_create_species(
+                common_name=common_name,
+                scientific_name=scientific_name,
+                reference_image_source=referencia,
+            )
+            self.visit_repo.assign_species(visit_id, str(match.species["id"]))
+        except Exception:
+            logger.exception(
+                "Smart Match falhou visit=%s camera=%s", visit_id, self.camera_id
+            )
+            return
+
+        if match.created:
+            self._pensar(
+                f"Nova espécie descoberta: {common_name} adicionada ao Álbum "
+                "de Conquistas!",
+                nivel=NIVEL_SUCESSO,
+                species=common_name,
+                scientific_name=scientific_name,
+            )
+        else:
+            self._pensar(
+                f"Espécie já catalogada ({common_name}) — contador de visitas "
+                "incrementado.",
+                nivel=NIVEL_INFO,
+                species=common_name,
+            )
+
+    def _reference_image_path(
+        self, crop_path: str | None, thumbnail_rel: str | None
+    ) -> Path | None:
+        """Caminho absoluto do arquivo tratado (recorte > thumbnail) da captura."""
+        if crop_path:
+            candidato = self.settings.app_data_dir / crop_path
+            if candidato.is_file():
+                return candidato
+        if thumbnail_rel:
+            candidato = self.settings.captures_dir / thumbnail_rel
+            if candidato.is_file():
+                return candidato
+        return None
 
     @staticmethod
     def _nome_cientifico(event: dict[str, Any], especie: str) -> str | None:

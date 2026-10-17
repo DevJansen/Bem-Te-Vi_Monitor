@@ -8,7 +8,8 @@ from typing import Any
 
 from app.infra.database.connection import db_session
 from app.infra.database.repository import _media_url, _optional_float
-from app.domain.avifauna_sul import descrever
+from app.domain.avifauna_sul import descrever, info_especie
+from app.core.config import get_settings
 from app.services.weather_service import category_for_label
 
 # Limiares de raridade (por número de avistagens da espécie no histórico local).
@@ -40,6 +41,36 @@ def _species_badges(sightings: int, rarity: str) -> list[str]:
     if sightings >= 50:
         badges.append("Superstar")
     return badges
+
+
+def _crop_url(visit_id: str | None) -> str | None:
+    """URL do recorte tratado da ave (close-up do Alaris Core), se o arquivo existir.
+
+    Os recortes ficam em ``app-data/crops`` (irmã da pasta estática ``captures``)
+    e são servidos pelo endpoint dedicado ``/api/visits/{id}/crop``.
+    """
+    if not visit_id:
+        return None
+    crop_path = get_settings().crops_dir / f"{visit_id}.jpg"
+    return f"/api/visits/{visit_id}/crop" if crop_path.is_file() else None
+
+
+def _visit_image_url(visit_id: str | None, thumbnail_path: str | None) -> str | None:
+    """Melhor imagem **tratada** de uma visita, validada em disco.
+
+    Prefere o recorte da ave (close-up já tratado pelo Alaris Core) e, na falta,
+    a thumbnail oficial — conferindo que o arquivo realmente existe para nunca
+    entregar uma imagem quebrada ao front-end.
+    """
+    crop = _crop_url(visit_id)
+    if crop:
+        return crop
+    if thumbnail_path:
+        normalized = str(thumbnail_path).replace("\\", "/").lstrip("/")
+        candidate = get_settings().captures_dir / normalized
+        if candidate.is_file():
+            return _media_url(thumbnail_path)
+    return None
 
 
 class AnalyticsRepository:
@@ -296,10 +327,16 @@ class AnalyticsRepository:
                         LIMIT 1
                     ) AS first_visit_thumbnail_path,
                     (
+                        SELECT best.id
+                        FROM visits AS best
+                        WHERE best.species_id = bs.id
+                        ORDER BY best.confidence DESC, best.detected_at DESC
+                        LIMIT 1
+                    ) AS best_visit_id,
+                    (
                         SELECT best.thumbnail_path
                         FROM visits AS best
                         WHERE best.species_id = bs.id
-                            AND best.thumbnail_path IS NOT NULL
                         ORDER BY best.confidence DESC, best.detected_at DESC
                         LIMIT 1
                     ) AS best_photo_path
@@ -325,6 +362,12 @@ class AnalyticsRepository:
                 common_name=row["common_name"],
                 scientific_name=row["scientific_name"],
             )
+            # Miniatura do card: prioriza o **recorte tratado** (close-up da ave)
+            # do melhor registro, caindo para a thumbnail oficial e, por fim,
+            # para a foto de referência. Os arquivos são validados em disco.
+            best_photo_url = _visit_image_url(
+                row["best_visit_id"], row["best_photo_path"]
+            )
             result.append(
                 {
                     "id": row["id"],
@@ -333,13 +376,13 @@ class AnalyticsRepository:
                     "description": row["description"] or "",
                     "is_unlocked": row["first_seen_at"] is not None,
                     "first_seen_at": row["first_seen_at"],
-                    "featured_photo_url": first_visit_photo,
+                    "featured_photo_url": first_visit_photo or reference_image_url,
                     "reference_image_url": reference_image_url,
                     "sightings_count": sightings,
                     # Campos gamificados do álbum de figurinhas.
                     "visits_count": sightings,
                     "rarity": rarity,
-                    "best_photo_url": _media_url(row["best_photo_path"]),
+                    "best_photo_url": best_photo_url or reference_image_url,
                     "badges": _species_badges(sightings, rarity),
                     # Status ecológico regional (base do Sul do Brasil / SC).
                     "ecological_status": status_ecologico["status"],
@@ -348,6 +391,188 @@ class AnalyticsRepository:
                 }
             )
         return result
+
+    def species_profile(self, species_id: str) -> dict[str, Any] | None:
+        """Ficha técnica completa de uma espécie (Minhas Aves / Álbum).
+
+        Cruza o histórico de avistagens (contagem, primeira/última vez, dias
+        ativos e permanência média), o histograma de horários de pico, a
+        temperatura/umidade média preferida (Open-Meteo) e o status ecológico
+        regional. Devolve ``None`` quando a espécie não existe.
+        """
+        with db_session(self.db_path) as conn:
+            species = conn.execute(
+                "SELECT * FROM bird_species WHERE id = ?", (species_id,)
+            ).fetchone()
+            if species is None:
+                return None
+
+            stats = conn.execute(
+                """
+                SELECT
+                    COUNT(*) AS visits_count,
+                    MIN(detected_at) AS first_seen_at,
+                    MAX(detected_at) AS last_seen_at,
+                    COUNT(DISTINCT substr(detected_at, 1, 10)) AS active_days,
+                    AVG(dwell_seconds) AS average_dwell_seconds,
+                    AVG(temperature) AS avg_temperature,
+                    MIN(temperature) AS min_temperature,
+                    MAX(temperature) AS max_temperature,
+                    AVG(humidity) AS avg_humidity
+                FROM visits
+                WHERE species_id = ?
+                """,
+                (species_id,),
+            ).fetchone()
+            hourly_rows = conn.execute(
+                """
+                SELECT
+                    substr(detected_at, 12, 2) AS hour,
+                    COUNT(*) AS visits,
+                    AVG(temperature) AS avg_temperature
+                FROM visits
+                WHERE species_id = ? AND length(detected_at) >= 13
+                GROUP BY hour
+                """,
+                (species_id,),
+            ).fetchall()
+            weather_rows = conn.execute(
+                """
+                SELECT
+                    weather_code AS condition,
+                    COUNT(*) AS visits,
+                    AVG(temperature) AS avg_temperature
+                FROM visits
+                WHERE species_id = ? AND weather_code IS NOT NULL
+                GROUP BY weather_code
+                ORDER BY visits DESC, weather_code COLLATE NOCASE ASC
+                """,
+                (species_id,),
+            ).fetchall()
+            best = conn.execute(
+                """
+                SELECT id, thumbnail_path
+                FROM visits
+                WHERE species_id = ?
+                ORDER BY confidence DESC, detected_at DESC
+                LIMIT 1
+                """,
+                (species_id,),
+            ).fetchone()
+            sighting_rows = conn.execute(
+                """
+                SELECT
+                    id, detected_at, confidence, thumbnail_path,
+                    temperature, humidity, weather_code, dwell_seconds
+                FROM visits
+                WHERE species_id = ?
+                ORDER BY detected_at DESC, id DESC
+                LIMIT 12
+                """,
+                (species_id,),
+            ).fetchall()
+
+        species = dict(species)
+        sightings = int(stats["visits_count"] or 0)
+        rarity = _rarity_for_sightings(sightings)
+        status_ecologico = descrever(
+            common_name=species.get("common_name"),
+            scientific_name=species.get("scientific_name"),
+        )
+        info_regional = info_especie(
+            common_name=species.get("common_name"),
+            scientific_name=species.get("scientific_name"),
+        )
+
+        # Histograma das 24 horas (mesmo formato do gráfico do painel).
+        counts = {str(row["hour"]): row for row in hourly_rows}
+        hourly_distribution: list[dict[str, Any]] = []
+        peak_hour: str | None = None
+        peak_visits = 0
+        for hour in range(24):
+            key = f"{hour:02d}"
+            row = counts.get(key)
+            visits = int(row["visits"]) if row is not None else 0
+            hourly_distribution.append(
+                {
+                    "hour": key,
+                    "visits": visits,
+                    "avg_temperature": (
+                        _optional_float(row["avg_temperature"])
+                        if row is not None
+                        else None
+                    ),
+                }
+            )
+            if visits > peak_visits:
+                peak_visits = visits
+                peak_hour = f"{key}h"
+
+        reference_path = species.get("reference_image_path")
+        reference_image_url = (
+            f"/reference-birds/{Path(reference_path).name}"
+            if reference_path
+            else None
+        )
+
+        recent_sightings = [
+            {
+                "visit_id": row["id"],
+                "detected_at": row["detected_at"],
+                "confidence": float(row["confidence"]),
+                "thumbnail_url": _media_url(row["thumbnail_path"]),
+                "crop_url": _crop_url(row["id"]),
+                "temperature": _optional_float(row["temperature"]),
+                "humidity": _optional_float(row["humidity"]),
+                "weather_code": row["weather_code"],
+                "dwell_seconds": float(row["dwell_seconds"] or 0.0),
+            }
+            for row in sighting_rows
+        ]
+
+        return {
+            "id": species["id"],
+            "common_name": species["common_name"],
+            "scientific_name": species["scientific_name"],
+            "description": species.get("description") or "",
+            "reference_image_url": reference_image_url,
+            "created_at": species["created_at"],
+            "visits_count": sightings,
+            "first_seen_at": stats["first_seen_at"],
+            "last_seen_at": stats["last_seen_at"],
+            "active_days": int(stats["active_days"] or 0),
+            "average_dwell_seconds": _optional_float(stats["average_dwell_seconds"]),
+            "best_photo_url": (
+                _visit_image_url(
+                    best["id"] if best is not None else None,
+                    best["thumbnail_path"] if best is not None else None,
+                )
+                or reference_image_url
+            ),
+            "rarity": rarity,
+            "badges": _species_badges(sightings, rarity),
+            "ecological_status": status_ecologico["status"],
+            "ecological_status_label": status_ecologico["label"],
+            "ecological_badge": status_ecologico["badge"],
+            "ecological_notes": (
+                info_regional.notes if info_regional is not None else None
+            ),
+            "peak_hour": peak_hour,
+            "hourly_distribution": hourly_distribution,
+            "avg_temperature": _optional_float(stats["avg_temperature"]),
+            "min_temperature": _optional_float(stats["min_temperature"]),
+            "max_temperature": _optional_float(stats["max_temperature"]),
+            "avg_humidity": _optional_float(stats["avg_humidity"]),
+            "weather_distribution": [
+                {
+                    "condition": row["condition"],
+                    "visits": int(row["visits"]),
+                    "avg_temperature": _optional_float(row["avg_temperature"]),
+                }
+                for row in weather_rows
+            ],
+            "recent_sightings": recent_sightings,
+        }
 
     def achievements(self) -> list[dict[str, Any]]:
         """Medalhas/marcos globais conquistados pelo observador.

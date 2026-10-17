@@ -243,6 +243,8 @@ export type BirdVisit = {
       /** Anotação ornitológica em pt-BR escrita automaticamente pela IA. */
       annotation: string;
     };
+    /** Ficha ornitológica profunda em cache (consulta da IA externa). */
+    ai_consult?: SpeciesAiConsult;
     [key: string]: unknown;
   };
 };
@@ -320,6 +322,90 @@ export type LifeListSpecies = {
   ecological_status?: string | null;
   ecological_status_label?: string | null;
   ecological_badge?: string | null;
+};
+
+/** Uma avistagem individual dentro da ficha da espécie (histórico recente). */
+export type SpeciesSighting = {
+  visit_id: string;
+  detected_at: string;
+  confidence: number;
+  thumbnail_url: string | null;
+  /** Recorte tratado pelo Alaris Core (close-up da ave). */
+  crop_url: string | null;
+  temperature: number | null;
+  humidity: number | null;
+  weather_code: string | null;
+  dwell_seconds: number;
+};
+
+/** Visitas da espécie em um horário do dia (histograma de pico). */
+export type SpeciesHourStat = {
+  hour: string;
+  visits: number;
+  avg_temperature: number | null;
+};
+
+/** Visitas da espécie sob uma condição meteorológica (Open-Meteo). */
+export type SpeciesWeatherStat = {
+  condition: string;
+  visits: number;
+  avg_temperature: number | null;
+};
+
+/** Ficha técnica completa de uma espécie (Minhas Aves / Álbum de Conquistas). */
+export type SpeciesProfile = {
+  id: string;
+  common_name: string;
+  scientific_name: string;
+  description: string;
+  reference_image_url: string | null;
+  created_at: string;
+  visits_count: number;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
+  active_days: number;
+  average_dwell_seconds: number | null;
+  best_photo_url: string | null;
+  rarity: RarityTier;
+  badges: string[];
+  ecological_status: string | null;
+  ecological_status_label: string | null;
+  ecological_badge: string | null;
+  /** Observação curada da base regional (habitat/sazonalidade). */
+  ecological_notes: string | null;
+  peak_hour: string | null;
+  hourly_distribution: SpeciesHourStat[];
+  avg_temperature: number | null;
+  min_temperature: number | null;
+  max_temperature: number | null;
+  avg_humidity: number | null;
+  weather_distribution: SpeciesWeatherStat[];
+  recent_sightings: SpeciesSighting[];
+};
+
+/** Ficha ornitológica profunda retornada pela IA externa (Gemini/OpenAI). */
+export type SpeciesAiConsult = {
+  scientific_name: string;
+  common_name: string;
+  family: string;
+  order: string;
+  conservation_status: string;
+  diet: string;
+  feeding_behavior: string;
+  habitat: string;
+  distribution: string;
+  biogeography: string;
+  migration: string;
+  size_cm: string;
+  weight_g: string;
+  lifespan: string;
+  curiosities: string[];
+  notes: string;
+  provider: string | null;
+  model: string | null;
+  image_source: string | null;
+  generated_at: string | null;
+  cached: boolean;
 };
 
 /** Anomalia acústico-visual (ex.: espécie que reaparece após meses ausente). */

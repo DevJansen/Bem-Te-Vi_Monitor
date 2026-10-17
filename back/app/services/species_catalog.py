@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import shutil
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 from app.core.config import get_settings
@@ -44,42 +45,89 @@ def _buscar_existente(
     return None
 
 
-def find_or_create_species(
+def _copiar_referencia(
+    species_id: str, reference_image_source: Path | str | None
+) -> str | None:
+    """Copia a imagem tratada para ``reference_birds`` e devolve o caminho relativo.
+
+    A foto de referência é o *melhor arquivo tratado* pelo Alaris Core (recorte
+    ou thumbnail oficial). Falhas ao copiar não impedem o cadastro — apenas
+    deixam a espécie sem foto de referência.
+    """
+    if reference_image_source is None:
+        return None
+    origem = Path(reference_image_source)
+    if not origem.is_file():
+        return None
+    settings = get_settings()
+    settings.ensure_directories()
+    destino = settings.reference_birds_dir / f"{species_id}.jpg"
+    try:
+        shutil.copyfile(origem, destino)
+    except OSError:
+        logger.exception(
+            "Falha ao copiar a imagem de referência da espécie %s", species_id
+        )
+        return None
+    return f"reference_birds/{species_id}.jpg"
+
+
+@dataclass(frozen=True)
+class SpeciesMatch:
+    """Resultado do *Smart Match* do Alaris Core.
+
+    - ``created`` indica se a espécie é **nova** (novo card no Álbum de
+      Conquistas) ou se já existia no catálogo (apenas incrementa o contador de
+      visitas e associa a nova mídia à espécie existente).
+    - ``reference_image_updated`` indica se a foto de referência foi definida ou
+      enriquecida nesta chamada.
+    """
+
+    species: dict
+    created: bool
+    reference_image_updated: bool = False
+
+
+def match_or_create_species(
     *,
     common_name: str,
     scientific_name: str,
     description: str = "",
     reference_image_source: Path | str | None = None,
-) -> dict:
-    """Devolve a espécie do catálogo, criando-a se ainda não existir.
+) -> SpeciesMatch:
+    """Compara a identificação com a Life List e devolve a espécie correspondente.
 
-    ``reference_image_source`` (opcional) é copiada para ``reference_birds`` e
-    usada como foto de referência da nova espécie. Falhas ao copiar a imagem não
-    impedem o cadastro — a espécie é criada mesmo assim.
+    Regra do **Alaris Core Smart Match**:
+
+    - Se a espécie **já estiver cadastrada** (mesmo nome científico ou popular),
+      devolve o card existente **sem duplicar** — o contador de visitas é
+      derivado do vínculo da visita e a foto/vídeo passam a integrar a galeria
+      daquela espécie. Se o card ainda não tinha foto de referência, ela é
+      preenchida com a imagem tratada desta captura.
+    - Se for **espécie nova**, cria o card estruturado no catálogo (Life List),
+      já com o status ecológico regional e a melhor foto tratada disponível.
     """
     repo = BirdSpeciesRepository(get_settings().db_path)
     existente = _buscar_existente(repo, scientific_name, common_name)
     if existente is not None:
-        return existente
+        updated = False
+        # Enriquece a foto de referência apenas quando ela ainda não existe.
+        if reference_image_source is not None and not existente.get(
+            "reference_image_path"
+        ):
+            relative = _copiar_referencia(existente["id"], reference_image_source)
+            if relative:
+                refreshed = repo.set_reference_image(existente["id"], relative)
+                if refreshed is not None:
+                    existente = refreshed
+                    updated = True
+        return SpeciesMatch(
+            species=existente, created=False, reference_image_updated=updated
+        )
 
-    settings = get_settings()
-    settings.ensure_directories()
     species_id = str(uuid.uuid4())
-    relative_path: str | None = None
-
-    if reference_image_source is not None:
-        origem = Path(reference_image_source)
-        if origem.is_file():
-            destino = settings.reference_birds_dir / f"{species_id}.jpg"
-            try:
-                shutil.copyfile(origem, destino)
-                relative_path = f"reference_birds/{species_id}.jpg"
-            except OSError:
-                logger.exception(
-                    "Falha ao copiar a imagem de referência da espécie %s", species_id
-                )
-
-    return repo.create(
+    relative_path = _copiar_referencia(species_id, reference_image_source)
+    created = repo.create(
         common_name=common_name.strip(),
         scientific_name=scientific_name.strip(),
         description=description.strip(),
@@ -90,3 +138,24 @@ def find_or_create_species(
             common_name=common_name, scientific_name=scientific_name
         ).value,
     )
+    return SpeciesMatch(
+        species=created,
+        created=True,
+        reference_image_updated=relative_path is not None,
+    )
+
+
+def find_or_create_species(
+    *,
+    common_name: str,
+    scientific_name: str,
+    description: str = "",
+    reference_image_source: Path | str | None = None,
+) -> dict:
+    """Atalho de compatibilidade: devolve apenas a espécie (sem o ``created``)."""
+    return match_or_create_species(
+        common_name=common_name,
+        scientific_name=scientific_name,
+        description=description,
+        reference_image_source=reference_image_source,
+    ).species

@@ -397,6 +397,34 @@ class VisitRepository:
             )
         return self.get(visit_id)
 
+    def update_metadata(
+        self, visit_id: str, updates: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Funde (merge raso) chaves no ``metadata_json`` da visita.
+
+        Usado para cachear a ficha ornitológica da IA externa sem sobrescrever
+        os demais metadados gravados pelo Alaris Core. Devolve a visita
+        atualizada ou ``None`` quando o ``visit_id`` não existe.
+        """
+        with db_session(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT metadata_json FROM visits WHERE id = ?", (visit_id,)
+            ).fetchone()
+            if row is None:
+                return None
+            try:
+                metadata = json.loads(row["metadata_json"] or "{}")
+            except (TypeError, ValueError):
+                metadata = {}
+            if not isinstance(metadata, dict):
+                metadata = {}
+            metadata.update(updates)
+            conn.execute(
+                "UPDATE visits SET metadata_json = ? WHERE id = ?",
+                (json.dumps(metadata, ensure_ascii=False), visit_id),
+            )
+        return self.get(visit_id)
+
     def list(
         self,
         *,
@@ -638,6 +666,19 @@ class BirdSpeciesRepository:
             cursor = conn.execute(
                 "UPDATE bird_species SET ecological_status = ? WHERE id = ?",
                 (status, species_id),
+            )
+            if cursor.rowcount == 0:
+                return None
+        return self.get(species_id)
+
+    def set_reference_image(
+        self, species_id: str, reference_image_path: str | None
+    ) -> dict[str, Any] | None:
+        """Define/atualiza a foto de referência (arquivo tratado pelo Alaris)."""
+        with db_session(self.db_path) as conn:
+            cursor = conn.execute(
+                "UPDATE bird_species SET reference_image_path = ? WHERE id = ?",
+                (reference_image_path, species_id),
             )
             if cursor.rowcount == 0:
                 return None

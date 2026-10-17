@@ -1,7 +1,12 @@
+import { useState } from "react";
 import { Bird, LockKeyhole } from "lucide-react";
 import type { LifeListSpecies, RarityTier } from "@/types";
 import { formatDateTime } from "@/utils/format";
 import { cn } from "@/utils/cn";
+import {
+  SpeciesProfileModal,
+  type SpeciesRef,
+} from "@/components/species/SpeciesProfileModal";
 
 type Props = {
   species: LifeListSpecies[];
@@ -39,6 +44,8 @@ export function LifeListAlbum({ species }: Props) {
   const total = species.length;
   const unlocked = species.filter((item) => item.is_unlocked).length;
   const percentage = total > 0 ? Math.round((unlocked / total) * 100) : 0;
+  // Espécie aberta na ficha técnica (null = modal fechado).
+  const [selected, setSelected] = useState<SpeciesRef | null>(null);
 
   return (
     <section className="space-y-5">
@@ -102,10 +109,25 @@ export function LifeListAlbum({ species }: Props) {
                 key={item.id}
                 style={{ animationDelay: `${Math.min(index, 12) * 45}ms` }}
                 className={cn(
-                  "group animate-pop-in overflow-hidden rounded-2xl border bg-dark-800 transition-transform duration-300 hover:-translate-y-1",
+                  "group relative animate-pop-in overflow-hidden rounded-2xl border bg-dark-800 transition-transform duration-300 hover:-translate-y-1",
                   item.is_unlocked ? style.card : "border-dark-700",
                 )}
               >
+                {/* Card inteiro clicável: abre a ficha técnica da espécie. */}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSelected({
+                      id: item.id,
+                      common_name: item.common_name,
+                      scientific_name: item.scientific_name,
+                      description: item.description,
+                    })
+                  }
+                  aria-label={`Abrir ficha técnica de ${item.common_name}`}
+                  title="Ver ficha técnica completa"
+                  className="absolute inset-0 z-10 cursor-pointer"
+                />
                 <div className="relative aspect-[4/3] overflow-hidden bg-dark-900">
                   {imageUrl ? (
                     <img
@@ -216,6 +238,10 @@ export function LifeListAlbum({ species }: Props) {
           })}
         </div>
       )}
+      <SpeciesProfileModal
+        species={selected}
+        onClose={() => setSelected(null)}
+      />
     </section>
   );
 }

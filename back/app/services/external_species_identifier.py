@@ -22,6 +22,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 import requests
@@ -399,3 +400,226 @@ def identify_bird_image_file(path: Path | str) -> SpeciesIdentification:
             "Não foi possível ler a imagem tratada da ave"
         ) from exc
     return identify_bird_image(image_bytes)
+
+
+# --------------------------------------------------------------------------- #
+# Consulta ornitológica profunda (ficha técnica da espécie)
+# --------------------------------------------------------------------------- #
+
+# Campos textuais esperados no JSON devolvido pela IA externa.
+_CONSULT_TEXT_FIELDS = (
+    "scientific_name",
+    "common_name",
+    "family",
+    "order",
+    "conservation_status",
+    "diet",
+    "feeding_behavior",
+    "habitat",
+    "distribution",
+    "biogeography",
+    "migration",
+    "size_cm",
+    "weight_g",
+    "lifespan",
+    "notes",
+)
+
+
+def build_consult_prompt(common_name: str, scientific_name: str) -> str:
+    """Monta o prompt ornitológico rico usado na consulta profunda da espécie.
+
+    Pede uma ficha estruturada (JSON) com nome científico, família, status de
+    conservação, comportamento alimentar, habitat, curiosidades e dados
+    biogeográficos — o conteúdo exibido no modal de consulta do AviaWatch.
+    """
+    nome = (common_name or "").strip() or "ave não identificada"
+    cientifico = (scientific_name or "").strip() or "não informado"
+    return (
+        "Você é um ornitólogo especialista na avifauna do Brasil (Mata Atlântica "
+        "e Sul do Brasil). Produza uma ficha técnica profunda e confiável sobre a "
+        f'espécie "{nome}" (nome científico: {cientifico}).\n'
+        "Responda SOMENTE com um JSON válido, em português do Brasil, sem "
+        "nenhum texto fora do JSON, usando exatamente estas chaves:\n"
+        "{\n"
+        '  "scientific_name": "nome científico binomial",\n'
+        '  "common_name": "nome popular em português",\n'
+        '  "family": "família taxonômica (ex.: Thraupidae)",\n'
+        '  "order": "ordem taxonômica (ex.: Passeriformes)",\n'
+        '  "conservation_status": "status de conservação (IUCN e/ou nacional)",\n'
+        '  "diet": "dieta (ex.: frugívora, insetívora, granívora, nectarívora)",\n'
+        '  "feeding_behavior": "comportamento alimentar e uso de comedouros",\n'
+        '  "habitat": "habitat e ambientes frequentados",\n'
+        '  "distribution": "distribuição geográfica",\n'
+        '  "biogeography": "dados biogeográficos e ocorrência no Sul do Brasil",\n'
+        '  "migration": "comportamento migratório / sazonalidade",\n'
+        '  "size_cm": "comprimento típico em centímetros",\n'
+        '  "weight_g": "peso típico em gramas",\n'
+        '  "lifespan": "expectativa de vida aproximada",\n'
+        '  "curiosities": ["curiosidade 1", "curiosidade 2", "curiosidade 3"],\n'
+        '  "notes": "observações científicas e dicas de identificação"\n'
+        "}\n"
+        "Seja preciso e objetivo. Quando não souber um campo, use uma string "
+        "vazia (ou uma lista vazia, no caso de curiosities)."
+    )
+
+
+@dataclass(frozen=True)
+class SpeciesConsult:
+    """Ficha ornitológica estruturada devolvida pela IA externa."""
+
+    data: dict[str, Any]
+    provider: str
+    model: str
+
+    def as_dict(self) -> dict[str, Any]:
+        """Devolve os campos da ficha (sem os metadados da consulta)."""
+        return dict(self.data)
+
+
+def _normalize_consult(
+    raw: dict[str, Any], *, common_name: str, scientific_name: str
+) -> dict[str, Any]:
+    """Normaliza o JSON devolvido pela IA para o formato do AviaWatch.
+
+    Tolera listas onde se espera texto e vice-versa, garante que os nomes
+    popular/científico nunca fiquem vazios e limita o número de curiosidades.
+    """
+
+    def _texto(chave: str) -> str:
+        valor = raw.get(chave)
+        if valor is None:
+            return ""
+        if isinstance(valor, (list, tuple)):
+            return "; ".join(
+                str(item).strip() for item in valor if str(item).strip()
+            )
+        return str(valor).strip()
+
+    curiosidades_brutas = raw.get("curiosities")
+    curiosidades: list[str] = []
+    if isinstance(curiosidades_brutas, list):
+        curiosidades = [
+            str(item).strip()
+            for item in curiosidades_brutas
+            if str(item).strip()
+        ]
+    elif isinstance(curiosidades_brutas, str) and curiosidades_brutas.strip():
+        curiosidades = [curiosidades_brutas.strip()]
+
+    data = {chave: _texto(chave) for chave in _CONSULT_TEXT_FIELDS}
+    data["scientific_name"] = data["scientific_name"] or scientific_name.strip()
+    data["common_name"] = data["common_name"] or common_name.strip()
+    data["curiosities"] = curiosidades[:6]
+    return data
+
+
+def consult_species_profile(
+    *,
+    common_name: str,
+    scientific_name: str,
+    image_bytes: bytes | None = None,
+) -> SpeciesConsult:
+    """Consulta a IA externa e devolve a ficha ornitológica profunda da espécie.
+
+    Reaproveita o mesmo roteamento de provedor da identificação (Google Gemini
+    oficial × compatível com a OpenAI). Quando uma imagem tratada é informada,
+    ela é enviada junto ao prompt para enriquecer a resposta (plumagem/porte).
+    """
+    settings = get_settings()
+    if not settings.ai_external_api_key:
+        raise ExternalIdentificationError(
+            "Configure AI_EXTERNAL_API_KEY para habilitar a consulta externa"
+        )
+
+    provider = detect_provider(
+        settings.ai_external_provider, settings.ai_external_base_url
+    )
+    model = settings.ai_external_model or default_model_for(provider)
+    api_key = settings.ai_external_api_key
+    prompt = build_consult_prompt(common_name, scientific_name)
+    image_base64 = (
+        base64.b64encode(image_bytes).decode("ascii") if image_bytes else None
+    )
+
+    if provider == PROVIDER_GOOGLE:
+        url = google_generate_content_url(model, settings.ai_external_base_url)
+        parts: list[dict[str, object]] = [{"text": prompt}]
+        if image_base64:
+            parts.append(
+                {
+                    "inline_data": {
+                        "mime_type": "image/jpeg",
+                        "data": image_base64,
+                    }
+                }
+            )
+        payload: dict[str, object] = {
+            "contents": [{"role": "user", "parts": parts}],
+            "generationConfig": {
+                "responseMimeType": "application/json",
+                "temperature": 0.2,
+            },
+        }
+        response = _post(url, api_key, payload, google=True)
+        # Alguns proxies do Gemini não aceitam "responseMimeType"; tenta de novo.
+        if response.status_code == 400 and "responsemimetype" in response.text.lower():
+            config = payload.get("generationConfig")
+            if isinstance(config, dict):
+                config.pop("responseMimeType", None)
+            response = _post(url, api_key, payload, google=True)
+    else:
+        try:
+            url = chat_completions_url(settings.ai_external_base_url)
+        except ValueError as exc:
+            raise ExternalIdentificationError(str(exc)) from exc
+        content: list[dict[str, object]] = [{"type": "text", "text": prompt}]
+        if image_base64:
+            content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{image_base64}",
+                        "detail": "high",
+                    },
+                }
+            )
+        payload = {
+            "model": model,
+            "response_format": {"type": "json_object"},
+            "messages": [{"role": "user", "content": content}],
+        }
+        response = _post(url, api_key, payload)
+        # Alguns provedores não suportam "response_format"; tenta sem ele.
+        if response.status_code == 400 and "response_format" in response.text.lower():
+            payload.pop("response_format", None)
+            response = _post(url, api_key, payload)
+
+    if not 200 <= response.status_code < 300:
+        detail = redact_secrets(provider_error_detail(response), [api_key])
+        message = (
+            f"A API externa de consulta respondeu com HTTP {response.status_code}"
+        )
+        if detail:
+            message = f"{message}: {detail}"
+        raise ExternalIdentificationError(message)
+
+    try:
+        response_data = response.json()
+        content = (
+            _google_text(response_data)
+            if provider == PROVIDER_GOOGLE
+            else _openai_content(response_data)
+        )
+        raw = _parse_identification(content)
+        if not isinstance(raw, dict):
+            raise ValueError("A resposta não é um objeto JSON")
+    except (KeyError, IndexError, TypeError, ValueError, AttributeError) as exc:
+        raise ExternalIdentificationError(
+            "A API externa retornou uma ficha ornitológica em formato inválido"
+        ) from exc
+
+    data = _normalize_consult(
+        raw, common_name=common_name, scientific_name=scientific_name
+    )
+    return SpeciesConsult(data=data, provider=provider, model=model)

@@ -32,6 +32,8 @@ import type {
   OfflineJob,
   RoiSettings,
   RoiZone,
+  SpeciesAiConsult,
+  SpeciesProfile,
   Timelapse,
   TimelapseGenerateResult,
   WeatherCorrelation,
@@ -258,6 +260,25 @@ export async function assignVisitSpecies(
   return data;
 }
 
+/**
+ * Consulta detalhada da espécie na IA externa (Google Gemini / compatível).
+ *
+ * O backend monta um *prompt* ornitológico rico e devolve a ficha formatada
+ * (família, conservação, dieta, habitat, curiosidades, biogeografia). O
+ * resultado fica em cache nos metadados da visita; `refresh` força nova consulta.
+ */
+export async function askVisitAi(
+  visitId: string,
+  refresh = false,
+): Promise<SpeciesAiConsult> {
+  const { data } = await api.post<SpeciesAiConsult>(
+    `/visits/${encodeURIComponent(visitId)}/ask-ai`,
+    undefined,
+    { params: refresh ? { refresh: true } : undefined, timeout: 60_000 },
+  );
+  return data;
+}
+
 /* ——— Catálogo local de espécies ——— */
 
 export async function listSpecies(): Promise<BirdSpecies[]> {
@@ -283,6 +304,19 @@ export async function createSpecies(
 
 export async function deleteSpecies(id: string): Promise<void> {
   await api.delete(`/species/${encodeURIComponent(id)}`);
+}
+
+/**
+ * Ficha técnica completa de uma espécie (histórico, horários de pico,
+ * temperatura média preferida, notas científicas e status ecológico).
+ */
+export async function fetchSpeciesProfile(
+  speciesId: string,
+): Promise<SpeciesProfile> {
+  const { data } = await api.get<SpeciesProfile>(
+    `/species/${encodeURIComponent(speciesId)}/profile`,
+  );
+  return data;
 }
 
 /* ——— Log de anomalias acústico-visuais ——— */

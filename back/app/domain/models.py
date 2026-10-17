@@ -391,6 +391,110 @@ class LifeListSpeciesOut(BaseModel):
     ecological_badge: str | None = None
 
 
+class SpeciesSightingOut(BaseModel):
+    """Uma avistagem individual da espécie (linha do histórico da ficha)."""
+
+    visit_id: str
+    detected_at: str
+    confidence: float
+    thumbnail_url: str | None = None
+    # Recorte tratado pelo Alaris Core (close-up da ave), servido por endpoint.
+    crop_url: str | None = None
+    temperature: float | None = None
+    humidity: float | None = None
+    weather_code: str | None = None
+    dwell_seconds: float = 0.0
+
+
+class SpeciesHourStatOut(BaseModel):
+    """Visitas da espécie em um horário do dia (histograma de pico)."""
+
+    hour: str
+    visits: int
+    avg_temperature: float | None = None
+
+
+class SpeciesWeatherStatOut(BaseModel):
+    """Visitas da espécie sob uma condição meteorológica (Open-Meteo)."""
+
+    condition: str
+    visits: int
+    avg_temperature: float | None = None
+
+
+class SpeciesProfileOut(BaseModel):
+    """Ficha técnica completa de uma espécie do Catálogo Local (Minhas Aves).
+
+    Reúne o histórico de avistagens, os horários de pico, a temperatura média
+    preferida (cruzada com a Open-Meteo), as notas científicas e o status
+    ecológico regional — tudo o que o front-end exibe no card/página da espécie.
+    """
+
+    id: str
+    common_name: str
+    scientific_name: str
+    description: str
+    reference_image_url: str | None = None
+    created_at: str
+    # Estatísticas de avistagem.
+    visits_count: int = 0
+    first_seen_at: str | None = None
+    last_seen_at: str | None = None
+    active_days: int = 0
+    average_dwell_seconds: float | None = None
+    best_photo_url: str | None = None
+    # Conteúdo rico / gamificação.
+    rarity: str = "Não observada"
+    badges: list[str] = Field(default_factory=list)
+    ecological_status: str | None = None
+    ecological_status_label: str | None = None
+    ecological_badge: str | None = None
+    # Observação curada da base regional (habitat/sazonalidade).
+    ecological_notes: str | None = None
+    peak_hour: str | None = None
+    hourly_distribution: list[SpeciesHourStatOut] = Field(default_factory=list)
+    # Clima cruzado (Open-Meteo).
+    avg_temperature: float | None = None
+    min_temperature: float | None = None
+    max_temperature: float | None = None
+    avg_humidity: float | None = None
+    weather_distribution: list[SpeciesWeatherStatOut] = Field(default_factory=list)
+    # Histórico recente (mais novo primeiro).
+    recent_sightings: list[SpeciesSightingOut] = Field(default_factory=list)
+
+
+class SpeciesConsultOut(BaseModel):
+    """Ficha ornitológica profunda devolvida pela IA externa (Gemini/OpenAI).
+
+    Estrutura rica pedida no *prompt* ornitológico: nome científico, família,
+    status de conservação, comportamento alimentar, habitat, curiosidades e
+    dados biogeográficos.
+    """
+
+    scientific_name: str
+    common_name: str
+    family: str = ""
+    order: str = ""
+    conservation_status: str = ""
+    diet: str = ""
+    feeding_behavior: str = ""
+    habitat: str = ""
+    distribution: str = ""
+    biogeography: str = ""
+    migration: str = ""
+    size_cm: str = ""
+    weight_g: str = ""
+    lifespan: str = ""
+    curiosities: list[str] = Field(default_factory=list)
+    notes: str = ""
+    # Metadados da consulta (provedor, modelo, imagem usada e cache).
+    provider: str | None = None
+    model: str | None = None
+    image_source: str | None = None
+    generated_at: str | None = None
+    cached: bool = False
+
+
 class AchievementOut(BaseModel):
     """Medalha/marco do observador, com progresso e estado."""
 

@@ -118,8 +118,12 @@ O **álbum de fotos** dos seus pássaros. Aqui você:
 
 - vê a foto e a miniatura de cada visita (as fotos tratadas automaticamente
   aparecem com o selo **HD**);
+- confere o **recorte focado da ave** (close-up com a plumagem em detalhe),
+  mostrado como miniatura **Recorte** no canto do cartão;
 - **assiste ao clipe** gravado (clique na imagem ou em "Reproduzir clipe");
 - **pergunta o nome** da ave clicando em **🤖 Perguntar à IA Externa** (se estiver configurada);
+- abre a **🔎 Ficha ornitológica (IA)** de uma ave já identificada para uma consulta
+  profunda (família, conservação, dieta, habitat, curiosidades e biogeografia);
 - **associa a visita** a uma espécie do seu catálogo;
 - **exporta tudo** numa planilha (CSV);
 - **apaga** visitas que não quer mais.
@@ -153,6 +157,11 @@ O seu **catálogo pessoal de espécies**. Cadastre:
 
 Depois, na Galeria, você **associa** cada visita à espécie cadastrada. É isso que alimenta
 sua Lista de Vida e suas estatísticas.
+
+Clique em qualquer card (aqui ou no **Álbum de Conquistas**) para abrir a **ficha técnica**
+da espécie: histórico de avistagens, **horários de pico** no comedouro, **temperatura média**
+preferida (cruzada com o clima), notas científicas e o **status ecológico** (Nativa,
+Migratória, Rara…). A miniatura do card mostra o **recorte tratado** da melhor visita.
 
 **Para que serve:** montar a "coleção" de aves que você já registrou.
 
@@ -300,6 +309,14 @@ e pergunta: *"Que espécie é essa?"* Ele responde com o nome comum e o científ
 - O AviaWatch envia a **foto tratada** (a melhor versão da ave, já realçada e recortada).
 - Ao identificar, a espécie é **cadastrada sozinha no Catálogo (Life List)** e a visita já fica
   associada a ela — assim a ave aparece no Álbum de Conquistas com a melhor foto disponível.
+- Depois de identificada, use **🔎 Ficha ornitológica (IA)** (na Galeria) ou
+  **Perguntar à IA Externa** (no detalhe da visita) para pedir uma **ficha completa**
+  da espécie: nome científico, família, status de conservação, dieta, comportamento
+  alimentar, habitat, distribuição, dados biogeográficos, porte e curiosidades. O
+  resultado aparece num painel organizado e fica guardado para não repetir consultas
+  (use **Atualizar** para refazer).
+- Se a espécie **já estava** no seu catálogo, o AviaWatch **não duplica** o card: apenas
+  soma mais uma visita e guarda a nova foto/vídeo naquela espécie.
 
 ### 🌦️ Clima e estatísticas
 

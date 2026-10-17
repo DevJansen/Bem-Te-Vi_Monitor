@@ -11,7 +11,8 @@ import numpy as np
 from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, status
 
 from app.core.config import get_settings
-from app.domain.models import BirdSpeciesOut
+from app.domain.models import BirdSpeciesOut, SpeciesProfileOut
+from app.infra.database.analytics_repository import AnalyticsRepository
 from app.infra.database.repository import BirdSpeciesRepository
 
 logger = logging.getLogger(__name__)
@@ -102,6 +103,28 @@ async def create_species(
         raise HTTPException(
             status_code=500, detail="Não foi possível cadastrar a espécie."
         ) from exc
+
+
+@router.get("/{species_id}/profile", response_model=SpeciesProfileOut)
+def get_species_profile(species_id: str) -> SpeciesProfileOut:
+    """Ficha técnica completa da espécie (Minhas Aves / Álbum de Conquistas).
+
+    Devolve o histórico de avistagens, os horários de pico, a temperatura média
+    preferida (cruzada com a Open-Meteo), as notas científicas e o status
+    ecológico regional — o conteúdo rico exibido no card/página da espécie.
+    """
+    try:
+        profile = AnalyticsRepository(get_settings().db_path).species_profile(
+            species_id
+        )
+    except Exception as exc:
+        logger.exception("Failed to load species profile species=%s", species_id)
+        raise HTTPException(
+            status_code=500, detail="Não foi possível carregar a ficha da espécie."
+        ) from exc
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Espécie não encontrada.")
+    return SpeciesProfileOut(**profile)
 
 
 @router.delete("/{species_id}", status_code=status.HTTP_204_NO_CONTENT)

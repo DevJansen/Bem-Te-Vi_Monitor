@@ -15,11 +15,13 @@ import {
   getErrorMessage,
   identifyVisitExternal,
   resolveMediaUrl,
+  visitCropUrl,
 } from "@/services/api";
 import { formatDateTime, formatPercent, formatSpeciesLabel } from "@/utils/format";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { VideoPlayerModal } from "@/components/common/VideoPlayerModal";
 import { WeatherBadges } from "@/components/common/WeatherBadges";
+import { SpeciesAiConsultModal } from "@/components/species/SpeciesAiConsultModal";
 
 type Props = {
   visits: BirdVisit[];
@@ -62,6 +64,10 @@ export function GalleryGrid({
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deletedVisitIds, setDeletedVisitIds] = useState<Set<string>>(new Set());
+  // Visita aberta na ficha ornitológica da IA externa (null = fechado).
+  const [consultVisit, setConsultVisit] = useState<BirdVisit | null>(null);
+  // Visitas cujo recorte (close-up) falhou ao carregar — esconde o inset.
+  const [cropFailures, setCropFailures] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<string | null>(null);
   // Visita cujo clipe está aberto no player de vídeo (null = fechado).
   const [playingVisit, setPlayingVisit] = useState<BirdVisit | null>(null);
@@ -399,6 +405,26 @@ export function GalleryGrid({
                       HD
                     </span>
                   ) : null}
+                  {/* Recorte focado da ave (close-up tratado pelo Alaris Core):
+                      permite ver a plumagem em detalhe sem abrir o registro. */}
+                  {visit.metadata?.crop_path && !cropFailures.has(visit.id) ? (
+                    <span className="pointer-events-none absolute bottom-2 left-2 flex flex-col items-center gap-1">
+                      <img
+                        src={visitCropUrl(visit.id)}
+                        alt={`Recorte focado da ave: ${formatSpeciesLabel(visit.species)}`}
+                        onError={() =>
+                          setCropFailures((current) =>
+                            new Set(current).add(visit.id),
+                          )
+                        }
+                        title="Recorte focado da ave (close-up tratado pelo Alaris Core)"
+                        className="h-16 w-16 rounded-xl border-2 border-emerald-400/50 bg-black object-cover shadow-xl"
+                      />
+                      <span className="rounded-full bg-black/70 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-200 backdrop-blur">
+                        Recorte
+                      </span>
+                    </span>
+                  ) : null}
                 </div>
                 <div className="space-y-1 p-3">
                   <p className="font-medium text-[var(--color-text-primary)]">
@@ -523,6 +549,17 @@ export function GalleryGrid({
                       )}
                     </button>
                   ) : null}
+                  {!genericSpecies ? (
+                    <button
+                      type="button"
+                      onClick={() => setConsultVisit(visit)}
+                      title="Ficha ornitológica completa (nome científico, família, conservação, dieta, habitat, curiosidades)"
+                      className="mt-1 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-violet-400/40 bg-violet-500/15 px-2.5 py-2 text-xs font-semibold text-violet-200 transition hover:bg-violet-500/25"
+                    >
+                      <Bot className="h-3.5 w-3.5" />
+                      🔎 Ficha ornitológica (IA)
+                    </button>
+                  ) : null}
                   {identificationError?.visitId === visit.id ? (
                     <p role="alert" className="text-xs text-red-300">
                       {identificationError.message}
@@ -613,6 +650,10 @@ export function GalleryGrid({
         }
         individualsPeak={playingVisit?.metadata?.individuals_peak ?? null}
         onClose={() => setPlayingVisit(null)}
+      />
+      <SpeciesAiConsultModal
+        visit={consultVisit}
+        onClose={() => setConsultVisit(null)}
       />
     </section>
   );

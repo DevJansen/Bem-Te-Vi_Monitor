@@ -3,6 +3,10 @@ import { Bird, LoaderCircle, Plus, Trash2, X } from "lucide-react";
 import type { BirdSpecies } from "@/types";
 import { createSpecies, deleteSpecies, getErrorMessage } from "@/services/api";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import {
+  SpeciesProfileModal,
+  type SpeciesRef,
+} from "@/components/species/SpeciesProfileModal";
 
 type Props = {
   species: BirdSpecies[];
@@ -31,6 +35,8 @@ export function SpeciesCatalog({
   const [formError, setFormError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  // Espécie aberta na ficha técnica (null = modal fechado).
+  const [selected, setSelected] = useState<SpeciesRef | null>(null);
 
   useEffect(() => {
     if (!toast) return;
@@ -129,8 +135,23 @@ export function SpeciesCatalog({
           {species.map((item) => (
             <article
               key={item.id}
-              className="overflow-hidden rounded-xl border border-dark-700 bg-dark-800"
+              className="relative overflow-hidden rounded-xl border border-dark-700 bg-dark-800 transition-colors hover:border-emerald-500/40"
             >
+              {/* Card inteiro clicável: abre a ficha técnica completa. */}
+              <button
+                type="button"
+                onClick={() =>
+                  setSelected({
+                    id: item.id,
+                    common_name: item.common_name,
+                    scientific_name: item.scientific_name,
+                    description: item.description,
+                  })
+                }
+                aria-label={`Abrir ficha técnica de ${item.common_name}`}
+                title="Ver ficha técnica completa"
+                className="absolute inset-0 z-10 cursor-pointer"
+              />
               <div className="aspect-[4/3] bg-dark-900">
                 {item.reference_image_url ? (
                   <img
@@ -180,7 +201,7 @@ export function SpeciesCatalog({
                 <button
                   type="button"
                   onClick={() => setDeletingSpecies(item)}
-                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-red-300 transition hover:bg-red-500/10"
+                  className="relative z-20 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-red-300 transition hover:bg-red-500/10"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                   Excluir espécie
@@ -306,6 +327,11 @@ export function SpeciesCatalog({
           </section>
         </div>
       ) : null}
+
+      <SpeciesProfileModal
+        species={selected}
+        onClose={() => setSelected(null)}
+      />
 
       <ConfirmDialog
         open={deletingSpecies !== null}

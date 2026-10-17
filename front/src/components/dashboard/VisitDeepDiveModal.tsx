@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Activity,
   Bird,
+  Bot,
   Camera,
   Clock3,
   Crosshair,
@@ -34,6 +35,7 @@ import {
   resolveVisitNames,
   resolveVisitSpeciesLabel,
 } from "@/utils/visits";
+import { SpeciesAiConsultModal } from "@/components/species/SpeciesAiConsultModal";
 
 type Props = {
   /** Visita aberta no deep-dive (null = modal fechado). */
@@ -62,23 +64,27 @@ export function VisitDeepDiveModal({
   const [imageView, setImageView] = useState<ImageView>("frame");
   // Recorte indisponível no servidor (arquivo ausente) → esconde a alternância.
   const [cropFailed, setCropFailed] = useState(false);
+  // Ficha ornitológica da IA externa (consulta profunda) aberta sobre o modal.
+  const [consultOpen, setConsultOpen] = useState(false);
 
   // Sempre reabre no quadro HD e fecha com a tecla Esc.
   useEffect(() => {
     if (visit) {
       setImageView("frame");
       setCropFailed(false);
+      setConsultOpen(false);
     }
   }, [visit]);
 
   useEffect(() => {
     if (!visit) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      // Não fecha o deep-dive com Esc quando a ficha da IA está aberta por cima.
+      if (event.key === "Escape" && !consultOpen) onClose();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [visit, onClose]);
+  }, [visit, onClose, consultOpen]);
 
   const data = useMemo(() => {
     if (!visit) return null;
@@ -426,6 +432,15 @@ export function VisitDeepDiveModal({
                 Ver clipe de 6 s na Galeria
                 <Play className="h-3.5 w-3.5 fill-current" />
               </button>
+              <button
+                type="button"
+                onClick={() => setConsultOpen(true)}
+                title="Perguntar à IA externa (ficha ornitológica completa)"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-violet-400/40 bg-violet-500/15 px-4 py-2.5 text-sm font-semibold text-violet-200 transition hover:bg-violet-500/25"
+              >
+                <Bot className="h-4 w-4" />
+                Perguntar à IA Externa
+              </button>
               {data.frame ? (
                 <a
                   href={data.frame}
@@ -441,6 +456,14 @@ export function VisitDeepDiveModal({
           </div>
         </div>
       </section>
+
+      {/* Ficha ornitológica da IA externa (consulta profunda, por cima). */}
+      {consultOpen ? (
+        <SpeciesAiConsultModal
+          visit={visit}
+          onClose={() => setConsultOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
