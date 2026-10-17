@@ -113,6 +113,8 @@ export type StreamStats = {
   fps: number;
   backend: string | null;
   active_birds: number;
+  /** Espécies distintas rastreadas neste instante (cards de status do Alaris). */
+  active_species: string[];
   individuals_peak: number;
   inferences: number;
   last_error: string | null;

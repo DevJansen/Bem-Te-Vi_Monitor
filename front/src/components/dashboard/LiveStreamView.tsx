@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Box, Crosshair, Frame, Gauge, Moon, Trash2, VideoOff } from "lucide-react";
-import type { Camera } from "@/types";
-import { videoFeedUrl } from "@/services/api";
+import {
+  Bird,
+  Box,
+  Crosshair,
+  Frame,
+  Gauge,
+  Moon,
+  Sparkles,
+  Trash2,
+  VideoOff,
+} from "lucide-react";
+import type { Camera, StreamStats } from "@/types";
+import { fetchStreams, videoFeedUrl } from "@/services/api";
 import { cn } from "@/utils/cn";
 import { abortMjpegStream } from "@/utils/stream";
 import { StatusDot } from "@/components/common/StatusDot";
@@ -33,6 +43,9 @@ export function LiveStreamView({
   const [streamVersion, setStreamVersion] = useState<number>(() => Date.now());
   const [streamConnection, setStreamConnection] =
     useState<StreamConnection>("reconnecting");
+  // Estado em tempo real do Alaris Core na câmera selecionada (aves ativas e
+  // espécies rastreadas): alimenta o realce da borda e os cards flutuantes.
+  const [streamStats, setStreamStats] = useState<StreamStats | null>(null);
 
   const imgRef = useRef<HTMLImageElement | null>(null);
   const lastLoad = useRef<number | null>(null);
@@ -58,6 +71,42 @@ export function LiveStreamView({
   const feedSrc = selected
     ? `${videoFeedUrl(selected.id, showBoxes)}&v=${streamVersion}`
     : null;
+
+  // Polling do estado do Alaris Core para a câmera selecionada (a cada 3 s).
+  useEffect(() => {
+    if (!selectedId) {
+      setStreamStats(null);
+      return;
+    }
+    let active = true;
+    const tick = async () => {
+      try {
+        const lista = await fetchStreams();
+        if (!active) return;
+        setStreamStats(lista.find((s) => s.camera_id === selectedId) ?? null);
+      } catch {
+        /* silencioso: mantém o último estado conhecido */
+      }
+    };
+    void tick();
+    const id = window.setInterval(() => void tick(), 3_000);
+    return () => {
+      active = false;
+      window.clearInterval(id);
+    };
+  }, [selectedId]);
+
+  const activeBirds = streamStats?.active_birds ?? 0;
+  const activeSpecies = streamStats?.active_species ?? [];
+  // O Alaris está rastreando ativamente quando há ave(s) no comedouro agora.
+  const tracking = activeBirds > 0;
+  // Espécies ativas resumidas para o card (ex.: "Tangara sayaca +2").
+  const speciesLabel =
+    activeSpecies.length === 0
+      ? null
+      : activeSpecies.length === 1
+        ? activeSpecies[0]
+        : `${activeSpecies[0]} +${activeSpecies.length - 1}`;
 
   /** Cancela uma reconexão agendada. */
   const clearRetry = useCallback(() => {
@@ -250,7 +299,13 @@ export function LiveStreamView({
         </div>
       </div>
 
-      <div className="relative aspect-video bg-dark-900">
+      <div
+        className={cn(
+          "relative aspect-video bg-dark-900 transition-shadow",
+          tracking &&
+            "ring-2 ring-emerald-500/60 shadow-[0_0_30px_-6px_rgba(16,200,80,0.6)]",
+        )}
+      >
         {!selected || !feedSrc ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-[var(--color-text-muted)]">
             <VideoOff className="h-8 w-8 opacity-50" />
@@ -304,9 +359,30 @@ export function LiveStreamView({
                 </span>
               ) : null}
             </div>
+            {tracking ? (
+              <div className="pointer-events-none absolute right-3 top-3 flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-black/65 px-2.5 py-1.5 backdrop-blur-md">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                </span>
+                <Sparkles className="h-3.5 w-3.5 text-emerald-300" />
+                <span className="text-[11px] font-semibold text-emerald-200">
+                  Alaris rastreando
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/20 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-emerald-200">
+                  <Bird className="h-3 w-3" />
+                  {activeBirds}
+                </span>
+                {speciesLabel ? (
+                  <span className="max-w-[160px] truncate text-[11px] text-white/85">
+                    {speciesLabel}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
             {showBoxes ? (
               <div className="absolute bottom-3 left-3 rounded-md bg-emerald-500/90 px-2 py-1 text-[10px] font-semibold text-dark-900">
-                YOLOv8 · caixas ativas
+                Alaris Core · overlays ativos
               </div>
             ) : null}
             {nightActive ? (

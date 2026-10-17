@@ -4,6 +4,7 @@ import {
   Grid2x2,
   LayoutGrid,
   Maximize2,
+  Sparkles,
   Square,
   Wifi,
   WifiOff,
@@ -167,6 +168,9 @@ function CameraTile({ camera, stats, focused, onToggleFocus }: TileProps) {
   const reconectando = ["connecting", "reconnecting", "idle"].includes(status);
   const offline = ["error", "stopped", "disabled"].includes(status);
   const avesAtivas = stats?.active_birds ?? 0;
+  const especiesAtivas = stats?.active_species ?? [];
+  // Alaris rastreando ativamente a ave no comedouro agora.
+  const rastreando = avesAtivas > 0;
 
   const connLabel = online ? "Online" : reconectando ? "Reconectando" : "Offline";
   const connTone = online
@@ -183,9 +187,11 @@ function CameraTile({ camera, stats, focused, onToggleFocus }: TileProps) {
   return (
     <article
       className={cn(
-        "group relative overflow-hidden rounded-xl border bg-black",
+        "group relative overflow-hidden rounded-xl border bg-black transition-shadow",
         online ? "border-emerald-500/25" : "border-dark-700",
         focused && "ring-1 ring-emerald-500/40",
+        rastreando &&
+          "border-emerald-500/60 ring-1 ring-emerald-500/50 shadow-[0_0_26px_-6px_rgba(16,200,80,0.6)]",
       )}
     >
       <div className="relative aspect-video w-full">
@@ -241,6 +247,12 @@ function CameraTile({ camera, stats, focused, onToggleFocus }: TileProps) {
             <Bird className="h-3 w-3" />
             {avesAtivas} {avesAtivas === 1 ? "ave" : "aves"}
           </span>
+          {rastreando && especiesAtivas.length > 0 ? (
+            <span className="inline-flex max-w-[60%] items-center gap-1 rounded-md bg-emerald-500/20 px-2 py-1 text-[10px] font-medium text-emerald-100 backdrop-blur-sm">
+              <Sparkles className="h-3 w-3 shrink-0" />
+              <span className="truncate">{especiesAtivas.join(", ")}</span>
+            </span>
+          ) : null}
           {stats?.backend ? (
             <span className="inline-flex items-center gap-1 rounded-md bg-black/60 px-2 py-1 text-[10px] font-medium uppercase text-[var(--color-text-muted)] backdrop-blur-sm">
               {stats.backend}

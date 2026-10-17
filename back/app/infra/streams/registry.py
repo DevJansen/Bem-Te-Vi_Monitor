@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import threading
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
@@ -27,6 +27,8 @@ class StreamStats:
     backend: str | None = None
     # Aves ativas no comedouro/bebedouro neste instante.
     active_birds: int = 0
+    # Espécies distintas rastreadas neste instante (para os cards do painel).
+    active_species: list[str] = field(default_factory=list)
     # Pico simultâneo observado na janela atual.
     individuals_peak: int = 0
     # Inferências executadas neste fluxo desde o início.

@@ -180,6 +180,11 @@ class Settings(BaseModel):
     enhancement_min_width: int = Field(default=720, ge=0, le=4096)
     # Qualidade JPEG da foto tratada (thumbnail oficial e recorte).
     enhancement_jpeg_quality: int = Field(default=95, ge=50, le=100)
+    # --- Overlays visuais do Alaris Core (clipes gravados) ---
+    # Grava a tarja de identificação (marca Alaris + espécie + confiança) nos
+    # clipes salvos, para que o vídeo já mostre qual ave aparece mesmo fora do
+    # painel. Não afeta o stream ao vivo (que desenha as caixas em tempo real).
+    clip_overlay_enabled: bool = True
     # --- Crop inteligente do recorte da ave ---
     # Margem (fração do tamanho da caixa) adicionada ao redor da ave, para dar
     # contexto sem cortar as pontas (penas, bico, patas).
@@ -463,6 +468,10 @@ class Settings(BaseModel):
                 0.0, float(os.getenv("BEST_FRAME_MIN_SHARPNESS", "20"))
             ),
             enhancement_enabled=os.getenv("ENHANCEMENT_ENABLED", "true")
+            .strip()
+            .lower()
+            not in {"0", "false", "no", "off", "não", "nao"},
+            clip_overlay_enabled=os.getenv("CLIP_OVERLAY_ENABLED", "true")
             .strip()
             .lower()
             not in {"0", "false", "no", "off", "não", "nao"},

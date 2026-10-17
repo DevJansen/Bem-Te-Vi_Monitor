@@ -7,6 +7,7 @@ import shutil
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 
 import cv2
 import numpy as np
@@ -131,9 +132,24 @@ def _even(value: int) -> int:
 
 
 def _prepare_frame(
-    frame: np.ndarray, width: int, height: int
+    frame: np.ndarray,
+    width: int,
+    height: int,
+    overlay_fn: Callable[[np.ndarray], np.ndarray] | None = None,
 ) -> np.ndarray | None:
-    """Normaliza um quadro (canais e tamanho) para a codificação de vídeo."""
+    """Normaliza um quadro (canais e tamanho) para a codificação de vídeo.
+
+    ``overlay_fn`` (opcional) aplica a tarja de identificação do Alaris sobre o
+    quadro antes da codificação — é o que grava a espécie no clipe. A função
+    nunca pode alterar o quadro original: deve devolver uma cópia.
+    """
+    if frame is None or getattr(frame, "size", 0) == 0:
+        return None
+    if overlay_fn is not None:
+        try:
+            frame = overlay_fn(frame)
+        except Exception:
+            logger.exception("Falha ao aplicar a tarja de identificação no clipe")
     if frame is None or getattr(frame, "size", 0) == 0:
         return None
     if frame.ndim == 2:
@@ -169,6 +185,7 @@ def _encode_with_ffmpeg(
     height: int,
     fps: float,
     out_path: Path,
+    overlay_fn: Callable[[np.ndarray], np.ndarray] | None = None,
 ) -> bool:
     """Resgate: codifica os quadros crus direto em H.264/MP4 via ffmpeg.
 
@@ -222,7 +239,7 @@ def _encode_with_ffmpeg(
     try:
         assert process.stdin is not None
         for frame in frames:
-            prepared = _prepare_frame(frame, width, height)
+            prepared = _prepare_frame(frame, width, height, overlay_fn)
             if prepared is not None:
                 process.stdin.write(prepared.tobytes())
         process.stdin.close()
@@ -307,6 +324,7 @@ def _write_with_opencv(
     height: int,
     fps: float,
     out_path: Path,
+    overlay_fn: Callable[[np.ndarray], np.ndarray] | None = None,
 ) -> str | None:
     """Grava os quadros em `.mp4` com o `cv2.VideoWriter`.
 
@@ -322,7 +340,7 @@ def _write_with_opencv(
                 continue
             try:
                 for frame in frames:
-                    prepared = _prepare_frame(frame, width, height)
+                    prepared = _prepare_frame(frame, width, height, overlay_fn)
                     if prepared is not None:
                         writer.write(prepared)
             finally:
@@ -355,6 +373,8 @@ def save_clip_mp4(
     camera_id: str,
     visit_id: str,
     fps: float,
+    *,
+    overlay_fn: Callable[[np.ndarray], np.ndarray] | None = None,
 ) -> Path | None:
     """Salva o clipe da visita em MP4 compatível com navegadores (H.264).
 
@@ -365,7 +385,9 @@ def save_clip_mp4(
        com o ffmpeg e salva o arquivo final na pasta da galeria;
     3. Se o ffmpeg não estiver disponível, mantém o arquivo do OpenCV.
 
-    Clipes corrompidos ou vazios são descartados (retorna `None`).
+    ``overlay_fn`` (opcional) grava a **tarja de identificação do Alaris** em
+    cada quadro — assim o vídeo salvo já mostra a espécie. Clipes corrompidos ou
+    vazios são descartados (retorna `None`).
     """
     valid_frames = [
         frame
@@ -392,7 +414,9 @@ def save_clip_mp4(
 
     try:
         # 1) Gravação com o OpenCV, sempre em `.mp4`.
-        codec_name = _write_with_opencv(valid_frames, width, height, fps, intermediate)
+        codec_name = _write_with_opencv(
+            valid_frames, width, height, fps, intermediate, overlay_fn
+        )
 
         if codec_name is not None and _is_valid_video(intermediate):
             # 2) Conversão pós-gravação para MP4 web-safe (H.264).
@@ -408,7 +432,7 @@ def save_clip_mp4(
         logger.warning(
             "OpenCV não gerou clipe válido (visita %s); usando ffmpeg", visit_id
         )
-        if _encode_with_ffmpeg(valid_frames, width, height, fps, final):
+        if _encode_with_ffmpeg(valid_frames, width, height, fps, final, overlay_fn):
             return final
 
         final.unlink(missing_ok=True)

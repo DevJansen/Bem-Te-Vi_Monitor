@@ -584,6 +584,15 @@ export function GalleryGrid({
             ? resolveMediaUrl(playingVisit.clip_url ?? playingVisit.clip_path)
             : null
         }
+        species={playingVisit?.species ?? null}
+        confidence={playingVisit?.confidence ?? null}
+        scientificName={playingVisit?.assigned_species_scientific_name ?? null}
+        ecologicalBadge={
+          (playingVisit?.metadata?.ecological?.badge as string | undefined) ??
+          (playingVisit?.metadata?.ai_analysis?.ecological_badge as string | undefined) ??
+          null
+        }
+        individualsPeak={playingVisit?.metadata?.individuals_peak ?? null}
         onClose={() => setPlayingVisit(null)}
       />
     </section>

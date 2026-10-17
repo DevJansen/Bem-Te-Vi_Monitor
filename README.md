@@ -143,6 +143,7 @@ O arquivo `back\.env.example` contém os nomes e os valores padrão. Copie-o par
 | `ENHANCEMENT_MAX_WIDTH` | Largura máxima (px) da foto tratada (limita o custo do denoise) | Padrão: `1280`; faixa: `320` a `4096` |
 | `ENHANCEMENT_MIN_WIDTH` | Largura mínima (px) da foto tratada (garante "alta definição") | Padrão: `720`; faixa: `0` a `4096` |
 | `ENHANCEMENT_JPEG_QUALITY` | Qualidade JPEG da foto tratada | Padrão: `95`; faixa: `50` a `100` |
+| `CLIP_OVERLAY_ENABLED` | Grava a tarja de identificação (Alaris + espécie + confiança) nos clipes salvos | Padrão: `true` (`false` salva o vídeo sem a tarja) |
 | `SMART_CROP_MARGIN` | Margem de contexto ao redor da ave no recorte (fração da caixa) | Padrão: `0.25` |
 | `SMART_CROP_MIN_DIMENSION` | Dimensão mínima (px) do recorte da ave (amplia se menor) | Padrão: `640` |
 | `SMART_CROP_MAX_DIMENSION` | Dimensão máxima (px) do recorte da ave (reduz se maior) | Padrão: `1024` |
@@ -552,6 +553,30 @@ Tudo isso já vem **ativado por padrão** — não é preciso ajustar nada a cad
 inicialização. Os valores podem ser afinados no `back\.env` (`YOLO_CONFIDENCE`,
 `OBJECT_PERSISTENCE_TIME`, `MOTION_SENSITIVITY`, `PRESENCE_GRACE_SECONDS`,
 `ALERT_COOLDOWN_SECONDS`) ou, no caso do cooldown, por zona no painel.
+
+**8. Overlays visuais e identificação nos vídeos (Alaris Core).** O Alaris deixa
+de ser "invisível": ele passa a **desenhar a própria atuação** sobre o vídeo.
+
+- **No stream ao vivo** (câmeras locais e remotas), cada ave detectada recebe uma
+  **caixa delimitadora arredondada** e um **selo flutuante** com a marca
+  `✨ Alaris AI`, o **nome da espécie** e a **confiança** (ex.: `Tangara sayaca
+  96%`). Aves aparecem em esmeralda e a fauna noturna em âmbar. O desenho é feito
+  com poucas operações por caixa (sem cópias extras de quadro), então **não
+  introduz atraso** no stream.
+- **No painel**, o feed da câmera se **ilumina** (borda e brilho esmeralda)
+  enquanto o Alaris está rastreando uma ave, com um **card flutuante**
+  *"Alaris rastreando"* mostrando a contagem e as **espécies ativas naquele
+  instante**. O Mural multi-câmera recebe o mesmo realce e o selo de espécies.
+- **Nos clipes gravados (6 s)**, o vídeo é salvo **já com uma tarja fosca de
+  identificação** no rodapé (marca `Alaris AI`, espécie, confiança, câmera e
+  horário). Assim a espécie é inconfundível mesmo se o arquivo for baixado,
+  compartilhado ou aberto fora do painel. A tarja é pré-renderizada **uma única
+  vez por clipe** e apenas mesclada em cada quadro — a gravação continua barata.
+  Pode ser desligada com `CLIP_OVERLAY_ENABLED=false`.
+- **Na Galeria**, o player de vídeo exibe um **selo elegante sobre o vídeo**
+  (tarja fosca em Dark Mode com ícone de ave, o nome da espécie em destaque e a
+  confiança), além dos selos ecológicos e de bando — resolvendo de imediato a
+  pergunta "qual ave está neste vídeo?".
 
 ### Manter o catálogo local de aves
 

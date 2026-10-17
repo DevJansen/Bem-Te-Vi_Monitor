@@ -16,7 +16,11 @@ import numpy as np
 from app.core.config import get_settings
 from app.domain.avifauna_sul import descrever, info_especie
 from app.domain.models import RoiType, RoiZone, VisitOut, ZoneConfig, ZoneMode
-from app.infra.ai.annotate import draw_bird_detections
+from app.infra.ai.annotate import (
+    apply_banner,
+    build_clip_banner,
+    draw_bird_detections,
+)
 from app.infra.ai.band_counting import ContadorIndividuos
 from app.infra.ai.behavior import (
     Comportamento,
@@ -401,12 +405,16 @@ class CameraPipeline(threading.Thread):
         )
 
     def _reportar_stream(
-        self, streamer: CameraStreamer | None, detections: list[Detection]
+        self,
+        streamer: CameraStreamer | None,
+        detections: list[Detection],
+        species_by_track: dict[int, str] | None = None,
     ) -> None:
         """Publica o estado do Alaris Core deste fluxo no registro de streams.
 
         Alimenta os selos em tempo real do grid multi-câmera (status de conexão,
-        FPS, backend, aves ativas no comedouro e pico de indivíduos).
+        FPS, backend, aves ativas no comedouro, pico de indivíduos e as espécies
+        rastreadas neste instante).
         """
         if streamer is None:
             return
@@ -416,6 +424,15 @@ class CameraPipeline(threading.Thread):
                 pico = int(self._contador.resumo().get("pico_simultaneo", 0))
             except Exception:
                 pico = 0
+        # Espécies distintas rastreadas agora (cards de status do painel).
+        especies: list[str] = []
+        if species_by_track:
+            vistas = {
+                species_by_track.get(det.track_id)
+                for det in detections
+                if det.track_id is not None
+            }
+            especies = sorted(nome for nome in vistas if nome)
         try:
             get_stream_registry().update(
                 self.camera_id,
@@ -425,6 +442,7 @@ class CameraPipeline(threading.Thread):
                 backend=self.detector.backend,
                 active_birds=len(detections),
                 individuals_peak=pico,
+                active_species=especies,
                 inferences=self._inferencias,
                 last_error=streamer.last_error,
             )
@@ -725,6 +743,34 @@ class CameraPipeline(threading.Thread):
         x1, y1, x2, y2 = bbox
         return (x1 * escala_x, y1 * escala_y, x2 * escala_x, y2 * escala_y)
 
+    def _clip_overlay(self, event: dict[str, Any], detected_at: str, frames):
+        """Monta a função que grava a tarja de identificação em cada quadro.
+
+        A tarja (largura total) é pré-renderizada **uma única vez** por clipe, no
+        tamanho real do quadro; cada quadro apenas a mescla — mantendo a gravação
+        barata. Retorna ``None`` quando o recurso está desligado nas configurações.
+        """
+        if not self.settings.clip_overlay_enabled or not frames:
+            return None
+        try:
+            largura = int(frames[0].shape[1])
+        except Exception:
+            largura = 1920
+        try:
+            camera = self.camera_repo.get(self.camera_id)
+            camera_name = camera.get("name") if camera else None
+        except Exception:
+            camera_name = None
+        hora = detected_at.replace("T", " ").replace("Z", " UTC")
+        strip = build_clip_banner(
+            largura,
+            species=str(event.get("species") or "Ave"),
+            confidence=float(event.get("confidence") or 0.0),
+            camera_name=camera_name,
+            timestamp=hora,
+        )
+        return lambda frame: apply_banner(frame, strip)
+
     def _persist_visit(
         self,
         event: dict[str, Any],
@@ -753,8 +799,13 @@ class CameraPipeline(threading.Thread):
             return
 
         visit_id = event["visit_id"]
-        clip_path = save_clip_mp4(frames, self.camera_id, visit_id, event["fps"])
         detected_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        # Tarja de identificação do Alaris gravada no clipe: o vídeo salvo já
+        # mostra a espécie e a confiança, mesmo fora do painel.
+        overlay_fn = self._clip_overlay(event, detected_at, frames)
+        clip_path = save_clip_mp4(
+            frames, self.camera_id, visit_id, event["fps"], overlay_fn=overlay_fn
+        )
         clip_rel = relative_to_captures(clip_path) if clip_path else None
 
         # Foto oficial: melhor quadro (mais nítido) realçado. Reserva: se a
@@ -1181,7 +1232,12 @@ class CameraPipeline(threading.Thread):
                     for detection in detections
                     if self._is_detection_allowed(detection, w, h)
                 ]
-                self._reportar_stream(streamer, detections)
+                # Espécies por indivíduo (cache por track_id): alimenta os selos
+                # do Alaris no stream ao vivo e os cards de status do painel.
+                if detections:
+                    self._especies_dos_tracks(frame, detections)
+                species_by_track = self._especies_por_track
+                self._reportar_stream(streamer, detections, species_by_track)
                 centers = [d.normalized_center(w, h) for d in detections]
                 triggers = self.zone_validator.update(centers)
                 if triggers and detections and self._pending_event is None:
@@ -1246,6 +1302,7 @@ class CameraPipeline(threading.Thread):
                         frame,
                         detections,
                         min_confidence=self.detector.confidence,
+                        species_by_track=species_by_track,
                     )
                 )
                 # Guarda o cinza atual como referência do próximo quadro.

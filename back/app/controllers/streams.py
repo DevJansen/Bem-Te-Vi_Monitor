@@ -90,6 +90,7 @@ def list_streams() -> list[StreamStatsOut]:
                     fps=round(stat.fps, 1),
                     backend=stat.backend,
                     active_birds=stat.active_birds,
+                    active_species=list(stat.active_species),
                     individuals_peak=stat.individuals_peak,
                     inferences=stat.inferences,
                     last_error=stat.last_error,

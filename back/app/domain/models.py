@@ -801,6 +801,8 @@ class StreamStatsOut(BaseModel):
     fps: float = 0.0
     backend: str | None = None
     active_birds: int = 0
+    # Espécies distintas rastreadas neste instante (cards de status do painel).
+    active_species: list[str] = Field(default_factory=list)
     individuals_peak: int = 0
     inferences: int = 0
     last_error: str | None = None
