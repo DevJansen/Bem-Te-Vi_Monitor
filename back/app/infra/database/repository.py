@@ -520,7 +520,7 @@ class VisitRepository:
             ).fetchone()
             cam_total = conn.execute("SELECT COUNT(*) AS c FROM cameras").fetchone()["c"]
             cam_active = conn.execute(
-                "SELECT COUNT(*) AS c FROM cameras WHERE enabled = 1"
+                "SELECT COUNT(*) AS c FROM cameras WHERE is_active = 1"
             ).fetchone()["c"]
 
         return {

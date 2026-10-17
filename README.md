@@ -339,6 +339,10 @@ FPS e contagem de aves.
   (backoff exponencial). O cache curto (`YOUTUBE_RESOLVER_CACHE_SEC`) evita
   re-extrair a cada tentativa, mas é ignorado na reconexão.
 - Para desligar a tradução: `YOUTUBE_RESOLVER_ENABLED=false` no `.env`.
+- Alguns vídeos/lives caem no bloqueio **"Sign in to confirm you're not a bot"**.
+  Nesse caso o backend repete a extração com um **cliente alternativo** do
+  YouTube (`android`) automaticamente. Se ainda assim falhar (live restrita),
+  informe um **arquivo de cookies** em `YOUTUBE_COOKIES_FILE` no `.env`.
 
 > Dica: instale um runtime JavaScript (ex.: `deno`) para o `yt-dlp` acessar
 > **todos** os formatos do YouTube. Sem ele, o yt-dlp ainda entrega o vídeo da

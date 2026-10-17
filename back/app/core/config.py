@@ -90,6 +90,9 @@ class Settings(BaseModel):
     # Tempo (s) de cache do link direto extraído (lives renovam o token com o
     # tempo; a reconexão força uma re-extração quando o stream cai).
     youtube_resolver_cache_sec: float = Field(default=90.0, ge=0.0, le=3600.0)
+    # Arquivo de cookies do YouTube (formato Netscape) para lives que exigem
+    # login/verificação anti-bot. Opcional.
+    youtube_cookies_file: str | None = None
     media_retention_days: int = Field(default=30, ge=1)
     # Localização do alimentador (latitude/longitude), usada pela integração
     # meteorológica com a Open-Meteo. Padrão: São Paulo/SP.
@@ -365,6 +368,8 @@ class Settings(BaseModel):
                 3600.0,
                 max(0.0, float(os.getenv("YOUTUBE_RESOLVER_CACHE_SEC", "90"))),
             ),
+            youtube_cookies_file=(os.getenv("YOUTUBE_COOKIES_FILE") or "").strip()
+            or None,
             media_retention_days=int(os.getenv("MEDIA_RETENTION_DAYS", "30")),
             latitude=min(
                 90.0, max(-90.0, float(os.getenv("LATITUDE", "-23.5505")))

@@ -16,6 +16,7 @@ Recursos:
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from urllib.parse import urlparse
@@ -45,7 +46,7 @@ _cache_lock = threading.Lock()
 #   2. a melhor faixa de VÍDEO em HLS — caso típico de live (basta para o
 #      Alaris Core, que analisa imagem);
 #   3. a melhor faixa de vídeo disponível (fallback para vídeos comuns).
-_YDL_OPTS: dict = {
+_YDL_BASE_OPTS: dict = {
     "format": "best[protocol^=m3u8]/bestvideo[protocol^=m3u8]/bestvideo/best",
     "quiet": True,
     "no_warnings": True,
@@ -56,6 +57,27 @@ _YDL_OPTS: dict = {
     "fragment_retries": 3,
     "socket_timeout": 15,
 }
+
+# Clientes alternativos do YouTube. O cliente "android" costuma escapar do
+# bloqueio anti-bot ("Sign in to confirm you're not a bot") que atinge alguns
+# vídeos/lives. Usado apenas como segunda tentativa (fallback).
+_YDL_FALLBACK_CLIENTS = ["android"]
+
+
+def _montar_opts(player_client: list[str] | None = None) -> dict:
+    """Monta as opções do yt-dlp, incluindo cookies e o cliente de player.
+
+    - Se ``YOUTUBE_COOKIES_FILE`` apontar para um arquivo existente, ele é usado
+      para autenticar (útil em lives restritas/age-restricted).
+    - ``player_client`` permite trocar o cliente do YouTube (fallback anti-bot).
+    """
+    opts = dict(_YDL_BASE_OPTS)
+    cookies = getattr(get_settings(), "youtube_cookies_file", None)
+    if cookies and os.path.isfile(cookies):
+        opts["cookiefile"] = cookies
+    if player_client:
+        opts["extractor_args"] = {"youtube": {"player_client": list(player_client)}}
+    return opts
 
 
 def is_youtube_url(url: str | None) -> bool:
@@ -89,8 +111,10 @@ def _extrair_url_da_info(info: dict) -> str | None:
 def get_direct_youtube_stream(youtube_url: str) -> str | None:
     """Extrai o link de stream direto (m3u8/URL de mídia crua) de uma live.
 
-    Retorna ``None`` em caso de falha (link inválido, sem rede, ``yt-dlp`` ausente,
-    transmissão encerrada etc.). **Nunca** levanta exceção.
+    Tenta primeiro os clientes padrão do yt-dlp e, se falhar (ex.: bloqueio
+    anti-bot), repete com o cliente ``android``. Retorna ``None`` em caso de
+    falha definitiva (link inválido, sem rede, ``yt-dlp`` ausente, transmissão
+    encerrada etc.). **Nunca** levanta exceção.
     """
     try:
         import yt_dlp
@@ -101,25 +125,39 @@ def get_direct_youtube_stream(youtube_url: str) -> str | None:
         )
         return None
 
-    try:
-        with yt_dlp.YoutubeDL(dict(_YDL_OPTS)) as ydl:
-            info = ydl.extract_info(youtube_url, download=False)
-    except Exception:
-        logger.warning("Falha ao extrair o stream do YouTube: %s", youtube_url)
-        logger.debug("Detalhe da falha do yt-dlp", exc_info=True)
-        return None
+    # Passada 1: clientes padrão. Passada 2: cliente "android" (contorna o
+    # bloqueio anti-bot que atinge alguns vídeos/lives).
+    for player_client in (None, _YDL_FALLBACK_CLIENTS):
+        try:
+            with yt_dlp.YoutubeDL(_montar_opts(player_client)) as ydl:
+                info = ydl.extract_info(youtube_url, download=False)
+        except Exception as exc:
+            logger.debug(
+                "yt-dlp falhou (player_client=%s): %s", player_client, exc
+            )
+            continue
 
-    if not info:
-        return None
+        if not info:
+            continue
 
-    # Playlists/canais: usa o primeiro item disponível.
-    if "entries" in info:
-        itens = [item for item in (info.get("entries") or []) if item]
-        if not itens:
-            return None
-        info = itens[0]
+        # Playlists/canais: usa o primeiro item disponível.
+        if "entries" in info:
+            itens = [item for item in (info.get("entries") or []) if item]
+            if not itens:
+                continue
+            info = itens[0]
 
-    return _extrair_url_da_info(info)
+        url_direta = _extrair_url_da_info(info)
+        if url_direta:
+            if player_client:
+                logger.info(
+                    "YouTube resolvido com player_client=%s (fallback anti-bot).",
+                    player_client,
+                )
+            return url_direta
+
+    logger.warning("Falha ao extrair o stream do YouTube: %s", youtube_url)
+    return None
 
 
 def resolver_url_direta(url: str, *, forcar: bool = False) -> str:
