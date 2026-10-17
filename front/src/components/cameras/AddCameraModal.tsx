@@ -10,6 +10,7 @@ import {
   Plus,
   Webcam,
   X,
+  Youtube,
 } from "lucide-react";
 import type { CameraCreatePayload, SourceType } from "@/types";
 import { cn } from "@/utils/cn";
@@ -31,6 +32,11 @@ function detectarTipo(url: string): SourceType {
   if (v.includes(".m3u8")) return "hls";
   if (v.startsWith("http://") || v.startsWith("https://")) return "http";
   return "rtsp";
+}
+
+/** Detecta se o link é de uma live/vídeo do YouTube (traduzido no backend). */
+function isYouTubeLink(url: string): boolean {
+  return /(youtube\.com|youtu\.be)/i.test(url.trim());
 }
 
 const TIPO_LABEL: Record<SourceType, string> = {
@@ -58,6 +64,7 @@ export function AddCameraModal({ open, onClose, onSubmit }: Props) {
 
   const tipoDetectado = useMemo(() => detectarTipo(url), [url]);
   const linkComCredenciais = /\/\/[^/@\s]+:[^/@\s]+@/.test(url);
+  const linkYouTube = useMemo(() => isYouTubeLink(url), [url]);
 
   if (!open) return null;
 
@@ -202,8 +209,8 @@ export function AddCameraModal({ open, onClose, onSubmit }: Props) {
           {modo === "stream" ? (
             <>
               <Field
-                label="URL do Stream ao Vivo (RTSP, HLS, HTTP)"
-                hint="Links públicos/abertos conectam direto, sem login."
+                label="URL do Stream ao Vivo (RTSP, HLS, HTTP ou YouTube)"
+                hint="Links públicos/abertos conectam direto. Lives do YouTube são traduzidas automaticamente."
               >
                 <div className="relative">
                   <Link2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
@@ -211,7 +218,7 @@ export function AddCameraModal({ open, onClose, onSubmit }: Props) {
                     required
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
-                    placeholder="rtsp://... ou https://.../stream.m3u8"
+                    placeholder="rtsp://... , https://.../stream.m3u8 ou link do YouTube"
                     className={`${inputClass} pl-9 font-mono text-[13px]`}
                     autoComplete="off"
                     spellCheck={false}
@@ -224,6 +231,12 @@ export function AddCameraModal({ open, onClose, onSubmit }: Props) {
                   <span className="inline-flex items-center gap-1 rounded-md bg-cyan-500/10 px-2 py-0.5 text-cyan-300">
                     Tipo detectado: {TIPO_LABEL[tipoDetectado]}
                   </span>
+                  {linkYouTube ? (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-0.5 text-red-300">
+                      <Youtube className="h-3 w-3" />
+                      Live do YouTube (link traduzido automaticamente)
+                    </span>
+                  ) : null}
                   {linkComCredenciais ? (
                     <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
                       <Lock className="h-3 w-3" />
