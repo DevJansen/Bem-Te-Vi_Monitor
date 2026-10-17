@@ -20,7 +20,7 @@ import {
   X,
 } from "lucide-react";
 import type { BirdSpecies, BirdVisit } from "@/types";
-import { resolveMediaUrl } from "@/services/api";
+import { resolveMediaUrl, visitCropUrl } from "@/services/api";
 import { cn } from "@/utils/cn";
 import { formatDateTime, formatTime } from "@/utils/format";
 import { formatHumidity, formatTemperature, formatWind, weatherEmoji } from "@/utils/weather";
@@ -60,10 +60,15 @@ export function VisitDeepDiveModal({
   onOpenInGallery,
 }: Props) {
   const [imageView, setImageView] = useState<ImageView>("frame");
+  // Recorte indisponível no servidor (arquivo ausente) → esconde a alternância.
+  const [cropFailed, setCropFailed] = useState(false);
 
   // Sempre reabre no quadro HD e fecha com a tecla Esc.
   useEffect(() => {
-    if (visit) setImageView("frame");
+    if (visit) {
+      setImageView("frame");
+      setCropFailed(false);
+    }
   }, [visit]);
 
   useEffect(() => {
@@ -78,7 +83,9 @@ export function VisitDeepDiveModal({
   const data = useMemo(() => {
     if (!visit) return null;
     const frame = resolveMediaUrl(visit.thumbnail_url ?? visit.thumbnail_path);
-    const crop = resolveMediaUrl(visit.metadata?.crop_path ?? null);
+    // O recorte da ave vive em `app-data/crops` e é servido pelo endpoint
+    // dedicado (`/api/visits/{id}/crop`), não pela pasta estática `captures`.
+    const crop = visit.metadata?.crop_path ? visitCropUrl(visit.id) : null;
     const clip = resolveMediaUrl(visit.clip_url ?? visit.clip_path);
     const catalogEntry = visit.species_id
       ? catalogSpecies.find((item) => item.id === visit.species_id)
@@ -107,9 +114,10 @@ export function VisitDeepDiveModal({
 
   if (!visit || !data) return null;
 
-  const showCrop = Boolean(data.crop && data.crop !== data.frame);
-  const heroSrc =
-    imageView === "crop" && data.crop ? data.crop : data.frame ?? data.crop;
+  // Se o recorte falhar ao carregar, voltamos ao quadro HD e escondemos o seletor.
+  const view: ImageView = cropFailed ? "frame" : imageView;
+  const showCrop = Boolean(data.crop) && !cropFailed;
+  const heroSrc = view === "crop" && data.crop ? data.crop : data.frame ?? data.crop;
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-6">
@@ -161,11 +169,15 @@ export function VisitDeepDiveModal({
             <div className="relative aspect-video w-full overflow-hidden">
               {heroSrc ? (
                 <img
+                  key={heroSrc}
                   src={heroSrc}
                   alt={`Foto tratada pelo Alaris Core: ${data.label}`}
+                  onError={() => {
+                    if (view === "crop") setCropFailed(true);
+                  }}
                   className={cn(
                     "h-full w-full",
-                    imageView === "crop" ? "object-contain" : "object-cover",
+                    view === "crop" ? "object-contain" : "object-cover",
                   )}
                 />
               ) : (
@@ -220,13 +232,13 @@ export function VisitDeepDiveModal({
                   {showCrop ? (
                     <div className="pointer-events-auto inline-flex rounded-lg border border-white/10 bg-black/65 p-0.5 backdrop-blur-md">
                       <ImageButton
-                        active={imageView === "frame"}
+                        active={view === "frame"}
                         icon={<ImageIcon className="h-3.5 w-3.5" />}
                         label="Quadro HD"
                         onClick={() => setImageView("frame")}
                       />
                       <ImageButton
-                        active={imageView === "crop"}
+                        active={view === "crop"}
                         icon={<Crosshair className="h-3.5 w-3.5" />}
                         label="Recorte da ave"
                         onClick={() => setImageView("crop")}

@@ -526,3 +526,14 @@ export function resolveMediaUrl(pathOrUrl: string | null | undefined): string | 
   if (pathOrUrl.startsWith("/")) return pathOrUrl;
   return `/captures/${pathOrUrl.replace(/^captures\//, "")}`;
 }
+
+/**
+ * URL do recorte (close-up) da ave tratado pelo Alaris Core.
+ *
+ * Os recortes ficam em `app-data/crops` (irmã da pasta estática `captures`),
+ * por isso são servidos pelo endpoint dedicado `/api/visits/{id}/crop` — e não
+ * por `/captures/crops/...`.
+ */
+export function visitCropUrl(visitId: string): string {
+  return `/api/visits/${encodeURIComponent(visitId)}/crop`;
+}
