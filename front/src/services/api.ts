@@ -423,8 +423,10 @@ export async function fetchAiLogs(
 
 /* ——— Métricas / Settings ——— */
 
-export async function fetchMetrics(): Promise<Metrics> {
-  const { data } = await api.get<Metrics>("/stats");
+export async function fetchMetrics(cameraId?: string): Promise<Metrics> {
+  const { data } = await api.get<Metrics>("/stats", {
+    params: cameraId ? { camera_id: cameraId } : undefined,
+  });
   return data;
 }
 

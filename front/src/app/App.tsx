@@ -87,7 +87,13 @@ export function App() {
     null,
   );
 
-  const metricsQuery = usePolling(fetchMetrics, 8_000);
+  const [metricsGarden, setMetricsGarden] = useState<string | null>(null);
+  const metricsGardenRef = useRef<string | null>(null);
+  metricsGardenRef.current = metricsGarden;
+  const metricsQuery = usePolling(
+    () => fetchMetrics(metricsGardenRef.current ?? undefined),
+    8_000,
+  );
   const camerasQuery = usePolling(listCameras, 5_000);
   const visitsQuery = usePolling(() => listVisits({ limit: 200 }), 10_000);
   const speciesQuery = usePolling(listSpecies, 60_000);
@@ -230,6 +236,21 @@ export function App() {
               <CameraWall cameras={camerasQuery.data ?? []} />
               <WeatherWidget />
               <AnomalyAlertsPanel />
+              <div className="mb-3 flex items-center gap-2">
+                <label className="text-xs text-[var(--color-text-muted)]">Jardim:</label>
+                <select
+                  value={metricsGarden ?? ""}
+                  onChange={(e) => setMetricsGarden(e.target.value === "" ? null : e.target.value)}
+                  className="rounded-md border border-dark-700 bg-dark-900/60 px-2 py-1.5 text-xs text-[var(--color-text-primary)]"
+                >
+                  <option value="">Todos os jardins</option>
+                  {(camerasQuery.data ?? []).map((cam) => (
+                    <option key={cam.id} value={cam.id}>
+                      {cam.location_label || cam.name || "Jardim sem nome"}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <KPIBoard metrics={metricsQuery.data} loading={metricsQuery.loading} />
               <div className="grid gap-4 xl:grid-cols-3">
                 <div className="xl:col-span-2">

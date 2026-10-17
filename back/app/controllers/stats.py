@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from app.core.config import get_settings
 from app.domain.models import StatsOut
@@ -17,9 +17,13 @@ router = APIRouter(prefix="/api/stats", tags=["stats"])
 
 
 @router.get("", response_model=StatsOut)
-async def get_stats() -> StatsOut:
+async def get_stats(
+    camera_id: str | None = Query(
+        default=None, description="Restringe as métricas a um jardim (câmera)."
+    ),
+) -> StatsOut:
     try:
-        raw = VisitRepository(get_settings().db_path).stats()
+        raw = VisitRepository(get_settings().db_path).stats(camera_id=camera_id)
         # Prefer live streamer count when available
         live = len(get_camera_manager().list_info())
         if live:

@@ -646,7 +646,7 @@ class VisitRepository:
                 row = conn.execute("SELECT COUNT(*) AS c FROM visits").fetchone()
             return int(row["c"]) if row else 0
 
-    def stats(self) -> dict[str, Any]:
+    def stats(self, camera_id: str | None = None) -> dict[str, Any]:
         """Estatísticas do painel ornitológico + contadores dos Visitantes.
 
         As métricas de aves ignoram os Visitantes Especiais (mamíferos/outros);
@@ -654,38 +654,44 @@ class VisitRepository:
         estatística divertida ``seeds_stolen_today``).
         """
         today_prefix = datetime.now(timezone.utc).date().isoformat()
+        # Filtro opcional por jardim (câmera).
+        filtro_cam = " AND camera_id = ?" if camera_id else ""
+        params_cam = (camera_id,) if camera_id else ()
         with db_session(self.db_path) as conn:
             total = conn.execute(
-                f"SELECT COUNT(*) AS c FROM visits WHERE {SQL_SO_AVES}"
+                f"SELECT COUNT(*) AS c FROM visits WHERE {SQL_SO_AVES}{filtro_cam}",
+                params_cam,
             ).fetchone()["c"]
             today = conn.execute(
                 f"SELECT COUNT(*) AS c FROM visits "
-                f"WHERE {SQL_SO_AVES} AND {SQL_DATA_LOCAL} = ?",
-                (today_prefix,),
+                f"WHERE {SQL_SO_AVES} AND {SQL_DATA_LOCAL} = ?{filtro_cam}",
+                (today_prefix, *params_cam),
             ).fetchone()["c"]
             species_rows = conn.execute(
                 f"""
                 SELECT species, COUNT(*) AS c
                 FROM visits
-                WHERE {SQL_SO_AVES}
+                WHERE {SQL_SO_AVES}{filtro_cam}
                 GROUP BY species
                 ORDER BY c DESC
                 LIMIT 50
-                """
+                """,
+                params_cam,
             ).fetchall()
             hour_rows = conn.execute(
                 f"""
                 SELECT {SQL_HORA_LOCAL_2D} AS hour, COUNT(*) AS c
                 FROM visits
-                WHERE {SQL_SO_AVES} AND {SQL_DATA_LOCAL} = ?
+                WHERE {SQL_SO_AVES} AND {SQL_DATA_LOCAL} = ?{filtro_cam}
                 GROUP BY hour
                 ORDER BY hour
                 """,
-                (today_prefix,),
+                (today_prefix, *params_cam),
             ).fetchall()
             last = conn.execute(
-                f"SELECT detected_at FROM visits WHERE {SQL_SO_AVES} "
-                "ORDER BY detected_at DESC LIMIT 1"
+                f"SELECT detected_at FROM visits WHERE {SQL_SO_AVES}{filtro_cam} "
+                "ORDER BY detected_at DESC LIMIT 1",
+                params_cam,
             ).fetchone()
             # --- Visitantes Silvestres / Convidados Especiais (Modo Esquilo) ---
             visitantes_today = conn.execute(
@@ -695,9 +701,9 @@ class VisitRepository:
                     SUM(CASE WHEN visitor_group = 'esquilo' THEN 1 ELSE 0 END)
                         AS esquilos
                 FROM visits
-                WHERE visitor_kind != 'bird' AND {SQL_DATA_LOCAL} = ?
+                WHERE visitor_kind != 'bird' AND {SQL_DATA_LOCAL} = ?{filtro_cam}
                 """,
-                (today_prefix,),
+                (today_prefix, *params_cam),
             ).fetchone()
             cam_total = conn.execute("SELECT COUNT(*) AS c FROM cameras").fetchone()["c"]
             cam_active = conn.execute(
