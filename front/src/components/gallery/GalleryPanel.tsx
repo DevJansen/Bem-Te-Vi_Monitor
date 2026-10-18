@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Film, Images, Squirrel } from "lucide-react";
+import { AudioLines, Film, Images, Squirrel } from "lucide-react";
 import type { BirdSpecies, BirdVisit } from "@/types";
 import { GalleryGrid } from "@/components/gallery/GalleryGrid";
 import { TimelapseGallery } from "@/components/gallery/TimelapseGallery";
+import { AudioDetectionPanel } from "@/components/audio/AudioDetectionPanel";
 import { cn } from "@/utils/cn";
 
 type Props = {
@@ -17,11 +18,13 @@ type Props = {
   onFocusHandled?: () => void;
 };
 
-type GalleryView = "captures" | "guests" | "timelapses";
+type GalleryView = "captures" | "guests" | "timelapses" | "audio";
 
 /**
- * Aba Galeria com duas visões: as capturas individuais das visitas e os
- * resumos do dia (time-lapses). A alternância fica em um controle segmentado.
+ * Aba Galeria com visões distintas e separadas: as **capturas de imagem/vídeo**
+ * das visitas, os **Convidados do Jardim** (visitantes especiais), os **resumos
+ * do dia** (time-lapses) e a **galeria de áudios** (cantos do BirdNET). A
+ * alternância fica em um controle segmentado.
  */
 export function GalleryPanel({
   visits,
@@ -44,13 +47,19 @@ export function GalleryPanel({
       <div
         role="tablist"
         aria-label="Visões da galeria"
-        className="inline-flex rounded-lg border border-dark-700 bg-dark-800 p-1"
+        className="inline-flex flex-wrap gap-1 rounded-lg border border-dark-700 bg-dark-800 p-1"
       >
         <TabButton
           active={view === "captures"}
           icon={Images}
-          label="Capturas"
+          label="Fotos e Vídeos"
           onClick={() => setView("captures")}
+        />
+        <TabButton
+          active={view === "audio"}
+          icon={AudioLines}
+          label="Áudios"
+          onClick={() => setView("audio")}
         />
         <TabButton
           active={view === "guests"}
@@ -86,6 +95,8 @@ export function GalleryPanel({
           focusVisitId={focusVisitId}
           onFocusHandled={onFocusHandled}
         />
+      ) : view === "audio" ? (
+        <AudioDetectionPanel species={species} />
       ) : (
         <TimelapseGallery />
       )}

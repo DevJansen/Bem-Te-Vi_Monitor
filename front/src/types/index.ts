@@ -17,6 +17,7 @@ export type AppTab =
   | "dashboard"
   | "cameras"
   | "gallery"
+  | "audio"
   | "species"
   | "analytics"
   | "settings";
@@ -671,11 +672,25 @@ export type AudioDetection = {
   scientific_name: string;
   confidence: number;
   linked_visit_id: string | null;
+  /** Clipe de áudio gravado da detecção (player integrado ao card). */
+  audio_url: string | null;
+  /** Vínculo com a espécie da Life List ("Minhas Aves"), quando identificada. */
+  species_id: string | null;
+  /** Rótulo do estado da identificação (manual ou por IA externa). */
+  identification_status: string | null;
   /** Condições do tempo no momento da detecção sonora (Open-Meteo). */
   temperature: number | null;
   humidity: number | null;
   weather_code: string | null;
   wind_speed: number | null;
+};
+
+/** Página de detecções sonoras para a paginação fluida da aba dedicada. */
+export type AudioDetectionPage = {
+  items: AudioDetection[];
+  total: number;
+  limit: number;
+  offset: number;
 };
 
 export type AudioAnalysisStatus = {

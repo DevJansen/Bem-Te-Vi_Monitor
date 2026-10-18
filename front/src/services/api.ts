@@ -10,6 +10,7 @@ import type {
   AnalyticsSummary,
   AudioAnalysisStatus,
   AudioDetection,
+  AudioDetectionPage,
   AudioInputDevices,
   BirdSpecies,
   BirdSpeciesCreatePayload,
@@ -591,11 +592,71 @@ export async function deleteTimelapse(filename: string): Promise<void> {
 
 export async function fetchAudioDetections(
   limit = 30,
+  offset = 0,
 ): Promise<AudioDetection[]> {
   const { data } = await api.get<AudioDetection[]>("/audio-detections", {
-    params: { limit },
+    params: { limit, offset },
   });
   return data;
+}
+
+/** Página de detecções sonoras (paginação fluida da aba Detecção Sonora). */
+export async function fetchAudioDetectionPage(
+  limit = 5,
+  offset = 0,
+): Promise<AudioDetectionPage> {
+  const { data } = await api.get<AudioDetectionPage>("/audio-detections/page", {
+    params: { limit, offset },
+  });
+  return data;
+}
+
+/** URL do clipe de áudio gravado da detecção (player integrado ao card). */
+export function audioDetectionClipUrl(detectionId: string): string {
+  return `/api/audio-detections/${encodeURIComponent(detectionId)}/audio`;
+}
+
+/** Associa **manualmente** a detecção sonora à espécie selecionada da Life List. */
+export async function identifyAudioDetection(
+  detectionId: string,
+  payload: { species_id?: string | null; common_name?: string | null; scientific_name?: string | null },
+): Promise<AudioDetection> {
+  const { data } = await api.put<AudioDetection>(
+    `/audio-detections/${encodeURIComponent(detectionId)}/identify`,
+    payload,
+  );
+  return data;
+}
+
+/** Aciona a IA externa para identificar a espécie pelo espectrograma do áudio. */
+export async function identifyAudioExternal(
+  detectionId: string,
+  addToCatalog = false,
+): Promise<AudioDetection> {
+  const { data } = await api.post<AudioDetection>(
+    `/audio-detections/${encodeURIComponent(detectionId)}/identify-external`,
+    null,
+    { params: { add_to_catalog: addToCatalog } },
+  );
+  return data;
+}
+
+/** Ficha ornitológica profunda (IA externa) da espécie detectada por som. */
+export async function askAiAboutAudioDetection(
+  detectionId: string,
+  refresh = false,
+): Promise<SpeciesAiConsult> {
+  const { data } = await api.post<SpeciesAiConsult>(
+    `/audio-detections/${encodeURIComponent(detectionId)}/ask-ai`,
+    null,
+    { params: { refresh } },
+  );
+  return data;
+}
+
+/** Remove uma detecção sonora do histórico. */
+export async function deleteAudioDetection(detectionId: string): Promise<void> {
+  await api.delete(`/audio-detections/${encodeURIComponent(detectionId)}`);
 }
 
 export async function fetchAudioAnalysisStatus(): Promise<AudioAnalysisStatus> {

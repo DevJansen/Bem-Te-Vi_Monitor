@@ -22,7 +22,7 @@ import { GalleryPanel } from "@/components/gallery/GalleryPanel";
 import { EnvSettings } from "@/components/settings/EnvSettings";
 import { CalibrationPanel } from "@/components/settings/CalibrationPanel";
 import { SpeciesCatalog } from "@/components/species/SpeciesCatalog";
-import { AudioDetectionFeed } from "@/components/dashboard/AudioDetectionFeed";
+import { AudioDetectionPanel } from "@/components/audio/AudioDetectionPanel";
 import { usePolling } from "@/hooks/usePolling";
 import {
   createCamera,
@@ -59,7 +59,11 @@ const TAB_META: Record<AppTab, { title: string; subtitle: string }> = {
   },
   gallery: {
     title: "Galeria",
-    subtitle: "Capturas, clipes e exportação CSV",
+    subtitle: "Capturas, clipes, áudios e exportação CSV",
+  },
+  audio: {
+    title: "Detecção Sonora",
+    subtitle: "Cantos identificados pelo BirdNET — ouça, identifique e consulte a IA",
   },
   species: {
     title: "Minhas Aves",
@@ -289,7 +293,6 @@ export function App() {
                 onOpenInGallery={handleOpenVisitInGallery}
               />
               <VisitsChart metrics={metricsQuery.data} />
-              <AudioDetectionFeed />
             </div>
           ) : null}
 
@@ -313,7 +316,6 @@ export function App() {
 
           {tab === "gallery" ? (
             <div className="space-y-4">
-              <AudioDetectionFeed />
               <GalleryPanel
                 visits={(visitsQuery.data ?? []).filter(
                   (visit) => !deletedVisitIds.has(visit.id),
@@ -326,6 +328,10 @@ export function App() {
                 onFocusHandled={handleGalleryFocusHandled}
               />
             </div>
+          ) : null}
+
+          {tab === "audio" ? (
+            <AudioDetectionPanel species={speciesQuery.data ?? []} />
           ) : null}
 
           {tab === "species" ? (

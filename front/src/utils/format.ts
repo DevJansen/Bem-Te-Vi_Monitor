@@ -26,14 +26,46 @@ export function formatPercent(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
 
+/**
+ * Rótulos genéricos do detector (YOLO/BirdNET) que significam apenas
+ * "ave não identificada". A nomenclatura oficial do Bem-Ti-Vi é
+ * **"Pássaro Desconhecido"** — nunca "Ave Genérica" nem "Bird".
+ */
+const ROTULOS_GENERICOS = new Set([
+  "",
+  "bird",
+  "ave",
+  "aves",
+  "passaro",
+  "passaros",
+  "passaro desconhecido",
+  "pássaro desconhecido",
+  "ave generica",
+  "ave genérica",
+  "ave (generica)",
+  "ave nao identificada",
+  "ave não identificada",
+  "nao identificada",
+  "não identificada",
+  "desconhecida",
+  "desconhecido",
+  "unidentified",
+  "unknown",
+]);
+
+/** Indica se o rótulo de espécie é genérico (não houve identificação real). */
+export function isGenericSpecies(species: string | null | undefined): boolean {
+  return ROTULOS_GENERICOS.has((species ?? "").trim().toLowerCase());
+}
+
 export function formatSpeciesLabel(species: string): string {
-  if (!species || species === "bird") return "Passaro Desconhecido";
+  if (isGenericSpecies(species)) return "Pássaro Desconhecido";
   return species.charAt(0).toUpperCase() + species.slice(1);
 }
 
-/** Rótulo curto de espécie para selos compactos (ex.: `bird` → "Passaro"). */
+/** Rótulo curto de espécie para selos compactos (ex.: `bird` → "Desconhecido"). */
 export function formatSpeciesShort(species: string): string {
-  if (!species || species === "bird") return "Passaro";
+  if (isGenericSpecies(species)) return "Desconhecido";
   return species.charAt(0).toUpperCase() + species.slice(1);
 }
 
