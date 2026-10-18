@@ -107,6 +107,30 @@ export async function updateCamera(
   return data;
 }
 
+/** Liga ou desliga o Alaris Core (IA visual - YOLOv8 + gravação) para uma câmera específica. */
+export async function toggleCameraAi(
+  cameraId: string,
+  enabled: boolean,
+): Promise<Camera> {
+  const { data } = await api.patch<Camera>(
+    `/cameras/${encodeURIComponent(cameraId)}/ai`,
+    { enabled },
+  );
+  return data;
+}
+
+/** Liga ou desliga o monitoramento de áudio com BirdNET para uma câmera específica. */
+export async function toggleCameraBioacoustics(
+  cameraId: string,
+  enabled: boolean,
+): Promise<Camera> {
+  const { data } = await api.patch<Camera>(
+    `/cameras/${encodeURIComponent(cameraId)}/bioacoustics`,
+    { enabled },
+  );
+  return data;
+}
+
 export async function getCameraZones(id: string): Promise<Zone[]> {
   const { data } = await api.get<{ zones: Zone[] }>(`/cameras/${id}/zones`);
   return data.zones;

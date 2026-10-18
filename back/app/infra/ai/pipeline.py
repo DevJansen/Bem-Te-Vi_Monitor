@@ -119,6 +119,10 @@ class CameraPipeline(threading.Thread):
             clahe_grid=self.settings.night_vision_clahe_grid,
             denoise=self.settings.night_vision_denoise,
         )
+        # Alaris Core (IA visual) ativo nesta câmera (controle em tempo real pelo painel).
+        row_cam = self.camera_repo.get(self.camera_id)
+        self.ai_enabled: bool = bool(row_cam.get("ai_enabled", 1)) if row_cam else True
+        self.camera_name: str = row_cam.get("name", "Câmera") if row_cam else "Câmera"
         # Estado do quadro atual (atualizado a cada ciclo; lido ao registrar visita).
         self._night_active = False
         self._configured_zones: list[ZoneConfig] = []
@@ -168,6 +172,21 @@ class CameraPipeline(threading.Thread):
     def stop(self) -> None:
         self._stop.set()
 
+    def set_ai_enabled(self, enabled: bool) -> None:
+        """Ativa ou pausa o processamento do Alaris Core para esta câmera em tempo real."""
+        self.ai_enabled = enabled
+        if not enabled:
+            self._last_detections = []
+            get_stream_registry().update(
+                camera_id=self.camera_id,
+                name=self.camera_name,
+                status="online",
+                fps=0.0,
+                backend="pausado",
+                active_birds=0,
+                active_species=[],
+            )
+
     def request_zones_reload(self) -> None:
         """Pede a recarga das zonas e ROI no próximo ciclo do laço."""
         self._zones_reload.set()
@@ -193,6 +212,8 @@ class CameraPipeline(threading.Thread):
             self.zone_validator.set_zones([])
             self._load_roi()
             return
+        self.ai_enabled = bool(row.get("ai_enabled", 1))
+        self.camera_name = row.get("name", self.camera_name)
         # Fuso da câmera: usado para gravar a hora/data local de cada visita.
         self._camera_timezone = row.get("timezone") or None
         try:
@@ -1328,6 +1349,24 @@ class CameraPipeline(threading.Thread):
                 self.buffer.push(frame)
                 frame_idx += 1
 
+                if not self.ai_enabled:
+                    # Alaris Core (IA) pausado pelo usuário para esta câmera:
+                    # Atualiza o frame atual do stream (para visualização limpa),
+                    # mas não consome inferência YOLOv8, zonas ou gravação de clipes.
+                    streamer.set_annotated_frame(frame)
+                    tracker.clear()
+                    get_stream_registry().update(
+                        camera_id=self.camera_id,
+                        name=self.camera_name,
+                        status="online",
+                        fps=round(streamer.fps, 1),
+                        backend="pausado",
+                        active_birds=0,
+                        active_species=[],
+                    )
+                    time.sleep(0.03)
+                    continue
+
                 if frame_idx % infer_every_n == 0:
                     # Relê a calibração do painel (em memória) a cada ciclo de
                     # inferência, para refletir ajustes quase em tempo real.
@@ -1525,6 +1564,17 @@ class PipelineSupervisor:
         row = CameraRepository(get_settings().db_path).get(camera_id)
         if row and row["is_active"]:
             self.start_camera(camera_id)
+
+    def set_camera_ai_enabled(self, camera_id: str, enabled: bool) -> None:
+        """Altera dinamicamente o status do Alaris Core para uma câmera específica."""
+        with self._lock:
+            pipeline = self._pipelines.get(camera_id)
+            if pipeline:
+                pipeline.set_ai_enabled(enabled)
+            elif enabled:
+                row = CameraRepository(get_settings().db_path).get(camera_id)
+                if row and row["is_active"]:
+                    self.start_camera(camera_id)
 
     def reload_zones(self, camera_id: str | None = None) -> None:
         """Pede a recarga de zonas/ROI sem reiniciar os pipelines.

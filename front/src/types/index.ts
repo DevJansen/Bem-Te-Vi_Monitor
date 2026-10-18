@@ -77,6 +77,10 @@ export type Camera = {
   country?: string | null;
   has_credentials: boolean;
   is_active: boolean;
+  /** Alaris Core (IA visual - YOLOv8 + gravação) ativo nesta câmera. */
+  ai_enabled?: boolean;
+  /** Monitoramento contínuo de áudio com BirdNET ativo nesta câmera. */
+  audio_enabled?: boolean;
   zones: Zone[];
   status: CameraStatus | string;
   /** Indica se a câmera está processando quadros em visão noturna (IR/baixa luz). */
@@ -97,6 +101,8 @@ export type CameraCreatePayload = {
   username?: string | null;
   password?: string | null;
   enabled?: boolean;
+  ai_enabled?: boolean;
+  audio_enabled?: boolean;
   zones?: Zone[];
 };
 
@@ -112,6 +118,8 @@ export type CameraUpdatePayload = {
   username?: string | null;
   password?: string | null;
   enabled?: boolean;
+  ai_enabled?: boolean;
+  audio_enabled?: boolean;
   zones?: Zone[];
   clear_credentials?: boolean;
   /** Apaga a localização geográfica da câmera. */

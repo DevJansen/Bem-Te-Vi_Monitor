@@ -23,6 +23,8 @@ from app.infra.database.connection import db_session
 from app.infra.database.repository import CameraRepository, VisitRepository
 from app.services.stream_resolver import resolver_url_audio
 
+from app.services.audio_analysis import get_ffmpeg_path
+
 logger = logging.getLogger(__name__)
 
 SAMPLE_RATE = 48_000
@@ -34,7 +36,7 @@ STATUS_POLL_SECONDS = 2.0
 
 def _audio_engine_issue() -> str | None:
     """Verifica se o motor de bioacústica está pronto (ffmpeg + BirdNET)."""
-    if shutil.which("ffmpeg") is None:
+    if get_ffmpeg_path() is None:
         return "FFmpeg não foi encontrado no PATH do sistema."
     import importlib.util
 
@@ -146,38 +148,48 @@ class BioacousticsService:
         row = self.camera_repo.get(camera_id)
         if row is None or not row["is_active"]:
             return None
-        from app.infra.camera.crypto import decrypt_secret
-        from app.infra.camera.streamer import CameraStreamer, StreamConfig
-        from app.core.config import get_settings
+        if row["source_type"] == "usb":
+            from app.infra.database.repository import SettingsRepository
+            from app.services.audio_devices import resolve_audio_input_args
 
-        settings = get_settings()
-        config = StreamConfig(
-            camera_id=row["id"],
-            name=row["name"],
-            source_type=row["source_type"],
-            stream_url=row["stream_url"],
-            username=decrypt_secret(row.get("username")),
-            password=decrypt_secret(row.get("password_encrypted")),
-        )
-        target = CameraStreamer(config).resolve_capture_target()
-        if isinstance(target, str):
-            # YouTube e outros links web: resolve para stream de ÁUDIO direto.
-            target = resolver_url_audio(target)
-        if not isinstance(target, str):
-            return None
-
-        # Argumentos de entrada conforme o protocolo do stream resolvido.
-        # Para streams HTTP/HLS (YouTube), adiciona headers para evitar 403.
-        if target.startswith("rtsp"):
-            input_args = ["-rtsp_transport", "tcp", "-i", target]
+            settings_repo = SettingsRepository(settings.db_path)
+            device = settings_repo.get("audio_input_device", "") or None
+            input_args = resolve_audio_input_args(device)
         else:
-            input_args = [
-                "-headers", "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\r\nReferer: https://www.youtube.com/\r\n",
-                "-i", target,
-            ]
+            from app.infra.camera.crypto import decrypt_secret
+            from app.infra.camera.streamer import CameraStreamer, StreamConfig
 
+            config = StreamConfig(
+                camera_id=row["id"],
+                name=row["name"],
+                source_type=row["source_type"],
+                stream_url=row["stream_url"],
+                username=decrypt_secret(row.get("username")),
+                password=decrypt_secret(row.get("password_encrypted")),
+            )
+            target = CameraStreamer(config).resolve_capture_target()
+            if isinstance(target, str):
+                # YouTube e outros links web: resolve para stream de ÁUDIO direto.
+                target = resolver_url_audio(target)
+            if not isinstance(target, str):
+                return None
+
+            # Argumentos de entrada conforme o protocolo do stream resolvido.
+            if target.startswith("rtsp://") or target.startswith("rtsps://"):
+                input_args = ["-rtsp_transport", "tcp", "-i", target]
+            elif target.startswith("http://") or target.startswith("https://"):
+                input_args = [
+                    "-headers",
+                    "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\r\nReferer: https://www.youtube.com/\r\n",
+                    "-i",
+                    target,
+                ]
+            else:
+                input_args = ["-i", target]
+
+        ffmpeg_bin = get_ffmpeg_path() or "ffmpeg"
         command = [
-            shutil.which("ffmpeg") or "ffmpeg",
+            ffmpeg_bin,
             "-hide_banner",
             "-loglevel",
             "error",

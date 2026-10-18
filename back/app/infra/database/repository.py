@@ -143,8 +143,9 @@ class CameraRepository:
                     id, name, source_type, stream_url, location_label,
                     latitude, longitude, timezone, country,
                     username, password_encrypted, is_active,
+                    ai_enabled, audio_enabled,
                     zones_json, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     camera_id,
@@ -159,6 +160,8 @@ class CameraRepository:
                     username_enc,
                     password_enc,
                     1 if payload.enabled else 0,
+                    1 if payload.ai_enabled else 0,
+                    1 if payload.audio_enabled else 0,
                     zones_json,
                     now,
                     now,
@@ -223,6 +226,16 @@ class CameraRepository:
             if payload.enabled is not None
             else existing["is_active"]
         )
+        ai_enabled = (
+            (1 if payload.ai_enabled else 0)
+            if payload.ai_enabled is not None
+            else existing.get("ai_enabled", 1)
+        )
+        audio_enabled = (
+            (1 if payload.audio_enabled else 0)
+            if payload.audio_enabled is not None
+            else existing.get("audio_enabled", 0)
+        )
         zones_json = (
             CameraZones(zones=payload.zones).model_dump_json()
             if payload.zones is not None
@@ -243,6 +256,7 @@ class CameraRepository:
                     name = ?, source_type = ?, stream_url = ?, location_label = ?,
                     latitude = ?, longitude = ?, timezone = ?, country = ?,
                     username = ?, password_encrypted = ?, is_active = ?,
+                    ai_enabled = ?, audio_enabled = ?,
                     zones_json = ?, updated_at = ?
                 WHERE id = ?
                 """,
@@ -258,6 +272,8 @@ class CameraRepository:
                     username_enc,
                     password_enc,
                     is_active,
+                    ai_enabled,
+                    audio_enabled,
                     zones_json,
                     _utc_now(),
                     camera_id,
@@ -290,6 +306,8 @@ class CameraRepository:
             country=row.get("country"),
             has_credentials=bool(row.get("username") or row.get("password_encrypted")),
             is_active=bool(row["is_active"]),
+            ai_enabled=bool(row.get("ai_enabled", 1)),
+            audio_enabled=bool(row.get("audio_enabled", 0)),
             zones=zones,
             status=status,
             night_mode=bool(night_mode),

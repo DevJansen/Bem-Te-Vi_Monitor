@@ -247,6 +247,16 @@ MIGRATIONS: list[tuple[int, str]] = [
             ON visits(camera_id);
         """,
     ),
+    (
+        11,
+        """
+        -- Controles Operacionais em Tempo Real por Câmera (Alaris Core & Bioacústica BirdNET).
+        -- ai_enabled: liga/desliga o processamento de IA (YOLOv8) e gravação de visitas.
+        -- audio_enabled: liga/desliga a captura e monitoramento contínuo de áudio com BirdNET.
+        ALTER TABLE cameras ADD COLUMN ai_enabled INTEGER NOT NULL DEFAULT 1;
+        ALTER TABLE cameras ADD COLUMN audio_enabled INTEGER NOT NULL DEFAULT 0;
+        """,
+    ),
 ]
 
 

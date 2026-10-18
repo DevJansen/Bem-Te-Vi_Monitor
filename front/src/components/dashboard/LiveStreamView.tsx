@@ -16,6 +16,7 @@ import { cn } from "@/utils/cn";
 import { formatSpeciesShort } from "@/utils/format";
 import { abortMjpegStream } from "@/utils/stream";
 import { StatusDot } from "@/components/common/StatusDot";
+import { CameraControlToolbar } from "@/components/dashboard/CameraControlToolbar";
 
 type Props = {
   cameras: Camera[];
@@ -25,6 +26,8 @@ type Props = {
   onEditRoi: (camera: Camera) => void;
   /** Remove a câmera selecionada (com confirmação). */
   onDelete: (camera: Camera) => void;
+  /** Callback quando o estado operacional da câmera muda. */
+  onCameraUpdated?: (camera: Camera) => void;
 };
 
 type StreamConnection = "connected" | "reconnecting" | "offline";
@@ -34,6 +37,7 @@ export function LiveStreamView({
   onEditZones,
   onEditRoi,
   onDelete,
+  onCameraUpdated,
 }: Props) {
   const enabled = cameras.filter((c) => c.is_active);
   const [selectedId, setSelectedId] = useState<string>("");
@@ -267,6 +271,13 @@ export function LiveStreamView({
             <span className="tabular-nums text-[var(--color-text-primary)]">{fps}</span>{" "}
             FPS
           </div>
+
+          {selected && (
+            <CameraControlToolbar
+              camera={selected}
+              onCameraUpdated={onCameraUpdated}
+            />
+          )}
 
           <span className="hidden h-5 w-px bg-dark-700 sm:block" aria-hidden />
 

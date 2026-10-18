@@ -20,7 +20,7 @@ from app.infra.database.audio_repository import AudioDetectionRepository
 from app.infra.database.repository import CameraRepository, SettingsRepository
 from app.services.audio_devices import resolve_audio_input_args
 from app.services.birdnet_runtime import available_runtime, ensure_tflite_runtime
-from app.services.stream_resolver import resolver_url_direta
+from app.services.stream_resolver import resolver_url_audio, resolver_url_direta
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +38,34 @@ _inference_lock = threading.Lock()
 StatusCallback = Callable[[str, str, str], None]
 
 
+def get_ffmpeg_path() -> str | None:
+    """Busca o executável do ffmpeg no PATH ou em diretórios comuns no Windows."""
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+    import glob
+    import os
+
+    local_app_data = os.environ.get("LOCALAPPDATA", "")
+    if local_app_data:
+        winget_pattern = os.path.join(
+            local_app_data, "Microsoft", "WinGet", "Packages", "*ffmpeg*", "**", "bin", "ffmpeg.exe"
+        )
+        matches = glob.glob(winget_pattern, recursive=True)
+        if matches:
+            return matches[0]
+        # Tentativa sem pasta bin
+        matches_direct = glob.glob(
+            os.path.join(local_app_data, "Microsoft", "WinGet", "Packages", "*ffmpeg*", "**", "ffmpeg.exe"),
+            recursive=True,
+        )
+        if matches_direct:
+            return matches_direct[0]
+    return None
+
+
 def _audio_engine_issue() -> str | None:
-    if shutil.which("ffmpeg") is None:
+    if get_ffmpeg_path() is None:
         return "FFmpeg não foi encontrado no PATH do sistema."
     if importlib.util.find_spec("birdnetlib") is None:
         return (
@@ -214,20 +240,29 @@ class AudioCameraWorker(threading.Thread):
         )
         target = CameraStreamer(config).resolve_capture_target()
         if isinstance(target, str):
-            # O ffmpeg também não abre a página web do YouTube: traduz o link
-            # para o stream direto antes de montar o comando.
-            target = resolver_url_direta(target)
+            # YouTube e outros links web: resolve para stream de áudio direto.
+            target = resolver_url_audio(target)
         if not isinstance(target, str):
             raise RuntimeError(
-                "A análise sonora exige uma câmera RTSP, ONVIF ou um "
+                "A análise sonora exige uma câmera RTSP, ONVIF, HLS, HTTP ou um "
                 "dispositivo de áudio USB."
             )
-        return ["-rtsp_transport", "tcp", "-i", target]
+        if target.startswith("rtsp://") or target.startswith("rtsps://"):
+            return ["-rtsp_transport", "tcp", "-i", target]
+        elif target.startswith("http://") or target.startswith("https://"):
+            return [
+                "-headers",
+                "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\r\nReferer: https://www.youtube.com/\r\n",
+                "-i",
+                target,
+            ]
+        return ["-i", target]
 
     def _open_audio_stream(self) -> subprocess.Popen[bytes]:
         input_args = self._audio_input_args()
+        ffmpeg_bin = get_ffmpeg_path() or "ffmpeg"
         command = [
-            shutil.which("ffmpeg") or "ffmpeg",
+            ffmpeg_bin,
             "-hide_banner",
             "-loglevel",
             "error",
@@ -397,30 +432,34 @@ class AudioAnalysisService(threading.Thread):
 
     @staticmethod
     def _worker_signature(row: dict[str, Any], audio_input_device: str) -> str:
-        """Assinatura que invalida o worker quando a fonte de áudio muda.
-
-        Para câmeras USB o dispositivo de entrada escolhido nas configurações
-        entra na assinatura, de modo que trocar o microfone reinicia o worker.
-        """
-        base = str(row.get("updated_at", ""))
+        """Assinatura que invalida o worker quando a fonte ou status de áudio muda."""
+        base = f"{row.get('updated_at', '')}|audio_enabled={row.get('audio_enabled', 0)}"
         if row["source_type"] == SourceType.USB.value:
             return f"{base}|audio={audio_input_device}"
         return base
 
+    def trigger_reconcile(self) -> None:
+        """Força a sincronização imediata dos workers de áudio sem aguardar o polling."""
+        try:
+            self._reconcile()
+        except Exception:
+            logger.exception("Failed to trigger immediate BirdNET reconcile")
+
     def _reconcile(self) -> None:
-        enabled_value = self.settings_repo.get("audio_analysis_enabled", "false")
-        enabled = enabled_value.lower() in {"1", "true", "yes", "on"}
-        rows = self.camera_repo.list_all() if enabled else []
-        # Câmeras RTSP/ONVIF capturam o áudio do próprio stream; câmeras USB usam
-        # um único dispositivo de entrada do sistema (microfone USB/webcam), então
-        # apenas a primeira delas é considerada para evitar disputa pelo aparelho.
+        global_enabled_val = self.settings_repo.get("audio_analysis_enabled", "false")
+        global_enabled = global_enabled_val.lower() in {"1", "true", "yes", "on"}
+        rows = self.camera_repo.list_all()
+
         eligible: dict[str, dict[str, Any]] = {}
         usb_assigned = False
         for row in rows:
             if not row["is_active"]:
                 continue
+            audio_on = bool(row.get("audio_enabled", 0)) or global_enabled
+            if not audio_on:
+                continue
             source_type = row["source_type"]
-            if source_type in {"rtsp", "onvif"}:
+            if source_type in {"rtsp", "onvif", "hls", "http", "webrtc"}:
                 eligible[row["id"]] = row
             elif source_type == SourceType.USB.value and not usb_assigned:
                 eligible[row["id"]] = row

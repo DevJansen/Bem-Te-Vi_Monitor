@@ -14,7 +14,7 @@ import type { Camera, CameraWeather } from "@/types";
 import { getCameraWeather } from "@/services/api";
 import { StatusDot } from "@/components/common/StatusDot";
 import { statusLabel } from "@/utils/format";
-import { AudioPlayer } from "@/components/cameras/AudioPlayer";
+import { CameraControlToolbar } from "@/components/dashboard/CameraControlToolbar";
 import { cn } from "@/utils/cn";
 
 type Props = {
@@ -25,6 +25,7 @@ type Props = {
   onDelete: (camera: Camera) => void;
   onEditZones: (camera: Camera) => void;
   onEditRoi: (camera: Camera) => void;
+  onCameraUpdated?: (camera: Camera) => void;
 };
 
 export function CameraGrid({
@@ -35,6 +36,7 @@ export function CameraGrid({
   onDelete,
   onEditZones,
   onEditRoi,
+  onCameraUpdated,
 }: Props) {
   return (
     <section>
@@ -108,8 +110,14 @@ export function CameraGrid({
 
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
                   <Badge tone={camera.is_active ? "ok" : "muted"}>
-                    {camera.is_active ? "Monitorando" : "Pausada"}
+                    {camera.is_active ? "Ativa" : "Desativada"}
                   </Badge>
+                  <Badge tone={camera.ai_enabled !== false ? "ok" : "muted"}>
+                    {camera.ai_enabled !== false ? "Alaris IA Ativo" : "Alaris IA Pausado"}
+                  </Badge>
+                  {camera.audio_enabled ? (
+                    <Badge tone="ok">BirdNET Ativo</Badge>
+                  ) : null}
                   {camera.has_credentials ? (
                     <Badge tone="ok">Credenciais OK</Badge>
                   ) : (
@@ -127,8 +135,13 @@ export function CameraGrid({
                 {/* Clima e horário locais do jardim (câmeras globais/remotas). */}
                 <CameraLocalWeather camera={camera} />
 
-                {/* Player de áudio ao vivo do jardim (Bioacústica). */}
-                <AudioPlayer cameraId={camera.id} />
+                {/* Barra de Controles Operacionais em Tempo Real */}
+                <div className="mt-3">
+                  <CameraControlToolbar
+                    camera={camera}
+                    onCameraUpdated={onCameraUpdated}
+                  />
+                </div>
 
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-dark-700 pt-3">
                   <label className="flex items-center gap-2 text-xs text-[var(--color-text-muted)]">

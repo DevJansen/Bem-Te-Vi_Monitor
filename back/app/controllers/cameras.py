@@ -11,6 +11,8 @@ from app.core.rate_limiter import limiter
 from app.core.config import get_settings
 from app.core.redact import extrair_credenciais_da_url
 from app.domain.models import (
+    CameraAiToggle,
+    CameraBioacousticsToggle,
     CameraCreate,
     CameraOut,
     CameraUpdate,
@@ -222,15 +224,112 @@ async def update_camera(camera_id: str, payload: CameraUpdate) -> CameraOut:
         if row is None:
             raise HTTPException(status_code=404, detail="Camera not found")
 
-        get_pipeline_supervisor().restart_camera(camera_id)
+        connection_changed = (
+            payload.stream_url is not None
+            or payload.source_type is not None
+            or update_creds
+            or payload.zones is not None
+        )
+
+        if payload.ai_enabled is not None:
+            get_pipeline_supervisor().set_camera_ai_enabled(camera_id, payload.ai_enabled)
+
+        if payload.audio_enabled is not None:
+            from app.services.audio_analysis import get_audio_analysis_service
+
+            get_audio_analysis_service().trigger_reconcile()
+
+        if payload.enabled is not None:
+            if payload.enabled:
+                get_pipeline_supervisor().start_camera(camera_id)
+            else:
+                get_pipeline_supervisor().stop_camera(camera_id)
+        elif connection_changed:
+            get_pipeline_supervisor().restart_camera(camera_id)
+
         return CameraRepository.to_out(
-            row, status=get_camera_manager().get_status(camera_id)
+            row,
+            status=get_camera_manager().get_status(camera_id),
+            night_mode=get_camera_manager().get_night_mode(camera_id),
         )
     except HTTPException:
         raise
     except Exception as exc:
         logger.exception("update_camera failed")
         raise HTTPException(status_code=500, detail="Failed to update camera") from exc
+
+
+@router.patch("/{camera_id}/ai", response_model=CameraOut)
+async def toggle_camera_ai(camera_id: str, payload: CameraAiToggle) -> CameraOut:
+    """Ativa ou pausa o Alaris Core (YOLOv8 + gravação) para a câmera em tempo real."""
+    repo = _repo()
+    existing = repo.get(camera_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    row = repo.update(camera_id, CameraUpdate(ai_enabled=payload.enabled))
+    if row is None:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    get_pipeline_supervisor().set_camera_ai_enabled(camera_id, payload.enabled)
+    from app.services.ai_cognitive_log import NIVEL_INFO, NIVEL_SUCESSO, registrar_pensamento
+
+    if payload.enabled:
+        registrar_pensamento(
+            f"Alaris Core (IA visual) ativado para a câmera '{row['name']}'.",
+            nivel=NIVEL_SUCESSO,
+            camera_id=camera_id,
+        )
+    else:
+        registrar_pensamento(
+            f"Alaris Core (IA visual) pausado para a câmera '{row['name']}' (economia de recursos).",
+            nivel=NIVEL_INFO,
+            camera_id=camera_id,
+        )
+
+    return CameraRepository.to_out(
+        row,
+        status=get_camera_manager().get_status(camera_id),
+        night_mode=get_camera_manager().get_night_mode(camera_id),
+    )
+
+
+@router.patch("/{camera_id}/bioacoustics", response_model=CameraOut)
+async def toggle_camera_bioacoustics(camera_id: str, payload: CameraBioacousticsToggle) -> CameraOut:
+    """Ativa ou desativa a captura de áudio com BirdNET para esta câmera."""
+    repo = _repo()
+    existing = repo.get(camera_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    row = repo.update(camera_id, CameraUpdate(audio_enabled=payload.enabled))
+    if row is None:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    from app.services.audio_analysis import get_audio_analysis_service
+
+    get_audio_analysis_service().trigger_reconcile()
+
+    from app.services.ai_cognitive_log import NIVEL_INFO, NIVEL_SUCESSO, registrar_pensamento
+
+    if payload.enabled:
+        registrar_pensamento(
+            f"Bioacústica (BirdNET) iniciada para a câmera '{row['name']}': monitorando cantos de aves.",
+            nivel=NIVEL_SUCESSO,
+            camera_id=camera_id,
+        )
+    else:
+        registrar_pensamento(
+            f"Bioacústica (BirdNET) pausada para a câmera '{row['name']}'.",
+            nivel=NIVEL_INFO,
+            camera_id=camera_id,
+        )
+
+    return CameraRepository.to_out(
+        row,
+        status=get_camera_manager().get_status(camera_id),
+        night_mode=get_camera_manager().get_night_mode(camera_id),
+    )
 
 
 @router.delete("/{camera_id}", status_code=status.HTTP_204_NO_CONTENT)

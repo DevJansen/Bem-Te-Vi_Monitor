@@ -11,6 +11,7 @@ export function usePolling<T>(
   error: string | null;
   loading: boolean;
   refresh: () => Promise<void>;
+  setData: React.Dispatch<React.SetStateAction<T | null>>;
 } {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -65,5 +66,6 @@ export function usePolling<T>(
       setLoading(true);
       await run();
     },
+    setData,
   };
 }

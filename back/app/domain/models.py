@@ -123,6 +123,8 @@ class CameraCreate(BaseModel):
     username: str | None = None
     password: str | None = None
     enabled: bool = True
+    ai_enabled: bool = True
+    audio_enabled: bool = False
     zones: list[ZoneConfig] = Field(default_factory=list)
 
     @field_validator("stream_url")
@@ -155,6 +157,8 @@ class CameraUpdate(BaseModel):
     username: str | None = None
     password: str | None = None
     enabled: bool | None = None
+    ai_enabled: bool | None = None
+    audio_enabled: bool | None = None
     zones: list[ZoneConfig] | None = None
     clear_credentials: bool = False
     # Quando verdadeiro, apaga a localização geográfica da câmera.
@@ -172,6 +176,14 @@ class CameraUpdate(BaseModel):
         return self
 
 
+class CameraAiToggle(BaseModel):
+    enabled: bool
+
+
+class CameraBioacousticsToggle(BaseModel):
+    enabled: bool
+
+
 class CameraOut(BaseModel):
     id: str
     name: str
@@ -184,6 +196,8 @@ class CameraOut(BaseModel):
     country: str | None = None
     has_credentials: bool = False
     is_active: bool
+    ai_enabled: bool = True
+    audio_enabled: bool = False
     zones: list[ZoneConfig] = Field(default_factory=list)
     status: str = "idle"
     # Indica se a câmera está processando quadros em visão noturna (IR/baixa luz).

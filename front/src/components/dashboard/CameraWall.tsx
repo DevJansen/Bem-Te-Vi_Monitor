@@ -15,6 +15,7 @@ import { fetchStreams, streamProxyUrl } from "@/services/api";
 import { cn } from "@/utils/cn";
 import { formatSpeciesShort } from "@/utils/format";
 import { abortMjpegStream } from "@/utils/stream";
+import { CameraControlToolbar } from "@/components/dashboard/CameraControlToolbar";
 
 type GridMode = 1 | 2 | 4;
 
@@ -27,13 +28,19 @@ const MODES: Array<{ value: GridMode; label: string; icon: typeof Square }> = [
 /**
  * "Mural de Câmeras" — grid multi-câmera em tempo real (1, 2 ou 4 lado a lado).
  *
- * Cada feed usa o **proxy seguro** do backend (`/api/streams/proxy/{id}`), então
- * a URL e as credenciais da câmera externa nunca chegam ao navegador. Sobre cada
- * vídeo exibimos os selos em tempo real do **Alaris Core**: status de conexão
- * (Online 🟢 / Reconectando 🟡), FPS e a contagem de aves ativas no
- * bebedouro/comedouro.
+ * Cada feed usa o **proxy seguro** do backend (`/api/streams/proxy/{id}`), com
+ * barra de ferramentas flutuante contendo os controles operacionais em tempo real:
+ * - Ligar / Desligar Alaris Core (IA)
+ * - Player de Áudio Ao Vivo (Mute / Unmute com volume)
+ * - Monitorar Áudio (BirdNET)
  */
-export function CameraWall({ cameras }: { cameras: Camera[] }) {
+export function CameraWall({
+  cameras,
+  onCameraUpdated,
+}: {
+  cameras: Camera[];
+  onCameraUpdated?: (camera: Camera) => void;
+}) {
   const ativas = useMemo(() => cameras.filter((c) => c.is_active), [cameras]);
   const [mode, setMode] = useState<GridMode>(4);
   const [focusedId, setFocusedId] = useState<string | null>(null);
@@ -137,6 +144,7 @@ export function CameraWall({ cameras }: { cameras: Camera[] }) {
             onToggleFocus={() =>
               setFocusedId((atual) => (atual === camera.id ? null : camera.id))
             }
+            onCameraUpdated={onCameraUpdated}
           />
         ))}
       </div>
@@ -149,9 +157,16 @@ type TileProps = {
   stats?: StreamStats;
   focused: boolean;
   onToggleFocus: () => void;
+  onCameraUpdated?: (camera: Camera) => void;
 };
 
-function CameraTile({ camera, stats, focused, onToggleFocus }: TileProps) {
+function CameraTile({
+  camera,
+  stats,
+  focused,
+  onToggleFocus,
+  onCameraUpdated,
+}: TileProps) {
   const imgRef = useRef<HTMLImageElement | null>(null);
   const [erro, setErro] = useState(false);
 
@@ -219,6 +234,15 @@ function CameraTile({ camera, stats, focused, onToggleFocus }: TileProps) {
           <span className={cn("text-[11px] font-semibold", connTone)}>
             {connLabel}
           </span>
+        </div>
+
+        {/* Barra de Ferramentas Flutuante de Controles Operacionais */}
+        <div className="absolute right-10 top-2 z-10 transition-opacity">
+          <CameraControlToolbar
+            camera={camera}
+            onCameraUpdated={onCameraUpdated}
+            compact
+          />
         </div>
 
         {/* Foco individual */}

@@ -203,6 +203,17 @@ class BoxTracker:
         """Todos os identificadores já vistos desde o início do rastreio."""
         return set(self._seen_ids)
 
+    def clear(self) -> None:
+        """Descarta todas as faixas ativas e o quadro-base do fluxo óptico.
+
+        Usado quando o Alaris Core é **pausado** para a câmera: ao retomar, o
+        rastreio começa limpo, sem "fantasmas" de aves que já saíram de cena.
+        Os identificadores já vistos (``seen_ids``) são preservados para não
+        inflar a contagem de indivíduos do mesmo bando.
+        """
+        self._tracks = []
+        self._gray = None
+
     @staticmethod
     def _to_gray(frame: np.ndarray) -> np.ndarray:
         return cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)

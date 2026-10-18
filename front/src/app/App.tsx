@@ -155,6 +155,15 @@ export function App() {
     }
   };
 
+  const handleCameraUpdated = (updated: Camera) => {
+    camerasQuery.setData((current: Camera[] | null) =>
+      current
+        ? current.map((c: Camera) => (c.id === updated.id ? updated : c))
+        : [updated],
+    );
+    void Promise.all([camerasQuery.refresh(), metricsQuery.refresh()]);
+  };
+
   const handleDelete = async (camera: Camera) => {
     const ok = window.confirm(`Remover a câmera "${camera.name}"?`);
     if (!ok) return;
@@ -233,7 +242,10 @@ export function App() {
           {tab === "dashboard" ? (
             <div className="space-y-4">
               <AiCorePanel />
-              <CameraWall cameras={camerasQuery.data ?? []} />
+              <CameraWall
+                cameras={camerasQuery.data ?? []}
+                onCameraUpdated={handleCameraUpdated}
+              />
               <WeatherWidget />
               <AnomalyAlertsPanel />
               <div className="mb-3 flex items-center gap-2">
@@ -264,6 +276,7 @@ export function App() {
                     onEditZones={setZoneCamera}
                     onEditRoi={setRoiCamera}
                     onDelete={(cam) => void handleDelete(cam)}
+                    onCameraUpdated={handleCameraUpdated}
                   />
                 </div>
                 <div className="space-y-4">
