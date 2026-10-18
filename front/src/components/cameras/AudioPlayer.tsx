@@ -16,6 +16,7 @@ export function AudioPlayer({ cameraId }: Props) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [muted, setMuted] = useState(true);
   const [volume, setVolume] = useState(0.5);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -28,11 +29,16 @@ export function AudioPlayer({ cameraId }: Props) {
     const audio = audioRef.current;
     if (!audio) return;
     if (muted) {
-      // Desmutar: atualiza o elemento diretamente antes de tocar.
       audio.muted = false;
       audio.volume = volume;
       setMuted(false);
-      audio.play().catch((err) => console.warn("Audio play failed:", err));
+      const p = audio.play();
+      if (p) {
+        p.catch((err) => {
+          console.warn("Audio play failed:", err);
+          setError("Clique para ativar o áudio");
+        });
+      }
     } else {
       audio.muted = true;
       setMuted(true);
@@ -47,7 +53,11 @@ export function AudioPlayer({ cameraId }: Props) {
         preload="auto"
         crossOrigin="anonymous"
         className="hidden"
-        onError={(e) => console.warn("Audio error:", e)}
+        onError={(e) => {
+          console.warn("Audio error:", e);
+          setError("Erro ao carregar áudio");
+        }}
+        onCanPlay={() => setError(null)}
       />
       <button
         type="button"
@@ -71,8 +81,8 @@ export function AudioPlayer({ cameraId }: Props) {
           muted && "opacity-40",
         )}
       />
-      <span className="w-8 text-right text-[10px] tabular-nums text-[var(--color-text-muted)]">
-        {muted ? "Mudo" : `${Math.round(volume * 100)}%`}
+      <span className="w-16 text-right text-[10px] tabular-nums text-[var(--color-text-muted)]">
+        {error ? error : muted ? "Mudo" : `${Math.round(volume * 100)}%`}
       </span>
     </div>
   );
