@@ -390,11 +390,34 @@ class AudioDetectionOut(BaseModel):
     scientific_name: str
     confidence: float = Field(ge=0.0, le=1.0)
     linked_visit_id: str | None = None
+    # Clipe de áudio gravado (player da aba Detecção Sonora), quando existe.
+    audio_url: str | None = None
+    # Vínculo com a espécie da Life List ("Minhas Aves"), quando identificada.
+    species_id: str | None = None
+    # Rótulo do estado da identificação (ex.: "Identificado por IA Externa").
+    identification_status: str | None = None
     # Condições meteorológicas no momento da detecção sonora.
     temperature: float | None = None
     humidity: float | None = None
     weather_code: str | None = None
     wind_speed: float | None = None
+
+
+class AudioDetectionIdentify(BaseModel):
+    """Vínculo manual de uma detecção sonora à espécie da Life List."""
+
+    species_id: str | None = None
+    common_name: str | None = Field(default=None, max_length=160)
+    scientific_name: str | None = Field(default=None, max_length=200)
+
+
+class AudioDetectionPage(BaseModel):
+    """Página de detecções sonoras para a paginação fluida da aba dedicada."""
+
+    items: list[AudioDetectionOut]
+    total: int
+    limit: int
+    offset: int
 
 
 class AudioAnalysisStatusOut(BaseModel):

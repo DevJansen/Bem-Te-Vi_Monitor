@@ -22,6 +22,7 @@ explicitamente como não-ave.
 
 from __future__ import annotations
 
+import re
 import unicodedata
 from dataclasses import dataclass
 from enum import Enum
@@ -115,6 +116,7 @@ def grupo_por_chave(chave: str | None) -> GrupoVisitante:
 # Palavras-chave (pt-BR e inglês, sem acentos) que denunciam um mamífero.
 # A ordem importa: o grupo mais específico (esquilo/roedor/felino/canino) vence.
 _CHAVES_ESQUILO = (
+    # Nomes populares (pt-BR / inglês).
     "esquilo",
     "serelepe",
     "caxinguele",
@@ -122,17 +124,54 @@ _CHAVES_ESQUILO = (
     "marmota",
     "chipmunk",
     "squirrel",
+    "groundhog",
+    # Gêneros/espécies de esquilos (Sciuridae) — a ciência é o desempate.
     "sciurus",
     "sciuridae",
     "sciurillus",
+    "tamias",
     "tamiasciurus",
     "callosciurus",
     "funambulus",
+    "helosciurus",
+    "exilisciurus",
+    "nannosciurus",
+    "myosciurus",
+    "microsciurus",
+    "syntheosciurus",
+    "lariscus",
+    "menetes",
+    "rheithrosciurus",
+    "glyphotes",
+    "sundasciurus",
+    "dremomys",
+    "tamiops",
+    "hyosciurus",
+    "prosciurillus",
+    "sciurotamias",
+    "uroscirtus",
     "xerus",
+    # Marmotas e esquilos-terrestres (também Sciuridae).
     "spermophilus",
-    "marmota",
     "cynomys",
+    "otospermophilus",
+    "ictidomys",
+    "xerospermophilus",
+    "urocitellus",
+    "ammospermophilus",
+    "callospermophilus",
+    # Esquilos-voadores.
     "glaucomys",
+    "petaurista",
+    "pteromys",
+    "pteromyscus",
+    "hylopetes",
+    "petinomys",
+    "aeretes",
+    "trogopterus",
+    "belomys",
+    "eupetaurus",
+    "biswamoyopterus",
 )
 _CHAVES_ROEDOR = (
     "roedor",
@@ -289,11 +328,35 @@ def _normalizar(texto: str | None) -> str:
     return "".join(ch for ch in decomposto if not unicodedata.combining(ch))
 
 
+def _tokens(texto: str) -> set[str]:
+    """Conjunto das palavras do texto normalizado (separadas por não-alfanuméricos)."""
+    return set(re.findall(r"[a-z0-9]+", texto))
+
+
 def _contem(texto: str, chaves: tuple[str, ...]) -> bool:
-    """Indica se alguma palavra-chave aparece no texto normalizado."""
+    """Indica se alguma palavra-chave aparece no texto normalizado.
+
+    A comparação é feita por **palavra inteira** (e não por *substring*). Esse
+    detalhe é o coração do refinamento anti-falso-positivo: substrings gerariam
+    erros grosseiros como classificar ``Catharus``/``Cathartes`` (tordos e
+    urubus) como felino por conterem ``cat``, ``Pigeon`` como suíno por conter
+    ``pig`` ou ``Cowbird`` como bovino por conter ``cow``. Chaves compostas (com
+    espaço ou hífen) são comparadas como trecho do texto normalizado.
+    """
     if not texto:
         return False
-    return any(chave in texto for chave in chaves)
+    palavras = _tokens(texto)
+    for chave in chaves:
+        termo = chave.strip()
+        if not termo:
+            continue
+        if " " in termo or "-" in termo:
+            # Frase composta (ex.: "sus scrofa", "porquinho-da-india").
+            if termo.replace("-", " ") in texto.replace("-", " "):
+                return True
+        elif termo in palavras:
+            return True
+    return False
 
 
 @dataclass(frozen=True)

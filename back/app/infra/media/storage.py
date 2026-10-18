@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import shutil
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,6 +12,7 @@ import cv2
 import numpy as np
 
 from app.core.config import get_settings
+from app.core.ffmpeg import get_ffmpeg_path
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +62,7 @@ def save_bird_crop(
     margin: float = 0.0,
     min_dimension: int = 0,
     max_dimension: int = 1024,
+    enhance: bool = True,
 ) -> str | None:
     """Salva o recorte da ave em app-data/crops e retorna seu caminho relativo.
 
@@ -69,6 +70,11 @@ def save_bird_crop(
     tamanho dela), ``min_dimension`` amplia recortes pequenos até uma resolução
     nítida (alta definição) e ``max_dimension`` limita o tamanho final. Os
     padrões preservam o comportamento anterior (corte exato, máx. 1024 px).
+
+    Com ``enhance=True`` (padrão), o recorte passa por um pós-processamento
+    cirúrgico de nitidez (:func:`app.infra.ai.enhancement.realcar_recorte_da_ave`):
+    CLAHE no canal de luminância + máscara de nitidez. Assim a plumagem fica
+    nítida o bastante para o observador humano **e** para a IA externa (Gemini).
     """
     settings = get_settings()
     try:
@@ -111,6 +117,15 @@ def save_bird_crop(
                 ),
                 interpolation=interpolacao,
             )
+
+        # Pós-processamento cirúrgico do recorte: CLAHE + máscara de nitidez.
+        # Nitidez aplicada depois do redimensionamento para não perder detalhe.
+        if enhance:
+            from app.infra.ai.enhancement import realcar_recorte_da_ave
+
+            tratado = realcar_recorte_da_ave(crop)
+            if tratado is not None and getattr(tratado, "size", 0) > 0:
+                crop = tratado
 
         output_path = settings.crops_dir / f"{visit_id}.jpg"
         if not cv2.imwrite(
@@ -193,7 +208,7 @@ def _encode_with_ffmpeg(
     válido. Recebe os quadros pelo `stdin` do ffmpeg com `yuv420p` (obrigatório
     para navegadores) e `+faststart` (índice no início do arquivo).
     """
-    ffmpeg = shutil.which("ffmpeg")
+    ffmpeg = get_ffmpeg_path()
     if ffmpeg is None:
         return False
 
@@ -272,7 +287,7 @@ def convert_to_web_mp4(input_path: Path | str, output_path: Path | str) -> bool:
     Observação: os clipes do AviaWatch não têm faixa de áudio, por isso usamos
     `-an` em vez de codificar áudio (`-acodec aac`).
     """
-    ffmpeg = shutil.which("ffmpeg")
+    ffmpeg = get_ffmpeg_path()
     if ffmpeg is None:
         logger.info("ffmpeg não encontrado; mantendo o arquivo original")
         return False

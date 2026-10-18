@@ -240,6 +240,11 @@ class Settings(BaseModel):
         return self.app_data_dir / "crops"
 
     @property
+    def audio_dir(self) -> Path:
+        """Pasta dos clipes de áudio das detecções sonoras (BirdNET)."""
+        return self.captures_dir / "audio"
+
+    @property
     def timelapses_dir(self) -> Path:
         """Pasta dos resumos do dia (time-lapses) em MP4."""
         return self.captures_dir / "timelapses"
@@ -295,6 +300,7 @@ class Settings(BaseModel):
             self.clips_dir,
             self.thumbs_dir,
             self.crops_dir,
+            self.audio_dir,
             self.timelapses_dir,
             self.reference_birds_dir,
             self.secrets_dir,

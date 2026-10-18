@@ -30,6 +30,11 @@ CLAHE_CLIP_PADRAO = 2.0
 CLAHE_GRID_PADRAO = 8
 # Força da redução de ruído (parâmetro ``h`` do fastNlMeansDenoisingColored).
 FORCA_RUIDO_PADRAO = 5.0
+# Nitidez extra aplicada apenas ao **recorte** (close-up da ave). A máscara de
+# nitidez (*unsharp mask*) realça as bordas das penas sem estourar o ruído —
+# ajuda tanto o observador humano quanto a IA externa a reconhecer a espécie.
+NITIDEZ_RECORTE_PADRAO = 0.8
+SIGMA_RECORTE_PADRAO = 1.0
 
 
 def _garantir_bgr(imagem: np.ndarray) -> np.ndarray:
@@ -105,6 +110,47 @@ def realcar_quadro_da_ave(
         h = float(forca_ruido)
         imagem = cv2.fastNlMeansDenoisingColored(
             imagem, None, h, h, 7, 15
+        )
+
+    return imagem
+
+
+def realcar_recorte_da_ave(
+    recorte: np.ndarray,
+    *,
+    clahe_clip: float = CLAHE_CLIP_PADRAO,
+    clahe_grid: int = CLAHE_GRID_PADRAO,
+    nitidez: float = NITIDEZ_RECORTE_PADRAO,
+    sigma: float = SIGMA_RECORTE_PADRAO,
+) -> np.ndarray | None:
+    """Realça o **recorte** (close-up) da ave antes de salvá-lo.
+
+    Enquanto :func:`realcar_quadro_da_ave` trata o quadro inteiro, esta função é
+    cirúrgica: age só sobre a bounding box do pássaro já recortada. Aplica
+
+    1. **CLAHE** no canal de luminância (contraste local da plumagem), e
+    2. **máscara de nitidez** (*unsharp mask*): ``original + nitidez·(original −
+       borrado)``, que realça as bordas das penas e o olho/bico sem estourar o
+       ruído de fundo.
+
+    O objetivo é um close-up nítido o bastante para o observador humano **e**
+    para a IA externa (Gemini) reconhecerem a espécie sem falhas. Devolve
+    ``None`` se o recorte for inválido/vazio.
+    """
+    if recorte is None or getattr(recorte, "size", 0) == 0:
+        return None
+
+    imagem = _garantir_bgr(recorte).copy()
+
+    # 1) Contraste local — realça cores e padrões da plumagem.
+    if clahe_clip and float(clahe_clip) > 1.0:
+        imagem = _aplicar_clahe(imagem, float(clahe_clip), int(clahe_grid))
+
+    # 2) Máscara de nitidez — acentua bordas/penas sem amplificar o ruído.
+    if nitidez and float(nitidez) > 0:
+        borrado = cv2.GaussianBlur(imagem, (0, 0), sigmaX=max(0.1, float(sigma)))
+        imagem = cv2.addWeighted(
+            imagem, 1.0 + float(nitidez), borrado, -float(nitidez), 0.0
         )
 
     return imagem

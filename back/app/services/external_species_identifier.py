@@ -48,6 +48,18 @@ IDENTIFICATION_PROMPT = (
     'o nome científico e popular em formato JSON, usando as chaves '
     '"scientific_name" e "common_name"'
 )
+
+# Prompt da bioacústica: a entrada é um **espectrograma** (o "canto desenhado"
+# no tempo × frequência) e não uma foto. Explicamos isso à IA para que ela
+# interprete o padrão acústico (trilhas harmônicas, sílabas) como faria o
+# BirdNET, devolvendo os mesmos campos em JSON.
+SPECTROGRAM_PROMPT = (
+    "A imagem é um **espectrograma** de um canto de ave (eixo horizontal = tempo, "
+    "eixo vertical = frequência). Interprete o padrão acústico (sílabas, trilhas "
+    "harmônicas e frequências dominantes) e identifique a espécie mais provável "
+    "(fauna brasileira quando possível). Retorne apenas JSON com as chaves "
+    '"scientific_name" e "common_name".'
+)
 # Tamanho máximo da mensagem de erro do provedor exibida ao usuário.
 _MAX_DETAIL = 200
 
@@ -234,14 +246,16 @@ def _post(
         ) from exc
 
 
-def _google_payload(image_base64: str) -> dict[str, object]:
+def _google_payload(
+    image_base64: str, prompt: str = IDENTIFICATION_PROMPT
+) -> dict[str, object]:
     """Corpo da requisição ``generateContent`` com a imagem em base64."""
     return {
         "contents": [
             {
                 "role": "user",
                 "parts": [
-                    {"text": IDENTIFICATION_PROMPT},
+                    {"text": prompt},
                     {
                         "inline_data": {
                             "mime_type": "image/jpeg",
@@ -291,8 +305,15 @@ def _openai_content(response_data: dict[str, object]) -> str:
     return str(conteudo)
 
 
-def identify_bird_image(image_bytes: bytes) -> SpeciesIdentification:
-    """Identifica a espécie de uma imagem usando o provedor configurado."""
+def identify_bird_image(
+    image_bytes: bytes, prompt: str = IDENTIFICATION_PROMPT
+) -> SpeciesIdentification:
+    """Identifica a espécie de uma imagem usando o provedor configurado.
+
+    ``prompt`` permite reaproveitar o mesmo motor tanto para a foto da ave
+    (padrão) quanto para o **espectrograma** da detecção sonora
+    (:data:`SPECTROGRAM_PROMPT`).
+    """
     settings = get_settings()
     if not settings.ai_external_api_key:
         raise ExternalIdentificationError(
@@ -310,7 +331,7 @@ def identify_bird_image(image_bytes: bytes) -> SpeciesIdentification:
 
     if provider == PROVIDER_GOOGLE:
         url = google_generate_content_url(model, settings.ai_external_base_url)
-        payload = _google_payload(image_base64)
+        payload = _google_payload(image_base64, prompt)
         response = _post(url, api_key, payload, google=True)
         # Alguns proxies do Gemini não aceitam "responseMimeType"; tenta de novo.
         if response.status_code == 400 and "responsemimetype" in response.text.lower():
@@ -330,7 +351,7 @@ def identify_bird_image(image_bytes: bytes) -> SpeciesIdentification:
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": IDENTIFICATION_PROMPT},
+                        {"type": "text", "text": prompt},
                         {
                             "type": "image_url",
                             "image_url": {
@@ -400,6 +421,16 @@ def identify_bird_image_file(path: Path | str) -> SpeciesIdentification:
             "Não foi possível ler a imagem tratada da ave"
         ) from exc
     return identify_bird_image(image_bytes)
+
+
+def identify_spectrogram(image_bytes: bytes) -> SpeciesIdentification:
+    """Identifica a espécie a partir do **espectrograma** de uma detecção sonora.
+
+    Reaproveita o mesmo motor da visão, mas com o prompt de bioacústica
+    (:data:`SPECTROGRAM_PROMPT`), orientando a IA a interpretar o padrão
+    acústico desenhado no tempo × frequência.
+    """
+    return identify_bird_image(image_bytes, prompt=SPECTROGRAM_PROMPT)
 
 
 # --------------------------------------------------------------------------- #

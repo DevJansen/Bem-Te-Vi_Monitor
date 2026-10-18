@@ -257,6 +257,40 @@ MIGRATIONS: list[tuple[int, str]] = [
         ALTER TABLE cameras ADD COLUMN audio_enabled INTEGER NOT NULL DEFAULT 0;
         """,
     ),
+    (
+        12,
+        """
+        -- Preservação permanente do histórico do jardim.
+        -- Excluir uma câmera NÃO apaga mais as visitas, os clipes de vídeo, as
+        -- fotos nem os áudios associados. A câmera passa a ser "arquivada"
+        -- (is_archived = 1) e sai das listagens e do processamento, mas as
+        -- visitas continuam apontando para ela (o LEFT JOIN preserva o nome do
+        -- jardim no histórico). O ON DELETE CASCADE das visitas permanece apenas
+        -- como salvaguarda e nunca é acionado pelo fluxo normal.
+        ALTER TABLE cameras ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0;
+
+        CREATE INDEX IF NOT EXISTS idx_cameras_is_archived ON cameras(is_archived);
+        """,
+    ),
+    (
+        13,
+        """
+        -- Detecção Sonora (Bioacústica): cada canto identificado pelo BirdNET
+        -- passa a guardar o clipe de áudio gravado, o vínculo com a espécie da
+        -- Life List e a ficha ornitológica da IA externa em cache.
+        --   audio_path: caminho relativo do WAV em captures/audio/.
+        --   species_id: card da espécie (bird_species) associado, quando houver.
+        --   identification_status: rótulo do estado (ex.: "Identificado por IA Externa").
+        --   ai_consult_json: ficha ornitológica da IA externa em cache (JSON).
+        ALTER TABLE audio_detections ADD COLUMN audio_path TEXT;
+        ALTER TABLE audio_detections ADD COLUMN species_id TEXT;
+        ALTER TABLE audio_detections ADD COLUMN identification_status TEXT;
+        ALTER TABLE audio_detections ADD COLUMN ai_consult_json TEXT;
+
+        CREATE INDEX IF NOT EXISTS idx_audio_detections_species
+            ON audio_detections(species_id);
+        """,
+    ),
 ]
 
 

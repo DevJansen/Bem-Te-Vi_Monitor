@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import importlib.util
 import logging
-import shutil
 import subprocess
 import threading
 from datetime import datetime, timedelta, timezone
@@ -13,6 +12,7 @@ from typing import Any, Callable
 import numpy as np
 
 from app.core.config import get_settings
+from app.core.ffmpeg import get_ffmpeg_path
 from app.domain.models import SourceType
 from app.infra.camera.crypto import decrypt_secret
 from app.infra.camera.streamer import CameraStreamer, StreamConfig
@@ -20,6 +20,7 @@ from app.infra.database.audio_repository import AudioDetectionRepository
 from app.infra.database.repository import CameraRepository, SettingsRepository
 from app.services.audio_devices import resolve_audio_input_args
 from app.services.birdnet_runtime import available_runtime, ensure_tflite_runtime
+from app.services.audio_clips import save_audio_clip
 from app.services.stream_resolver import resolver_url_audio, resolver_url_direta
 
 logger = logging.getLogger(__name__)
@@ -36,32 +37,6 @@ _analyzer_lock = threading.Lock()
 _inference_lock = threading.Lock()
 
 StatusCallback = Callable[[str, str, str], None]
-
-
-def get_ffmpeg_path() -> str | None:
-    """Busca o executável do ffmpeg no PATH ou em diretórios comuns no Windows."""
-    found = shutil.which("ffmpeg")
-    if found:
-        return found
-    import glob
-    import os
-
-    local_app_data = os.environ.get("LOCALAPPDATA", "")
-    if local_app_data:
-        winget_pattern = os.path.join(
-            local_app_data, "Microsoft", "WinGet", "Packages", "*ffmpeg*", "**", "bin", "ffmpeg.exe"
-        )
-        matches = glob.glob(winget_pattern, recursive=True)
-        if matches:
-            return matches[0]
-        # Tentativa sem pasta bin
-        matches_direct = glob.glob(
-            os.path.join(local_app_data, "Microsoft", "WinGet", "Packages", "*ffmpeg*", "**", "ffmpeg.exe"),
-            recursive=True,
-        )
-        if matches_direct:
-            return matches_direct[0]
-    return None
 
 
 def _audio_engine_issue() -> str | None:
@@ -300,6 +275,11 @@ class AudioCameraWorker(threading.Thread):
         min_confidence = self._confidence_threshold()
         detections = _read_detections(analyzer, samples, min_confidence)
 
+        # O clipe de áudio do bloco é o mesmo para todas as detecções nele: grava
+        # uma única vez (preguiçosamente) e reaproveita o caminho.
+        bloco_gravado = False
+        audio_path: str | None = None
+
         for detection in detections:
             common_name = str(detection.get("common_name") or "").strip()
             scientific_name = str(detection.get("scientific_name") or "").strip()
@@ -321,12 +301,18 @@ class AudioCameraWorker(threading.Thread):
             detected_at = captured_at + timedelta(
                 seconds=max(0.0, min(float(CHUNK_SECONDS), detection_offset))
             )
+            if not bloco_gravado:
+                # O clipe de áudio da detecção (para o player da aba Detecção
+                # Sonora). Falhas não impedem o registro da detecção.
+                audio_path = save_audio_clip(samples)
+                bloco_gravado = True
             result = self._detection_repo.create_and_link(
                 camera_id=self.camera_id,
                 detected_at=detected_at.isoformat(),
                 species=common_name,
                 scientific_name=scientific_name,
                 confidence=float(detection["confidence"]),
+                audio_path=audio_path,
             )
             logger.info(
                 "BirdNET detection camera=%s species=%s confidence=%.3f linked_visit=%s",

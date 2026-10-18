@@ -9,7 +9,6 @@ para o player do painel (som ambiente do jardim remoto).
 from __future__ import annotations
 
 import logging
-import shutil
 import subprocess
 import threading
 from datetime import datetime, timedelta, timezone
@@ -23,7 +22,7 @@ from app.infra.database.connection import db_session
 from app.infra.database.repository import CameraRepository, VisitRepository
 from app.services.stream_resolver import resolver_url_audio
 
-from app.services.audio_analysis import get_ffmpeg_path
+from app.core.ffmpeg import get_ffmpeg_path
 
 logger = logging.getLogger(__name__)
 

@@ -18,13 +18,13 @@ from __future__ import annotations
 import json
 import logging
 import re
-import shutil
 import subprocess
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from app.core.config import get_settings
+from app.core.ffmpeg import get_ffmpeg_path, get_ffprobe_path
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +158,7 @@ def load_metadata(video: Path) -> dict[str, Any]:
 
 def _probe_duration(path: Path) -> float | None:
     """Lê a duração do MP4 com o ``ffprobe`` (``None`` se indisponível/falhar)."""
-    ffprobe = shutil.which("ffprobe")
+    ffprobe = get_ffprobe_path()
     if ffprobe is None:
         return None
     command = [
@@ -230,7 +230,7 @@ def build_timelapse(
         logger.info("Nenhum clipe válido para o time-lapse de %s", day)
         return None
 
-    ffmpeg = shutil.which("ffmpeg")
+    ffmpeg = get_ffmpeg_path()
     if ffmpeg is None:
         logger.warning(
             "ffmpeg não encontrado; não foi possível gerar o time-lapse de %s",

@@ -110,10 +110,16 @@ class CameraRepository:
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
 
-    def list_all(self) -> list[dict[str, Any]]:
+    def list_all(self, include_archived: bool = False) -> list[dict[str, Any]]:
+        """Lista as câmeras cadastradas (por padrão, sem as arquivadas).
+
+        Câmeras arquivadas são as que o observador "removeu": o histórico do
+        jardim é preservado, mas elas somem das listagens e do processamento.
+        """
+        where = "" if include_archived else "WHERE COALESCE(is_archived, 0) = 0"
         with db_session(self.db_path) as conn:
             rows = conn.execute(
-                "SELECT * FROM cameras ORDER BY created_at ASC"
+                f"SELECT * FROM cameras {where} ORDER BY created_at ASC"
             ).fetchall()
             return [dict(r) for r in rows]
 
@@ -282,8 +288,31 @@ class CameraRepository:
         return self.get(camera_id)
 
     def delete(self, camera_id: str) -> bool:
+        """Arquiva a câmera preservando **todo** o histórico do jardim.
+
+        Antes, remover uma câmera apagava a linha da tabela e, pelo
+        ``ON DELETE CASCADE``, destruía as visitas, os áudios e as mídias
+        associadas. Agora a câmera é apenas **arquivada** (``is_archived = 1``)
+        e desativada: some das listagens e do processamento, mas a galeria, os
+        clipes, as fotos e os registros de áudio permanecem para sempre. O
+        arquivo em disco nunca é tocado.
+
+        Devolve ``True`` somente quando uma câmera ainda não arquivada foi
+        efetivamente arquivada (evita recontar uma remoção repetida).
+        """
         with db_session(self.db_path) as conn:
-            cursor = conn.execute("DELETE FROM cameras WHERE id = ?", (camera_id,))
+            cursor = conn.execute(
+                """
+                UPDATE cameras
+                   SET is_archived = 1,
+                       is_active = 0,
+                       ai_enabled = 0,
+                       audio_enabled = 0,
+                       updated_at = ?
+                 WHERE id = ? AND COALESCE(is_archived, 0) = 0
+                """,
+                (_utc_now(), camera_id),
+            )
             return cursor.rowcount > 0
 
     @staticmethod

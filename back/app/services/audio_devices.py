@@ -26,6 +26,8 @@ import threading
 import time
 from dataclasses import dataclass
 
+from app.core.ffmpeg import get_ffmpeg_path
+
 logger = logging.getLogger(__name__)
 
 # Tempo de vida do cache de dispositivos (segundos).
@@ -54,7 +56,7 @@ class AudioDevice:
 
 
 def _ffmpeg() -> str:
-    return shutil.which("ffmpeg") or "ffmpeg"
+    return get_ffmpeg_path() or "ffmpeg"
 
 
 def platform_backend() -> str:
