@@ -29,17 +29,26 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/visits", tags=["visits"])
 
 # Rótulos genéricos do detector que NÃO são um nome de espécie de verdade.
+# A comparação é por texto literal em minúsculas; por isso listamos as variantes
+# com e sem acento (a nomenclatura oficial exibida é "Pássaro Desconhecido").
 _GENERIC_SPECIES = {
     "bird",
     "passaro",
+    "passaros",
     "passaro desconhecido",
+    "pássaro desconhecido",
     "ave",
+    "aves",
     "ave (genérica)",
+    "ave (generica)",
     "ave nao identificada",
     "ave não identificada",
     "não identificada",
     "nao identificada",
     "unidentified",
+    "unknown",
+    "desconhecida",
+    "desconhecido",
 }
 
 

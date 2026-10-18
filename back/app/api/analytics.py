@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import date
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from app.core.config import get_settings
 from app.domain.models import (
@@ -34,9 +34,16 @@ def _repository() -> AnalyticsRepository:
 
 
 @router.get("/summary", response_model=AnalyticsSummaryOut)
-def get_analytics_summary() -> AnalyticsSummaryOut:
+def get_analytics_summary(
+    camera_id: str | None = Query(
+        default=None,
+        description="Restringe o resumo a um jardim (câmera). Omitido = consolidado.",
+    ),
+) -> AnalyticsSummaryOut:
     try:
-        return AnalyticsSummaryOut(**_repository().summary())
+        return AnalyticsSummaryOut(
+            **_repository().summary(camera_id=camera_id)
+        )
     except Exception as exc:
         logger.exception("get_analytics_summary failed")
         raise HTTPException(
@@ -62,11 +69,16 @@ def get_analytics_today() -> TodayByGardenOut:
     "/hourly-distribution",
     response_model=list[HourlyDistributionOut],
 )
-def get_hourly_distribution() -> list[HourlyDistributionOut]:
+def get_hourly_distribution(
+    camera_id: str | None = Query(
+        default=None,
+        description="Restringe a distribuição a um jardim (câmera). Omitido = consolidado.",
+    ),
+) -> list[HourlyDistributionOut]:
     try:
         return [
             HourlyDistributionOut(**row)
-            for row in _repository().hourly_distribution()
+            for row in _repository().hourly_distribution(camera_id=camera_id)
         ]
     except Exception as exc:
         logger.exception("get_hourly_distribution failed")

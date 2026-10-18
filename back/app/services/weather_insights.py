@@ -148,7 +148,7 @@ def _normalize_row(row: dict[str, Any]) -> dict[str, Any] | None:
         "humidity": _as_float(row.get("humidity")),
         "condition": condition or None,
         "category": category_for_label(condition),
-        "species": row.get("species_name") or "Ave (genérica)",
+        "species": row.get("species_name") or "Pássaro Desconhecido",
         "scientific": row.get("scientific_name"),
     }
 

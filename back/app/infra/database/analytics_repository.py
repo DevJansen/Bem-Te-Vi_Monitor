@@ -97,10 +97,22 @@ class AnalyticsRepository:
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
 
-    def summary(self) -> dict[str, Any]:
+    def summary(self, camera_id: str | None = None) -> dict[str, Any]:
+        """Resumo estatístico consolidado ou de **um único jardim**.
+
+        Quando ``camera_id`` é informado, todas as métricas (visitas, espécie
+        mais frequente e horário de pico) ficam restritas àquela câmera — é o
+        que alimenta o seletor "cada jardim × visão total consolidada" da aba
+        Estatísticas & Conquistas.
+        """
         now = datetime.now(timezone.utc)
         today_prefix = now.date().isoformat()
         week_start = (now - timedelta(days=7)).isoformat()
+        # Fragmento + parâmetro do filtro por jardim (vazio = consolidado).
+        filtro = " AND camera_id = ?" if camera_id else ""
+        # Variante qualificada com o alias ``v`` (usada nas consultas com JOIN).
+        filtro_v = " AND v.camera_id = ?" if camera_id else ""
+        filtro_params: tuple[Any, ...] = (camera_id,) if camera_id else ()
 
         with db_session(self.db_path) as conn:
             counts = conn.execute(
@@ -111,34 +123,36 @@ class AnalyticsRepository:
                     SUM(CASE WHEN detected_at >= ? THEN 1 ELSE 0 END) AS visits_last_7_days,
                     COALESCE(AVG(dwell_seconds), 0) AS average_duration_seconds
                 FROM visits
-                WHERE {SQL_SO_AVES}
+                WHERE {SQL_SO_AVES}{filtro}
                 """,
-                (today_prefix, week_start),
+                (today_prefix, week_start, *filtro_params),
             ).fetchone()
             leader = conn.execute(
                 f"""
                 SELECT COALESCE(
                     bs.common_name,
                     NULLIF(NULLIF(v.species, 'bird'), 'passaro'),
-                    'Ave (genérica)'
+                    'Pássaro Desconhecido'
                 ) AS species_name, COUNT(*) AS visit_count
                 FROM visits v
                 LEFT JOIN bird_species bs ON bs.id = v.species_id
-                WHERE {SQL_SO_AVES}
+                WHERE {SQL_SO_AVES}{filtro_v}
                 GROUP BY species_name
                 ORDER BY visit_count DESC, species_name COLLATE NOCASE ASC
                 LIMIT 1
-                """
+                """,
+                filtro_params,
             ).fetchone()
             peak = conn.execute(
                 f"""
                 SELECT {SQL_HORA_LOCAL_2D} AS hour, COUNT(*) AS visit_count
                 FROM visits
-                WHERE {SQL_SO_AVES} AND length(detected_at) >= 13
+                WHERE {SQL_SO_AVES}{filtro} AND length(detected_at) >= 13
                 GROUP BY hour
                 ORDER BY visit_count DESC, hour ASC
                 LIMIT 1
-                """
+                """,
+                filtro_params,
             ).fetchone()
 
         return {
@@ -277,15 +291,21 @@ class AnalyticsRepository:
             "peak_hours": peak_hours,
         }
 
-    def hourly_distribution(self) -> list[dict[str, int | str]]:
+    def hourly_distribution(
+        self, camera_id: str | None = None
+    ) -> list[dict[str, int | str]]:
+        """Distribuição das visitas por hora do dia (consolidada ou por jardim)."""
+        filtro = " AND camera_id = ?" if camera_id else ""
+        params: tuple[Any, ...] = (camera_id,) if camera_id else ()
         with db_session(self.db_path) as conn:
             rows = conn.execute(
                 f"""
                 SELECT {SQL_HORA_LOCAL_2D} AS hour, COUNT(*) AS visit_count
                 FROM visits
-                WHERE {SQL_SO_AVES} AND length(detected_at) >= 13
+                WHERE {SQL_SO_AVES}{filtro} AND length(detected_at) >= 13
                 GROUP BY hour
-                """
+                """,
+                params,
             ).fetchall()
 
         counts = {str(row["hour"]): int(row["visit_count"]) for row in rows}
@@ -320,7 +340,7 @@ class AnalyticsRepository:
                     COALESCE(
                         bs.common_name,
                         NULLIF(NULLIF(v.species, 'bird'), 'passaro'),
-                        'Ave (genérica)'
+                        'Pássaro Desconhecido'
                     ) AS species_name,
                     bs.scientific_name AS scientific_name
                 FROM visits v

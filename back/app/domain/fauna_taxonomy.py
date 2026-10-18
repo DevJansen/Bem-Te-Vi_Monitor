@@ -304,11 +304,10 @@ _CHAVES_MAMIFERO = (
 _GENERICOS_AVE = {
     "bird",
     "passaro",
+    "passaros",
     "passaro desconhecido",
     "ave",
     "aves",
-    "passaro",
-    "passaros",
     "ave (generica)",
     "ave nao identificada",
     "nao identificada",
