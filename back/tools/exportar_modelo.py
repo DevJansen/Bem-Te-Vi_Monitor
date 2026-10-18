@@ -7,7 +7,7 @@ Gera o artefato de inferência mais rápido para o hardware do usuário:
 - ``openvino``  → Intel CPU/iGPU.
 - ``torchscript`` → empacotamento portátil do PyTorch.
 
-Após exportar, o AviaWatch passa a usar o artefato automaticamente (com
+Após exportar, o Bem-Ti-Vi passa a usar o artefato automaticamente (com
 ``YOLO_ACCELERATION=auto``), desde que o arquivo fique ao lado do ``.pt``.
 
 Uso (a partir da pasta ``back``, com o ambiente virtual ativo)::
@@ -84,7 +84,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"Artefato gerado: {caminho}")
     print(
-        "Pronto! O AviaWatch usará este arquivo automaticamente "
+        "Pronto! O Bem-Ti-Vi usará este arquivo automaticamente "
         "(YOLO_ACCELERATION=auto)."
     )
     return 0

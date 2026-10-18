@@ -1,1 +1,1 @@
-"""AviaWatch backend application package."""
+"""Bem-Ti-Vi backend application package."""

@@ -1,6 +1,6 @@
 """Manipulação segura de URLs de stream (redação e extração de credenciais).
 
-Regras de ouro do AviaWatch:
+Regras de ouro do Bem-Ti-Vi:
 
 - A URL real (com usuário/senha embutidos) só existe **em memória** no backend.
 - Qualquer resposta de API mostra a userInfo mascarada

@@ -1,6 +1,6 @@
 """Envio de mensagens pelo Telegram (Bot API) com tratamento de falhas.
 
-O AviaWatch usa este módulo para entregar alertas no Telegram sem nunca
+O Bem-Ti-Vi usa este módulo para entregar alertas no Telegram sem nunca
 bloquear o pipeline de vídeo: qualquer falha de rede é registrada no log e
 convertida em um retorno ``False``, sem propagar exceção para quem chamou.
 """
@@ -23,7 +23,7 @@ _MAX_CAPTION = 1024
 
 
 class TelegramNotifier:
-    """Cliente da Bot API do Telegram para o AviaWatch.
+    """Cliente da Bot API do Telegram para o Bem-Ti-Vi.
 
     Métodos são "fire-and-forget": retornam ``True``/``False`` e registram
     erros no log, mas nunca lançam exceção — o pipeline de vídeo não pode

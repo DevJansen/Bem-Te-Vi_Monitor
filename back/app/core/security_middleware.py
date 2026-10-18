@@ -98,7 +98,7 @@ class SecurityHeadersMiddleware:
 class LocalAccessGuardMiddleware:
     """Restringe a API a conexões locais, salvo liberação explícita.
 
-    Padrão seguro do AviaWatch: a API responde apenas ao próprio computador.
+    Padrão seguro do Bem-Ti-Vi: a API responde apenas ao próprio computador.
     Se o servidor for exposto na rede (ex.: ``HOST=0.0.0.0``) sem definir
     ``ALLOW_REMOTE_ACCESS=true``, toda origem externa recebe ``403``.
     """

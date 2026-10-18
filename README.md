@@ -1,8 +1,14 @@
-# AviaWatch
+# Bem-Ti-Vi
 
 Sistema **local** de monitoramento de avifauna por IA.
 
-O AviaWatch recebe vídeo de câmeras USB, RTSP, ONVIF, HLS, HTTP ou WebRTC —
+> **Sobre o nome:** o projeto nasceu como *AviaWatch* e foi rebatizado de
+> **Bem-Ti-Vi** — em homenagem ao pássaro que "avisa" quando chega visita ao
+> jardim. O repositório no GitHub e a pasta local continuam com o nome antigo
+> (`AviaWatch` / `aviawatch`) apenas por compatibilidade; o **motor de IA**
+> segue assinando como **Alaris Core**.
+
+O Bem-Ti-Vi recebe vídeo de câmeras USB, RTSP, ONVIF, HLS, HTTP ou WebRTC —
 inclusive streams externos ao vivo (de outras casas/locais remotos) —, detecta
 aves com YOLOv8 e registra visitas em SQLite. O painel web permite desenhar zonas
 de inclusão e exclusão por câmera, consultar snapshots e clipes e, opcionalmente,
@@ -40,7 +46,7 @@ npm --version
 
 ## Instalação e execução rápida (Windows) — `start.bat`
 
-O jeito mais simples de subir o AviaWatch:
+O jeito mais simples de subir o Bem-Ti-Vi:
 
 ### Passo 1 — Abrir a pasta do projeto
 
@@ -172,7 +178,7 @@ backend.
   correspondente em `TELEGRAM_CHAT_ID`.
 - **Discord:** nas configurações do servidor/canal, crie um webhook em
   **Integrações → Webhooks** e guarde a URL completa em `DISCORD_WEBHOOK_URL`.
-- **IA externa:** use a chave do provedor de sua preferência. O AviaWatch aceita
+- **IA externa:** use a chave do provedor de sua preferência. O Bem-Ti-Vi aceita
   dois modos:
   - **Google Gemini** (`AI_EXTERNAL_PROVIDER=google`): usa o **endpoint oficial**
     do Google Generative Language
@@ -212,8 +218,8 @@ O script irá, nesta ordem:
 
 Duas janelas de console serão abertas:
 
-- `AviaWatch Backend`
-- `AviaWatch Frontend`
+- `Bem-Ti-Vi Backend`
+- `Bem-Ti-Vi Frontend`
 
 ### Passo 4 — Abrir o painel
 
@@ -227,7 +233,7 @@ O `start.bat` tenta abrir o navegador sozinho. Se não abrir, use:
 
 ### Passo 5 — Encerrar
 
-Feche as janelas `AviaWatch Backend` e `AviaWatch Frontend`, ou pressione `Ctrl+C` em cada uma.
+Feche as janelas `Bem-Ti-Vi Backend` e `Bem-Ti-Vi Frontend`, ou pressione `Ctrl+C` em cada uma.
 
 > Na **primeira execução**, o download do modelo YOLO (`yolov8n.pt`) e dos pacotes Python/Node pode demorar vários minutos.
 
@@ -293,7 +299,7 @@ Pelo front (com Vite rodando), as mesmas rotas passam pelo proxy:
 - http://127.0.0.1:5173/api/health  
 - http://127.0.0.1:5173/api/stats  
 
-Se o painel mostrar “Não foi possível conectar à API”, confirme se a janela **AviaWatch Backend** está aberta e sem erros.
+Se o painel mostrar “Não foi possível conectar à API”, confirme se a janela **Bem-Ti-Vi Backend** está aberta e sem erros.
 
 ---
 
@@ -428,7 +434,7 @@ sem reiniciar o backend.
   (`openai`), usa-se a API de chat compatível com a OpenAI (`AI_EXTERNAL_BASE_URL`,
   `AI_EXTERNAL_MODEL`) — OpenAI, OpenRouter, Groq ou Ollama. Basta definir
   `AI_EXTERNAL_API_KEY`.
-- Ao identificar, o AviaWatch **cadastra automaticamente a espécie no Catálogo
+- Ao identificar, o Bem-Ti-Vi **cadastra automaticamente a espécie no Catálogo
   Local (Life List)** e associa a visita (a foto tratada vira a imagem de
   referência da espécie), sem gerar duplicatas. Pela API, o parâmetro
   `add_to_catalog=false` desativa esse cadastro automático.
@@ -453,9 +459,32 @@ sem reiniciar o backend.
 - Sem imagem tratada disponível ou chave configurada, a API informa o erro. Os
   recortes ficam em `back\app-data\crops\` e seguem a política de retenção de mídia.
 
+### Detecção Sonora (aba dedicada)
+
+Além de ver, o Bem-Ti-Vi **escuta**. A aba **Detecção Sonora** reúne os cantos
+identificados pelo **BirdNET** em blocos de **5 itens por página**, com
+**paginação fluida**, e dá ações de curadoria a cada registro:
+
+- **Player integrado por card:** cada detecção tem o **clipe de áudio** gravado
+  (WAV) reproduzível ali mesmo — botão play/pause, barra de progresso arrastável,
+  volume e mudo. Nada toca sozinho: o observador decide quando ouvir.
+- **Associar manualmente:** o seletor **Associar à espécie** vincula o canto a um
+  card já existente da **Life List** (`Minhas Aves`), sem duplicar espécies.
+- **Identificar com IA Externa:** o botão envia o **espectrograma** do áudio
+  (desenhado localmente com `numpy`+`cv2`, sem `matplotlib`) para o provedor de IA
+  configurado e devolve o nome popular/científico — cadastrando a espécie quando
+  for nova. Endpoint: `POST /api/audio-detections/{id}/identify-external`.
+- **Perguntar à IA Externa:** abre a **ficha ornitológica profunda** da espécie
+  detectada (família, conservação, dieta, habitat, biogeografia, curiosidades),
+  com cache reaproveitado. Endpoint: `POST /api/audio-detections/{id}/ask-ai`.
+- **Excluir:** remove a detecção sonora do histórico (com o áudio no disco).
+
+O mesmo painel aparece na **Galeria → aba "Áudios"**, mantendo **imagens/vídeos** e
+**áudios** em galerias separadas. A análise é 100% local; nenhum áudio sai da máquina.
+
 ### Montar resumos do dia (time-lapse)
 
-O AviaWatch junta os clipes de um dia em um único vídeo acelerado — o **Resumo do
+O Bem-Ti-Vi junta os clipes de um dia em um único vídeo acelerado — o **Resumo do
 Dia** — para rever os melhores momentos em segundos, sem assistir a cada gravação
 individual.
 
@@ -481,7 +510,7 @@ a geração fica indisponível (com aviso no log) e o restante do sistema segue 
 
 ### Monitorar 24 horas com visão noturna (infravermelho)
 
-O AviaWatch continua enxergando no escuro. Quando a luminosidade cai (ou a
+O Bem-Ti-Vi continua enxergando no escuro. Quando a luminosidade cai (ou a
 câmera entra em modo infravermelho e passa a entregar imagens em preto e branco),
 o backend realça o contraste e reduz o ruído de cada quadro **antes** da
 inferência do YOLOv8, ajudando a IA a identificar formas mesmo à noite.
@@ -525,7 +554,7 @@ cd back
 venv\Scripts\python.exe -m tools.exportar_modelo --formato onnx
 ```
 
-Com `YOLO_ACCELERATION=auto`, o AviaWatch passa a usar o `.onnx`/`.engine`
+Com `YOLO_ACCELERATION=auto`, o Bem-Ti-Vi passa a usar o `.onnx`/`.engine`
 automaticamente. Ajuste `YOLO_DEVICE`, `YOLO_HALF`, `YOLO_IMGSZ` e `YOLO_TTA`
 conforme o hardware. A telemetria do backend informa o backend em uso.
 
@@ -571,7 +600,7 @@ pelo UTC: uma visita às 10h na Costa Rica não aparece mais como "madrugada" no
 Brasil. Câmeras sem fuso cadastrado continuam usando o UTC (comportamento
 anterior, sem quebrar o histórico).
 
-**6. IA visível — Alaris Core.** O motor de IA do AviaWatch assina como
+**6. IA visível — Alaris Core.** O motor de IA do Bem-Ti-Vi assina como
 **Alaris Core v1.0** (a assinatura aparece em `GET /api/ai/status` e nos metadados
 de cada visita). O painel ganha um **Núcleo de IA** (widget futurista em Dark Mode
 com pulsos neon, selo "Potencializado por Alaris AI") que mostra em tempo real o
@@ -794,14 +823,14 @@ o backend.
 aviawatch/
 ├── back/                 # FastAPI + OpenCV + YOLOv8 + SQLite
 │   ├── app/
-│   │   ├── api/         # Analytics
-│   │   ├── controllers/  # Rotas REST
-│   │   ├── core/         # Configuração
-│   │   ├── domain/       # Modelos
+│   │   ├── api/         # Analytics (resumo/distribuição por jardim)
+│   │   ├── controllers/  # Rotas REST (inclui audio_detections)
+│   │   ├── core/         # Configuração e descoberta do ffmpeg/ffprobe
+│   │   ├── domain/       # Modelos e taxonomia da fauna (anti-esquilo)
 │   │   ├── infra/        # AI, câmera, DB, mídia
-│   │   ├── services/     # Notificações (notifier/NotificationService), áudio BirdNET, .env e identificação externa
+│   │   ├── services/     # Notificações, áudio BirdNET (audio_clips/audio_analysis), .env e IA externa
 │   │   └── main.py
-│   ├── app-data/         # Banco, capturas e segredos (local)
+│   ├── app-data/         # Banco, capturas, recortes, clipes e áudios (local)
 │   ├── requirements.txt
 │   └── .env.example
 ├── front/                # React 19 + Vite + TypeScript + Tailwind
@@ -819,7 +848,7 @@ aviawatch/
 |--------|------|-----------|
 | GET | `/api/health` | Saúde da API |
 | GET/POST | `/api/cameras` | Listar / criar câmeras (cada item inclui `night_mode`, se a visão noturna está ativa) |
-| GET/PUT/DELETE | `/api/cameras/{id}` | Detalhe / atualizar / remover |
+| GET/PUT/DELETE | `/api/cameras/{id}` | Detalhe / atualizar / remover. **Excluir arquiva a câmera (soft-delete)**: nada da galeria, dos clipes, das fotos ou dos áudios é apagado — o histórico do jardim é preservado permanentemente |
 | GET/PUT | `/api/cameras/{id}/zones` | Carregar / salvar polígonos de inclusão e exclusão |
 | GET | `/api/cameras/{id}/weather` | Clima e horário **locais** do jardim da câmera (Open-Meteo; requer coordenadas) |
 | GET | `/api/weather/geocode?q=` | Seletor de cidade inteligente: nome → coordenadas + fuso IANA |
@@ -852,8 +881,8 @@ aviawatch/
 | POST | `/api/settings/env` | Salvar variáveis permitidas no `back/.env` e aplicá-las em runtime |
 | POST | `/api/settings/env/test` | Testar credenciais digitadas sem salvá-las (no Telegram envia uma mensagem real) |
 | GET | `/api/stats` | Métricas do painel |
-| GET | `/api/analytics/summary` | Visitas de hoje, últimos 7 dias e total; espécie líder, duração média e horário de pico |
-| GET | `/api/analytics/hourly-distribution` | Contagem histórica de visitas para cada hora do dia (00h–23h) |
+| GET | `/api/analytics/summary?camera_id=` | Visitas de hoje, últimos 7 dias e total; espécie líder, duração média e horário de pico. Com `camera_id`, restringe a um jardim (visão por jardim × consolidada) |
+| GET | `/api/analytics/hourly-distribution?camera_id=` | Contagem histórica de visitas para cada hora do dia (00h–23h), consolidada ou de um jardim |
 | GET | `/api/analytics/lifelist` | Espécies do catálogo, desbloqueio, primeiro registro, foto, avistagens e status ecológico |
 | GET | `/api/analytics/achievements` | Conquistas desbloqueadas e disponíveis |
 | GET | `/api/anomalies` | Log de anomalias acústico-visuais (ex.: espécie que reaparece após meses); aceita `limit` e `only_pending` |
@@ -869,8 +898,14 @@ aviawatch/
 | POST | `/api/analytics/timelapses/generate` | Gera sob demanda o resumo de um dia (`day` opcional; `force` regera) |
 | DELETE | `/api/analytics/timelapses/{arquivo}` | Remove um resumo do dia |
 | GET | `/api/audio-detections?limit=30` | Detecções sonoras recentes, confiança e visita visual associada |
+| GET | `/api/audio-detections/page?limit=5&offset=` | Página de detecções sonoras para a aba **Detecção Sonora** (blocos de 5, paginação fluida) |
 | GET | `/api/audio-detections/status` | Estado da análise BirdNET e câmeras monitoradas |
 | GET | `/api/audio-detections/devices` | Dispositivos de áudio de entrada disponíveis (microfones) |
+| GET | `/api/audio-detections/{id}/audio` | Clipe de áudio (WAV) da detecção, para o player integrado ao card |
+| PUT | `/api/audio-detections/{id}/identify` | Associação **manual** do canto a uma espécie da Life List (`{"species_id":"..."}`) |
+| POST | `/api/audio-detections/{id}/identify-external` | IA externa identifica a espécie pelo **espectrograma** do áudio (`add_to_catalog` opcional) |
+| POST | `/api/audio-detections/{id}/ask-ai` | Ficha ornitológica profunda (IA externa) da espécie detectada por som (`refresh=true` reconsulta) |
+| DELETE | `/api/audio-detections/{id}` | Remove a detecção sonora (e o clipe de áudio no disco) |
 | GET | `/api/video-feed/{id}?boxes=true` | Stream MJPEG com caixas de detecção (use `boxes=false` para ocultá-las) |
 | GET | `/api/video-feed/{id}/snapshot` | Foto atual da câmera |
 | GET | `/api/weather/current` | Clima atual no alimentador (temperatura, chuva e vento) |
@@ -879,8 +914,16 @@ aviawatch/
 | GET | `/captures/...` | Thumbnails e demais mídias estáticas |
 
 A aba **Estatísticas & Conquistas** do painel mostra os hábitos de visita e a Life
-List. Uma espécie é desbloqueada quando uma visita é associada a ela no catálogo;
-o gráfico agrupa as visitas de todo o histórico por hora do dia.
+List. Um seletor no topo alterna entre **cada jardim** e a **Visão Total
+Consolidada**: visitas, horário de pico, distribuição por hora e **espécies
+presentes** acompanham o escopo escolhido. Uma espécie é desbloqueada quando uma
+visita é associada a ela no catálogo.
+
+> **Nomenclatura:** detecções que o YOLO/BirdNET ainda não nomearam aparecem
+> sempre como **"Pássaro Desconhecido"** — nunca "Ave Genérica" nem "Bird" — com
+> a **silhueta padrão** do sistema no lugar da foto. Visitantes que não são aves
+> (esquilos, gatos…) ficam isolados na aba **Visitantes Especiais** e **não**
+> entram na contagem de pássaros.
 
 A seção **Insights Comportamentais & Clima** (`/api/analytics/weather-insights`)
 cruza cada visita com a temperatura, a umidade e a condição do tempo gravadas no
@@ -984,7 +1027,7 @@ espaço.
 | `python` não reconhecido | Reinstale o Python marcando “Add to PATH” e abra um terminal novo |
 | `npm` não reconhecido | Reinstale o Node.js LTS e abra um terminal novo |
 | Porta 8000 ou 5173 em uso | No PowerShell: `Get-NetTCPConnection -LocalPort 8000 -State Listen` e encerre o PID (`Stop-Process -Id <PID> -Force`). Depois rode `start.bat` de novo |
-| Front sem dados / 404 nas rotas | Confirme que a API em `:8000` é a do AviaWatch atual (`/docs` deve listar `/api/visits`, `/api/stats`, `/api/settings`). Outro processo antigo na porta 8000 causa 404 |
+| Front sem dados / 404 nas rotas | Confirme que a API em `:8000` é a do Bem-Ti-Vi atual (`/docs` deve listar `/api/visits`, `/api/stats`, `/api/settings`). Outro processo antigo na porta 8000 causa 404 |
 | Front sem dados | Confirme http://127.0.0.1:8000/api/health e a janela do backend |
 | Identificação externa indisponível | Confira `AI_EXTERNAL_API_KEY`, `AI_EXTERNAL_PROVIDER`, o modelo com suporte a visão e o acesso de rede ao provedor escolhido. No **Google Gemini** o provedor deve ser `google` (a URL base é ignorada); um **HTTP 404** indica que a chamada caiu numa rota padrão da OpenAI em vez do endpoint oficial do Google |
 | Importação de gravação rejeitada | Use MP4, AVI, MOV ou MKV com menos de 2 GB e associe o arquivo a uma câmera cadastrada |
@@ -1011,7 +1054,7 @@ espaço.
 - Cabeçalhos de segurança HTTP (CSP, `X-Frame-Options`, `nosniff` etc.) em todas as respostas  
 - Validação do cabeçalho `Host` (`ALLOWED_HOSTS`) contra Host Header Injection  
 - Consultas SQLite sempre parametrizadas e caminhos de mídia validados contra *path traversal*  
-- Sem telemetria do AviaWatch  
+- Sem telemetria do Bem-Ti-Vi  
 
 > A auditoria completa (achados, correções e remediação de histórico do Git) está em
 > [`docs/SEGURANCA.md`](docs/SEGURANCA.md).

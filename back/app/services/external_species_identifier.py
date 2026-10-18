@@ -462,7 +462,7 @@ def build_consult_prompt(common_name: str, scientific_name: str) -> str:
 
     Pede uma ficha estruturada (JSON) com nome científico, família, status de
     conservação, comportamento alimentar, habitat, curiosidades e dados
-    biogeográficos — o conteúdo exibido no modal de consulta do AviaWatch.
+    biogeográficos — o conteúdo exibido no modal de consulta do Bem-Ti-Vi.
     """
     nome = (common_name or "").strip() or "ave não identificada"
     cientifico = (scientific_name or "").strip() or "não informado"
@@ -511,7 +511,7 @@ class SpeciesConsult:
 def _normalize_consult(
     raw: dict[str, Any], *, common_name: str, scientific_name: str
 ) -> dict[str, Any]:
-    """Normaliza o JSON devolvido pela IA para o formato do AviaWatch.
+    """Normaliza o JSON devolvido pela IA para o formato do Bem-Ti-Vi.
 
     Tolera listas onde se espera texto e vice-versa, garante que os nomes
     popular/científico nunca fiquem vazios e limita o número de curiosidades.

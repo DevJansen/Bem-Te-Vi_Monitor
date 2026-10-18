@@ -125,7 +125,7 @@ def _is_non_bird_class(common_name: str, scientific_name: str) -> bool:
     "Engine", "Dog", "Siren" e alguns insetos. Nessas classes o nome científico
     e o nome comum são idênticos (por exemplo, ``Dog_Dog``), enquanto as aves
     usam binomial de Lineu (por exemplo,
-    ``Turdus rufiventris_Sabiá-laranjeira``). Como o AviaWatch é dedicado a
+    ``Turdus rufiventris_Sabiá-laranjeira``). Como o Bem-Ti-Vi é dedicado a
     aves, essas classes são descartadas antes da persistência.
     """
     return scientific_name.strip().casefold() == common_name.strip().casefold()

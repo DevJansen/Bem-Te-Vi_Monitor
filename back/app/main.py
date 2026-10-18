@@ -1,4 +1,4 @@
-"""AviaWatch API — entry point."""
+"""Bem-Ti-Vi API — entry point."""
 
 from __future__ import annotations
 
@@ -109,7 +109,7 @@ async def lifespan(app: FastAPI):
     app.state.settings = settings
     yield
 
-    logger.info("Shutting down AviaWatch…")
+    logger.info("Shutting down Bem-Ti-Vi…")
     retention_worker.stop()
     try:
         timelapse_scheduler.stop()
@@ -210,7 +210,7 @@ async def root() -> str:
 <head>
   <meta charset="utf-8" />
   <meta http-equiv="refresh" content="0;url=http://127.0.0.1:5173" />
-  <title>AviaWatch API</title>
+  <title>Bem-Ti-Vi API</title>
   <style>
     body { font-family: Segoe UI, sans-serif; background:#0a0f0d; color:#e8f5ef;
            display:flex; min-height:100vh; align-items:center; justify-content:center; }
@@ -220,7 +220,7 @@ async def root() -> str:
 </head>
 <body>
   <div class="box">
-    <h1>AviaWatch — API</h1>
+    <h1>Bem-Ti-Vi — API</h1>
     <p>Esta é a porta da <strong>API</strong> (8000), não o painel.</p>
     <p>Abra o painel em <a href="http://127.0.0.1:5173">http://127.0.0.1:5173</a></p>
     <p>Docs: <a href="/docs">/docs</a></p>

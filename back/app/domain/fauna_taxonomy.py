@@ -1,6 +1,6 @@
 """Taxonomia leve da fauna do jardim — o "anti-esquilo" do Alaris Core.
 
-O detector de aves do AviaWatch é um YOLOv8 afinado para aves, mas o mundo real
+O detector de aves do Bem-Ti-Vi é um YOLOv8 afinado para aves, mas o mundo real
 não coopera: esquilos, gatos, gambás e outros bichos invadem o comedouro. Sem uma
 camada de taxonomia, o Alaris Core acabaria cadastrando um **esquilo como nova
 espécie de ave** na Life List ("Minhas Aves"), poluindo o Álbum e disparando

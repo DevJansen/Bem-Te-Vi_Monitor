@@ -1,4 +1,4 @@
-# AviaWatch — Relatório de Auditoria de Segurança e Proteção de Dados
+# Bem-Ti-Vi — Relatório de Auditoria de Segurança e Proteção de Dados
 
 **Escopo:** Backend (FastAPI + YOLOv8 + SQLite) e Frontend (React + Vite).
 **Foco:** Gestão de segredos, higiene do Git, OWASP Top 10 e conformidade com

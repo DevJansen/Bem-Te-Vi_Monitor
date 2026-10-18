@@ -1,4 +1,4 @@
-"""Versioned SQLite migrations for AviaWatch."""
+"""Versioned SQLite migrations for Bem-Ti-Vi."""
 
 from __future__ import annotations
 

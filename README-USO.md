@@ -1,14 +1,14 @@
-# AviaWatch — Guia do Usuário
+# Bem-Ti-Vi — Guia do Usuário
 
-> **Para quem quer entender e usar o AviaWatch sem precisar entender de programação.**
+> **Para quem quer entender e usar o Bem-Ti-Vi sem precisar entender de programação.**
 >
 > (Se você é desenvolvedor e quer detalhes técnicos de instalação e configuração, veja o [`README.md`](README.md).)
 
 ---
 
-## O que é o AviaWatch?
+## O que é o Bem-Ti-Vi?
 
-O AviaWatch é um **vigia de pássaros automático** para o seu computador. Você aponta uma
+O Bem-Ti-Vi é um **vigia de pássaros automático** para o seu computador. Você aponta uma
 câmera (uma webcam ou uma câmera IP) para um comedouro, bebedouro ou cantinho onde os
 passarinhos costumam aparecer, e o sistema **sozinho**:
 
@@ -32,7 +32,7 @@ quando você pede especificamente para uma inteligência artificial adivinhar o 
 | 🌙 **Visão noturna** | Realça imagens escuras/infravermelho e monitora 24 horas |
 | 🖼️ **Fotos e vídeos** | Guarda uma foto e um clipe curto de cada visita |
 | 🎞️ **Resumo do dia** | Junta os clipes do dia em um vídeo acelerado (time-lapse) |
-| 🔊 **Reconhecimento de canto** | Identifica o pássaro pelo som (opcional) |
+| 🔊 **Reconhecimento de canto** | Identifica o pássaro pelo som e organiza os cantos numa aba própria (opcional) |
 | 🤖 **Identificação por IA** | Adivinha o nome da ave na foto (opcional, sob seu comando) |
 | 📊 **Estatísticas** | Mostra horários de pico, ranking e gráficos |
 | 🏆 **Lista de Vida e conquistas** | Você "desbloqueia" espécies como num jogo |
@@ -61,9 +61,9 @@ quando você pede especificamente para uma inteligência artificial adivinhar o 
 
 ---
 
-## As telas do AviaWatch
+## As telas do Bem-Ti-Vi
 
-O menu lateral tem seis telas. Vamos explicar cada uma como se estivéssemos juntos:
+O menu lateral tem sete telas. Vamos explicar cada uma como se estivéssemos juntos:
 
 ---
 
@@ -71,13 +71,18 @@ O menu lateral tem seis telas. Vamos explicar cada uma como se estivéssemos jun
 
 É o "painel do cockpit". Aqui você vê, de relance:
 
-- **Clima agora** — temperatura, chuva e vento no seu endereço, e como isso costuma afetar as visitas.
-- **Números do dia** — quantas visitas, quantas espécies, tempo médio e horário de movimento.
-- **Ao vivo** — a imagem em tempo real das suas câmeras.
-- **Ranking de espécies** — quem apareceu mais.
-- **Visitas de hoje** — uma linha do tempo do dia.
+- **Clima agora** — temperatura, chuva e vento, com um **seletor de localidade**:
+  escolha a *localização global* ou o *clima local de cada jardim* (útil quando você
+  acompanha câmeras de outros lugares).
+- **Números do dia** — quantas visitas, quantas espécies, tempo médio e horário de
+  movimento. Um seletor de **Jardim** filtra tudo para a câmera escolhida.
+- **Ao vivo** — a imagem em tempo real das suas câmeras, em cartões translúcidos com
+  botões de **ativar/desativar o monitoramento**, **ouvinte de áudio ao vivo** e
+  **Bioacústica (BirdNET)** liga/desliga direto no cartão.
+- **Top 5 espécies** — as aves mais frequentes do período, cada uma com a **foto**.
+- **Visitas de hoje** — uma linha do tempo do dia; ao abrir um registro, o botão
+  **🤖 Perguntar à IA Externa** dispara a análise **daquele pássaro específico**.
 - **Gráfico de visitas** — a evolução ao longo dos dias.
-- **Detecções de som** — os pássaros identificados pelo canto (se estiver ativado).
 
 **Para que serve:** ver "como está o movimento" sem precisar abrir nada.
 
@@ -90,10 +95,17 @@ O menu lateral tem seis telas. Vamos explicar cada uma como se estivéssemos jun
 Onde você **cadastra e cuida** das câmeras.
 
 - **Adicionar câmera:** escolha o tipo (webcam `USB`, ou câmera IP `RTSP`/`ONVIF`) e preencha o endereço e, se houver, usuário e senha.
-- **Localização global (opcional):** para câmeras em outros países (lives do YouTube, streams externos), abra **Localização & fuso horário**, informe a **cidade/país** e toque em **Buscar**. O AviaWatch descobre as coordenadas e o fuso sozinho — e o card da câmera passa a mostrar o **clima e o horário locais do jardim**.
+- **Localização global (opcional):** para câmeras em outros países (lives do YouTube, streams externos), abra **Localização & fuso horário**, informe a **cidade/país** e toque em **Buscar**. O Bem-Ti-Vi descobre as coordenadas e o fuso sozinho — e o card da câmera passa a mostrar o **clima e o horário locais do jardim**.
 - **Ligar/desligar** cada câmera com um toque.
+- **Controles no cartão (ao vivo):** ligar/desligar a **IA (Alaris)**, ouvir o **áudio
+  ao vivo** da câmera e ativar/desativar a **Bioacústica (BirdNET)** — em cartões
+  translúcidos, sem sair do Painel.
 - **Desenhar zonas** (veja abaixo).
 - **Análise de Cartão de Memória** para analisar vídeos antigos (veja abaixo).
+
+> **Excluir uma câmera não apaga nada da galeria.** As fotos, os clipes e os áudios já
+> gravados daquele jardim são **preservados para sempre**; a câmera apenas sai da lista
+> de monitoramento (o histórico continua disponível nas Galerias e nas Estatísticas).
 
 **Para que serve:** dizer ao sistema *onde* olhar e *o que ignorar*.
 
@@ -133,10 +145,19 @@ O **álbum de fotos** dos seus pássaros. Aqui você:
 
 ![Tela Galeria — cartões de visitas com foto, clipe, associação ao catálogo e IA](docs/images/galeria.png)
 
+#### 🎞️ Abas da Galeria
+
+No topo da Galeria há **quatro abas**, separando cada tipo de mídia:
+
+- **Fotos e Vídeos** — as visitas individuais (foto, recorte e clipe);
+- **Áudios** — a **galeria de cantos** do BirdNET (o mesmo painel da aba *Detecção Sonora*),
+  com imagens/vídeos e áudios em **galerias separadas**;
+- **Convidados do Jardim** — os visitantes que não são aves (esquilos, gatos…);
+- **Resumos do Dia (Time-Lapse)** — os vídeos acelerados de cada dia.
+
 #### 🎞️ Resumos do Dia (Time-Lapse)
 
-No topo da Galeria há duas abas: **Capturas** (as visitas individuais) e **Resumos
-do Dia (Time-Lapse)**. Na segunda, o AviaWatch junta os clipes de cada dia em **um
+Na aba **Resumos do Dia (Time-Lapse)**, o Bem-Ti-Vi junta os clipes de cada dia em **um
 único vídeo acelerado**, para você rever os melhores momentos em segundos.
 
 - o vídeo do dia já aparece pronto no player, com a data, a quantidade de clipes e a duração;
@@ -148,7 +169,45 @@ do Dia (Time-Lapse)**. Na segunda, o AviaWatch junta os clipes de cada dia em **
 
 ---
 
-### 📖 4. Minhas Aves
+### 🔊 4. Detecção Sonora
+
+A aba de **destaque** para quem gosta de "ouvir" o jardim. Aqui ficam os cantos
+identificados pelo **BirdNET**, mostrados em **blocos de 5 por página**, com
+**paginação fluida** (Anterior/Próxima e os números das páginas).
+
+Cada canto é um cartão com:
+
+- **Player de áudio integrado** — dê o play para ouvir o trecho gravado daquela
+  detecção (barra de progresso, volume e mudo). Nada toca sozinho.
+- **Associar à espécie** — um menu para **ligar o canto a uma ave da sua Life List**
+  (Minhas Aves). Assim o canto entra na sua coleção.
+- **Wand — Identificar com IA Externa** — envia o **sonograma** (a "impressão
+  digital" visual do som) para a IA configurada e tenta descobrir a espécie,
+  cadastrando-a automaticamente quando for nova.
+- **Bot — Perguntar à IA Externa** — abre a **ficha ornitológica completa** da
+  espécie já identificada (família, conservação, dieta, habitat, curiosidades…).
+- **Lixeira** — remove aquela detecção do histórico.
+
+No topo aparece o **estado** do monitoramento acústico (quantas câmeras estão sendo
+ouvidas) e um botão para **atualizar** a lista na hora.
+
+**Para que serve:** revisar, ouvir e identificar os cantos — inclusive aves que
+aparecem pouco e você quase nunca vê.
+
+#### ⚠️ Sobre os pássaros não identificados
+
+Quando o sistema **não tem certeza** do nome do pássaro, ele **nunca** inventa: o
+registro aparece rotulado como **"Pássaro Desconhecido"**, com uma **silhueta padrão**
+no lugar da foto. É o mesmo rótulo em todo o aplicativo (Painel, Galeria, Álbum e
+Estatísticas).
+
+Os bichos que **não são pássaros** — esquilos, gatos, gambás — ficam **separados** na
+aba **Visitantes Especiais** (no Painel) e em **Convidados do Jardim** (na Galeria), e
+**não** entram na contagem de aves.
+
+---
+
+### 📖 5. Minhas Aves
 
 O seu **catálogo pessoal de espécies**. Cadastre:
 
@@ -162,7 +221,8 @@ sua Lista de Vida e suas estatísticas.
 Clique em qualquer card (aqui ou no **Álbum de Conquistas**) para abrir a **ficha técnica**
 da espécie: histórico de avistagens, **horários de pico** no comedouro, **temperatura média**
 preferida (cruzada com o clima), notas científicas e o **status ecológico** (Nativa,
-Migratória, Rara…). A miniatura do card mostra o **recorte tratado** da melhor visita.
+Migratória, Rara…). A miniatura do card mostra o **recorte tratado** da melhor visita e,
+quando ainda não há foto, aparece a **silhueta padrão** — nunca um ícone de imagem quebrada.
 
 **Para que serve:** montar a "coleção" de aves que você já registrou.
 
@@ -170,11 +230,13 @@ Migratória, Rara…). A miniatura do card mostra o **recorte tratado** da melho
 
 ---
 
-### 📊 5. Estatísticas & Conquistas
+### 📊 6. Estatísticas & Conquistas
 
-O "modo jogador". Aqui você encontra:
+O "modo jogador". Um **seletor no topo** alterna o escopo entre **cada jardim** e a
+**Visão Total Consolidada** (todos juntos). Aqui você encontra:
 
-- **gráficos e horários de pico** — quando os pássaros mais aparecem;
+- **gráficos e horários de pico** — quando os pássaros mais aparecem (no jardim escolhido ou no total);
+- **espécies presentes** — quantas espécies já passaram por aquele jardim;
 - **Insights Comportamentais & Clima** — cards inteligentes e gráficos que cruzam o
   tempo com os hábitos das aves (veja abaixo);
 - **Lista de Vida** — as espécies que você já desbloqueou, com foto e número de avistagens;
@@ -186,7 +248,7 @@ O "modo jogador". Aqui você encontra:
 
 ---
 
-### ⚙️ 6. Configurações
+### ⚙️ 7. Configurações
 
 Onde você ajusta o comportamento. Tem cinco blocos:
 
@@ -204,7 +266,7 @@ Onde você ajusta o comportamento. Tem cinco blocos:
 
 ### 🔍 Como o sistema "vê" o pássaro?
 
-O AviaWatch usa uma inteligência artificial chamada **YOLOv8**, treinada para reconhecer
+O Bem-Ti-Vi usa uma inteligência artificial chamada **YOLOv8**, treinada para reconhecer
 objetos. Ele é ajustado para procurar apenas a classe **"pássaro"**. Quando detecta um, ele:
 
 1. marca uma caixa ao redor do pássaro;
@@ -220,7 +282,7 @@ Dá para ajustar o quanto a IA deve ser "confiante" para contar um pássaro (vej
 
 ### 📸 A foto automática (melhor quadro em HD)
 
-Você não precisa escolher o melhor momento: o AviaWatch faz isso por você. Entre os
+Você não precisa escolher o melhor momento: o Bem-Ti-Vi faz isso por você. Entre os
 cerca de **6 segundos** de gravação de cada visita, ele analisa todos os quadros em
 que o pássaro aparece e fica com o **mais nítido** — evitando fotos borradas de asa
 em movimento — e ainda realça o contraste e reduz o ruído da imagem. Na Galeria,
@@ -232,7 +294,7 @@ procurar o melhor instante manualmente.
 
 ### 🧠 A IA que conta bando, entende comportamento e conhece as espécies
 
-O "cérebro" do AviaWatch ficou bem mais esperto. Agora ele:
+O "cérebro" do Bem-Ti-Vi ficou bem mais esperto. Agora ele:
 
 - **conta quantos pássaros** estão no comedouro ao mesmo tempo. Se chegarem 3
   cambacicas e 2 saíras juntas, ele registra isso e mostra um selo **👥 N** na foto;
@@ -247,10 +309,10 @@ O "cérebro" do AviaWatch ficou bem mais esperto. Agora ele:
   — ou seja, aceita detectar o pássaro mesmo com a imagem mais apagada, para não
   perder o registro;
 - **avisa quando uma ave volta**: se uma espécie que você não via há **mais de 6
-  meses** aparecer de novo, o AviaWatch cria um **alerta de reaparecimento** (uma
+  meses** aparecer de novo, o Bem-Ti-Vi cria um **alerta de reaparecimento** (uma
   "anomalia"), que pode ser visto na lista de anomalias da API/painel.
 
-**Para que serve:** transformar o AviaWatch num verdadeiro caderno de campo
+**Para que serve:** transformar o Bem-Ti-Vi num verdadeiro caderno de campo
 automático — não só "tem um pássaro", mas *quantos*, *fazendo o quê* e *que
 espécie* é, com foco em aves raras e migratórias.
 
@@ -260,7 +322,7 @@ espécie* é, com foco em aves raras e migratórias.
 
 ### 🌙 Visão noturna e monitoramento 24 horas
 
-O AviaWatch também **enxerga no escuro**. Muitas câmeras têm visão infravermelha
+O Bem-Ti-Vi também **enxerga no escuro**. Muitas câmeras têm visão infravermelha
 (ficam em preto e branco à noite); o sistema realça o contraste dessas imagens
 antes de procurar o pássaro, então ele continua detectando mesmo com pouca luz.
 
@@ -283,7 +345,7 @@ Como você percebe que a visão noturna está ligada:
 
 ### 🔊 Reconhecimento de canto (BirdNET)
 
-Além da visão, o AviaWatch pode **escutar** o ambiente e identificar o pássaro pelo canto,
+Além da visão, o Bem-Ti-Vi pode **escutar** o ambiente e identificar o pássaro pelo canto,
 usando um sistema chamado **BirdNET**. É opcional e precisa ser ativado nas Configurações.
 
 - Funciona com o **microfone** da câmera USB ou com um microfone do computador.
@@ -291,12 +353,15 @@ usando um sistema chamado **BirdNET**. É opcional e precisa ser ativado nas Con
 - Acima de um nível de confiança (70% por padrão), a detecção é guardada.
 - Se houver uma visita "visual" da mesma câmera até 30 segundos antes/depois, o sistema
   **liga o canto à imagem** — ou seja, ele tenta unir "o que você viu" com "o que você ouviu".
+- Cada canto é gravado como um **clipe de áudio** e fica disponível na aba
+  **🔊 Detecção Sonora**, onde você pode **ouvir**, **associar a uma espécie** da sua
+  Life List, **identificar pela IA** ou **abrir a ficha** da espécie.
 
 > **Detalhe técnico:** o áudio nunca sai do seu computador. O reconhecimento é feito localmente.
 
 ### 🤖 Identificação por IA externa (perguntar o nome)
 
-Quando você clica em **🤖 Perguntar à IA Externa** numa foto, o AviaWatch envia **aquela foto**
+Quando você clica em **🤖 Perguntar à IA Externa** numa foto, o Bem-Ti-Vi envia **aquela foto**
 para um serviço de inteligência artificial (como a OpenAI, OpenRouter, Groq, Ollama ou Gemini)
 e pergunta: *"Que espécie é essa?"* Ele responde com o nome comum e o científico.
 
@@ -304,10 +369,10 @@ e pergunta: *"Que espécie é essa?"* Ele responde com o nome comum e o científ
 
 - Só acontece **quando você clica**. Nada é enviado sozinho.
 - É preciso **configurar uma chave** de algum provedor (nas Configurações).
-- O AviaWatch aceita vários provedores. No card "IA Externa" você escolhe o **provedor** numa
+- O Bem-Ti-Vi aceita vários provedores. No card "IA Externa" você escolhe o **provedor** numa
   lista e o **modelo** é sugerido automaticamente — não precisa digitar endereço nenhum.
 - A foto fica guardada no seu computador e é enviada apenas durante essa consulta.
-- O AviaWatch envia a **foto tratada** (a melhor versão da ave, já realçada e recortada).
+- O Bem-Ti-Vi envia a **foto tratada** (a melhor versão da ave, já realçada e recortada).
 - Ao identificar, a espécie é **cadastrada sozinha no Catálogo (Life List)** e a visita já fica
   associada a ela — assim a ave aparece no Álbum de Conquistas com a melhor foto disponível.
 - Depois de identificada, use **🔎 Ficha ornitológica (IA)** (na Galeria) ou
@@ -320,12 +385,12 @@ e pergunta: *"Que espécie é essa?"* Ele responde com o nome comum e o científ
   ave (ou abra a ficha técnica dela e toque em **🔎 Ficha ornitológica (IA)**). Aqui a
   consulta parte da espécie cadastrada e da **foto de referência**, e o resultado fica
   guardado na própria espécie.
-- Se a espécie **já estava** no seu catálogo, o AviaWatch **não duplica** o card: apenas
+- Se a espécie **já estava** no seu catálogo, o Bem-Ti-Vi **não duplica** o card: apenas
   soma mais uma visita e guarda a nova foto/vídeo naquela espécie.
 
 ### 🌦️ Clima e estatísticas
 
-O AviaWatch consulta o tempo no seu endereço (via Open-Meteo) e cruza com as visitas.
+O Bem-Ti-Vi consulta o tempo no seu endereço (via Open-Meteo) e cruza com as visitas.
 Assim você descobre, por exemplo, se choveu mais no dia em que os pássaros sumiram.
 
 **Câmeras em outros países:** se você cadastrou a localização de uma câmera
@@ -425,12 +490,12 @@ Não automaticamente. Ele detecta e registra. Para saber o nome, você pode (a) 
 Sim, via RTSP ou ONVIF. Basta informar o endereço e as credenciais.
 
 **Funciona de noite, com a câmera em preto e branco (infravermelho)?**
-Sim. O AviaWatch realça o contraste dessas imagens escuras e continua detectando. Na tela
+Sim. O Bem-Ti-Vi realça o contraste dessas imagens escuras e continua detectando. Na tela
 **Configurações** você ainda pode ligar a **Visão Noturna** e até monitorar a fauna noturna
 (gatos, cachorros) além de aves.
 
 **Apaguei sem querer. Como recuperei?**
-Se o arquivo estiver na Lixeira do computador, você pode restaurá-lo. Se excluiu dentro do AviaWatch, o registro e os arquivos locais são removidos.
+Se o arquivo estiver na Lixeira do computador, você pode restaurá-lo. Se excluiu dentro do Bem-Ti-Vi, o registro e os arquivos locais são removidos.
 
 **O que é a "Lista de Vida"?**
 É uma lista de todas as espécies que você já registrou. Cada nova espécie desbloqueada vira uma "conquista".
@@ -449,7 +514,7 @@ Se o arquivo estiver na Lixeira do computador, você pode restaurá-lo. Se exclu
 
 ## Segurança e privacidade
 
-- O AviaWatch foi feito para rodar **só no seu computador**.
+- O Bem-Ti-Vi foi feito para rodar **só no seu computador**.
 - As chaves (Telegram, Discord, IA) são guardadas num arquivo local e **nunca são mostradas** na tela — a tela exibe apenas um começo mascarado, como `AIza...****`.
 - O painel de configuração só aceita acesso do próprio computador (não funciona pela internet).
 - Por padrão, **toda** a API só responde ao seu computador. Para acessar de outro aparelho seria preciso mudar uma opção avançada (`ALLOW_REMOTE_ACCESS`) — e o recomendado, nesse caso, é usar uma VPN.

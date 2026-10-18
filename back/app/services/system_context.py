@@ -1,6 +1,6 @@
 """Contexto sistêmico da IA: ajuste de sensibilidade por clima e horário.
 
-A IA local "entende" o estado do AviaWatch e adapta a sensibilidade:
+A IA local "entende" o estado do Bem-Ti-Vi e adapta a sensibilidade:
 
 - **Calibração do usuário** é a base (nunca elevamos a confiança acima dela).
 - **Clima adverso** (chuva, nevoeiro, tempestade, nublado) reduz a visibilidade:

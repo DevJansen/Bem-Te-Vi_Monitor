@@ -284,7 +284,7 @@ def convert_to_web_mp4(input_path: Path | str, output_path: Path | str) -> bool:
     `yuv420p` e `+faststart` (índice no início, permitindo avançar durante o
     download). Retorna `True` apenas se o arquivo final for decodificável.
 
-    Observação: os clipes do AviaWatch não têm faixa de áudio, por isso usamos
+    Observação: os clipes do Bem-Ti-Vi não têm faixa de áudio, por isso usamos
     `-an` em vez de codificar áudio (`-acodec aac`).
     """
     ffmpeg = get_ffmpeg_path()

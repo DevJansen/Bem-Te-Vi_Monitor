@@ -195,7 +195,7 @@ export function TimelapseGallery() {
             Nenhum resumo do dia ainda
           </p>
           <p className="max-w-md text-xs text-[var(--color-text-muted)]">
-            Assim que houver clipes gravados, o AviaWatch monta o time-lapse
+            Assim que houver clipes gravados, o Bem-Ti-Vi monta o time-lapse
             automaticamente ao fim do dia. Você também pode clicar em
             "Gerar resumo de hoje".
           </p>

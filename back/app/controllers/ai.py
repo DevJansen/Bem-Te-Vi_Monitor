@@ -1,6 +1,6 @@
 """Rotas REST do motor de IA (AI Core).
 
-Expõe o "coração pulsante" do AviaWatch: o estado do modelo, a telemetria de
+Expõe o "coração pulsante" do Bem-Ti-Vi: o estado do modelo, a telemetria de
 desempenho (FPS, latência, inferências) e o **log cognitivo** — os "pensamentos"
 da IA em tempo real, consumidos pelo painel futurista do Dashboard.
 """
