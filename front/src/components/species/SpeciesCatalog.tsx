@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Bird, Bot, LoaderCircle, Plus, Trash2, X } from "lucide-react";
 import type { BirdSpecies } from "@/types";
-import { createSpecies, deleteSpecies, getErrorMessage } from "@/services/api";
+import { createSpecies, deleteSpecies, getErrorMessage, resolveMediaUrl } from "@/services/api";
+import { BIRD_SILHOUETTE_DATA_URI } from "@/utils/speciesImage";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import {
   SpeciesProfileModal,
@@ -22,22 +23,30 @@ const inputClass =
 /**
  * Miniatura da foto de referência do card.
  *
- * Mostra a imagem tratada da espécie e, se o arquivo estiver ausente/corrompido,
- * cai para o aviso "Sem foto de referência" — nunca deixa um ícone quebrado.
+ * Normaliza a URL (caminho relativo → absoluto) e, se o arquivo estiver
+ * ausente/corrompido, cai para a **silhueta padrão** do sistema — nunca deixa
+ * um ícone de imagem quebrada.
  */
 function ReferenceThumb({ url, name }: { url: string | null; name: string }) {
   const [failed, setFailed] = useState(false);
-  if (!url || failed) {
+  const resolved = resolveMediaUrl(url);
+  if (!resolved || failed) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 text-[var(--color-text-muted)]">
-        <Bird className="h-9 w-9 text-emerald-400/70" />
-        <span className="text-xs">Sem foto de referência</span>
+      <div className="relative h-full w-full">
+        <img
+          src={BIRD_SILHOUETTE_DATA_URI}
+          alt="Silhueta padrão de pássaro"
+          className="h-full w-full object-cover"
+        />
+        <span className="absolute inset-x-0 bottom-0 bg-dark-900/70 px-2 py-1 text-center text-[10px] text-[var(--color-text-muted)]">
+          Sem foto de referência
+        </span>
       </div>
     );
   }
   return (
     <img
-      src={url}
+      src={resolved}
       alt={`Foto de referência: ${name}`}
       onError={() => setFailed(true)}
       className="h-full w-full object-cover"

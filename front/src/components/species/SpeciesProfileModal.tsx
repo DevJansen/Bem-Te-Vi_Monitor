@@ -20,8 +20,10 @@ import type { SpeciesProfile } from "@/types";
 import {
   fetchSpeciesProfile,
   getErrorMessage,
+  resolveMediaUrl,
   visitCropUrl,
 } from "@/services/api";
+import { BIRD_SILHOUETTE_DATA_URI } from "@/utils/speciesImage";
 import { SpeciesAiConsultModal } from "@/components/species/SpeciesAiConsultModal";
 import { cn } from "@/utils/cn";
 import { formatDateTime } from "@/utils/format";
@@ -89,7 +91,8 @@ export function SpeciesProfileModal({ species, onClose }: Props) {
   if (!species) return null;
 
   const hero =
-    profile?.best_photo_url ?? profile?.reference_image_url ?? null;
+    resolveMediaUrl(profile?.best_photo_url ?? profile?.reference_image_url ?? null) ??
+    BIRD_SILHOUETTE_DATA_URI;
   const peakKey = profile?.peak_hour?.replace("h", "") ?? "";
   const maxHourly = Math.max(
     1,
@@ -159,17 +162,11 @@ export function SpeciesProfileModal({ species, onClose }: Props) {
               {/* Foto + selos */}
               <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
                 <div className="relative aspect-[4/3] overflow-hidden rounded-xl border border-dark-700 bg-dark-900">
-                  {hero ? (
-                    <img
-                      src={hero}
-                      alt={`Melhor registro de ${profile.common_name}`}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-[var(--color-text-muted)]">
-                      <Bird className="h-10 w-10 text-emerald-400/60" />
-                    </div>
-                  )}
+                  <img
+                    src={hero}
+                    alt={`Melhor registro de ${profile.common_name}`}
+                    className="h-full w-full object-cover"
+                  />
                 </div>
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -347,9 +344,9 @@ export function SpeciesProfileModal({ species, onClose }: Props) {
                   <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
                     {profile.recent_sightings.map((sighting) => {
                       const thumb =
-                        sighting.crop_url ??
-                        sighting.thumbnail_url ??
-                        visitCropUrl(sighting.visit_id);
+                        resolveMediaUrl(
+                          sighting.crop_url ?? sighting.thumbnail_url,
+                        ) ?? visitCropUrl(sighting.visit_id);
                       return (
                         <figure
                           key={sighting.visit_id}
@@ -360,6 +357,10 @@ export function SpeciesProfileModal({ species, onClose }: Props) {
                             <img
                               src={thumb}
                               alt={`Avistagem em ${formatDateTime(sighting.detected_at)}`}
+                              onError={(event) => {
+                                event.currentTarget.src = BIRD_SILHOUETTE_DATA_URI;
+                              }}
+                              loading="lazy"
                               className="h-full w-full object-cover transition group-hover:scale-105"
                             />
                             {sighting.weather_code ? (

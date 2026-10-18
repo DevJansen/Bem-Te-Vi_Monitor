@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Bird, LockKeyhole } from "lucide-react";
 import type { LifeListSpecies, RarityTier } from "@/types";
+import { resolveMediaUrl } from "@/services/api";
+import { BIRD_SILHOUETTE_DATA_URI } from "@/utils/speciesImage";
 import { formatDateTime } from "@/utils/format";
 import { cn } from "@/utils/cn";
 import {
@@ -46,6 +48,8 @@ export function LifeListAlbum({ species }: Props) {
   const percentage = total > 0 ? Math.round((unlocked / total) * 100) : 0;
   // Espécie aberta na ficha técnica (null = modal fechado).
   const [selected, setSelected] = useState<SpeciesRef | null>(null);
+  // Miniaturas cujo arquivo falhou ao carregar (caem para a silhueta padrão).
+  const [brokenImages, setBrokenImages] = useState<Set<string>>(new Set());
 
   return (
     <section className="space-y-5">
@@ -100,10 +104,15 @@ export function LifeListAlbum({ species }: Props) {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {species.map((item, index) => {
             const style = RARITY_STYLES[item.rarity];
+            // A URL é normalizada (caminho relativo → absoluto) e, se o arquivo
+            // estiver ausente/corrompido, cai para a silhueta padrão do sistema.
             const imageUrl =
-              item.best_photo_url ??
-              item.featured_photo_url ??
-              item.reference_image_url;
+              resolveMediaUrl(
+                item.best_photo_url ??
+                  item.featured_photo_url ??
+                  item.reference_image_url,
+              ) ?? BIRD_SILHOUETTE_DATA_URI;
+            const usableImage = !brokenImages.has(item.id);
             return (
               <article
                 key={item.id}
@@ -129,35 +138,37 @@ export function LifeListAlbum({ species }: Props) {
                   className="absolute inset-0 z-10 cursor-pointer"
                 />
                 <div className="relative aspect-[4/3] overflow-hidden bg-dark-900">
-                  {imageUrl ? (
-                    <img
-                      src={imageUrl}
-                      alt={
-                        item.is_unlocked
-                          ? `Registro de ${item.common_name}`
-                          : `Silhueta de ${item.common_name}`
-                      }
-                      className={cn(
-                        "h-full w-full object-cover transition-transform duration-500",
-                        item.is_unlocked
-                          ? "group-hover:scale-105"
-                          : "scale-105 grayscale opacity-25",
-                      )}
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="flex h-full items-center justify-center">
+                  <img
+                    src={usableImage ? imageUrl : BIRD_SILHOUETTE_DATA_URI}
+                    alt={
+                      item.is_unlocked
+                        ? `Registro de ${item.common_name}`
+                        : `Silhueta de ${item.common_name}`
+                    }
+                    onError={() =>
+                      setBrokenImages((current) =>
+                        current.has(item.id)
+                          ? current
+                          : new Set(current).add(item.id),
+                      )
+                    }
+                    className={cn(
+                      "h-full w-full object-cover transition-transform duration-500",
+                      item.is_unlocked
+                        ? "group-hover:scale-105"
+                        : "scale-105 grayscale opacity-25",
+                    )}
+                    loading="lazy"
+                  />
+                  {/* Véu escuro quando a foto caiu para a silhueta padrão. */}
+                  {!usableImage && item.is_unlocked ? (
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/20">
                       <Bird
                         aria-hidden
-                        className={cn(
-                          "h-16 w-16",
-                          item.is_unlocked
-                            ? "text-emerald-400/60"
-                            : "text-[var(--color-text-muted)]/25",
-                        )}
+                        className="h-10 w-10 text-emerald-300/70"
                       />
                     </div>
-                  )}
+                  ) : null}
 
                   {/* Cadeado das aves ainda não descobertas */}
                   {!item.is_unlocked ? (

@@ -250,7 +250,7 @@ export function App() {
                 cameras={camerasQuery.data ?? []}
                 onCameraUpdated={handleCameraUpdated}
               />
-              <WeatherWidget />
+              <WeatherWidget cameras={camerasQuery.data ?? []} />
               <AnomalyAlertsPanel />
               <div className="mb-3 flex items-center gap-2">
                 <label className="text-xs text-[var(--color-text-muted)]">Jardim:</label>
@@ -284,7 +284,12 @@ export function App() {
                   />
                 </div>
                 <div className="space-y-4">
-                  <SpeciesRanking metrics={metricsQuery.data} />
+                  <SpeciesRanking
+                    metrics={metricsQuery.data}
+                    species={speciesQuery.data ?? []}
+                    limit={5}
+                    subtitle="Top 5 espécies mais frequentes"
+                  />
                   <AiStreamLog />
                 </div>
               </div>

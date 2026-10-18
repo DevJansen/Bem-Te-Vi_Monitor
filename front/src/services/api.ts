@@ -455,14 +455,21 @@ export async function fetchMetrics(cameraId?: string): Promise<Metrics> {
   return data;
 }
 
-export async function fetchAnalyticsSummary(): Promise<AnalyticsSummary> {
-  const { data } = await api.get<AnalyticsSummary>("/analytics/summary");
+export async function fetchAnalyticsSummary(
+  cameraId?: string,
+): Promise<AnalyticsSummary> {
+  const { data } = await api.get<AnalyticsSummary>("/analytics/summary", {
+    params: cameraId ? { camera_id: cameraId } : undefined,
+  });
   return data;
 }
 
-export async function fetchHourlyDistribution(): Promise<HourlyDistribution[]> {
+export async function fetchHourlyDistribution(
+  cameraId?: string,
+): Promise<HourlyDistribution[]> {
   const { data } = await api.get<HourlyDistribution[]>(
     "/analytics/hourly-distribution",
+    { params: cameraId ? { camera_id: cameraId } : undefined },
   );
   return data;
 }

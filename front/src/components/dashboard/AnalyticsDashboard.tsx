@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -16,6 +16,7 @@ import {
   Clock3,
   Eye,
   FileText,
+  MapPin,
   RefreshCw,
   Sparkles,
   Timer,
@@ -28,17 +29,21 @@ import {
   fetchCollectorLevel,
   fetchHourlyDistribution,
   fetchLifeList,
+  fetchMetrics,
   fetchWeatherCorrelation,
   fetchWeatherInsights,
   getErrorMessage,
   laudoPdfUrl,
+  listCameras,
 } from "@/services/api";
 import type {
   Achievement,
   AnalyticsSummary,
+  Camera,
   CollectorLevel,
   HourlyDistribution,
   LifeListSpecies,
+  Metrics,
   WeatherCorrelation,
   WeatherInsights,
 } from "@/types";
@@ -60,12 +65,12 @@ type AnalyticsData = {
   collectorLevel: CollectorLevel | null;
 };
 
-async function loadAnalytics(): Promise<AnalyticsData> {
+async function loadAnalytics(cameraId?: string): Promise<AnalyticsData> {
   try {
     const [summary, hourly, lifeList, weather, weatherInsights, achievements, collectorLevel] =
       await Promise.all([
-        fetchAnalyticsSummary(),
-        fetchHourlyDistribution(),
+        fetchAnalyticsSummary(cameraId),
+        fetchHourlyDistribution(cameraId),
         fetchLifeList(),
         fetchWeatherCorrelation(),
         fetchWeatherInsights(),
@@ -133,16 +138,76 @@ function MetricCard({
 }
 
 export function AnalyticsDashboard() {
-  const query = usePolling(loadAnalytics, 30_000);
-  const refresh = () => void query.refresh();
+  // Jardim selecionado ("" = Visão Total Consolidada de todos os jardins).
+  const [garden, setGarden] = useState("");
+  const gardenRef = useRef("");
+  // Ref síncrona: o refresh disparado no onChange já usa a seleção nova.
+  gardenRef.current = garden;
+
+  const camerasQuery = usePolling(listCameras, 60_000);
+  const query = usePolling(
+    () => loadAnalytics(gardenRef.current || undefined),
+    30_000,
+  );
+  // Métricas do jardim (visitas/espécies presentes) — consolidadas ou filtradas.
+  const metricsQuery = usePolling(
+    () => fetchMetrics(gardenRef.current || undefined),
+    30_000,
+  );
+  const refresh = () => {
+    void query.refresh();
+    void metricsQuery.refresh();
+  };
   const data = query.data;
+  const cameras: Camera[] = camerasQuery.data ?? [];
+  const scopedMetrics: Metrics | null = metricsQuery.data;
   const unlockedCount = data?.lifeList.filter((item) => item.is_unlocked).length ?? 0;
   const peakHour = data?.summary.peak_hour;
+  // Número de espécies distintas registradas no escopo atual (jardim ou total).
+  const speciesPresent = Object.keys(scopedMetrics?.species_counts ?? {}).length;
+  const gardenLabel =
+    cameras.find((camera) => camera.id === garden)?.location_label ||
+    cameras.find((camera) => camera.id === garden)?.name ||
+    "Visão Total Consolidada";
   // Aba interna: Álbum de figurinhas x Medalhas do observador.
   const [view, setView] = useState<"album" | "badges">("album");
 
+  const handleGardenChange = (value: string) => {
+    gardenRef.current = value;
+    setGarden(value);
+    void query.refresh();
+    void metricsQuery.refresh();
+  };
+
   return (
     <div className="space-y-6">
+      {/* Seletor: cada jardim × Visão Total Consolidada */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dark-700 bg-dark-800 px-4 py-3">
+        <div className="flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
+          <MapPin className="h-4 w-4 text-emerald-400" />
+          <label htmlFor="analytics-garden" className="font-medium">
+            Escopo das estatísticas:
+          </label>
+          <select
+            id="analytics-garden"
+            value={garden}
+            onChange={(event) => handleGardenChange(event.target.value)}
+            className="rounded-md border border-dark-700 bg-dark-900/70 px-2.5 py-1.5 text-xs text-[var(--color-text-primary)]"
+          >
+            <option value="">Visão Total Consolidada</option>
+            {cameras.map((camera) => (
+              <option key={camera.id} value={camera.id}>
+                {camera.location_label || camera.name || "Jardim sem nome"}
+              </option>
+            ))}
+          </select>
+        </div>
+        <p className="text-xs text-[var(--color-text-muted)]">
+          Exibindo:{" "}
+          <span className="font-semibold text-emerald-300">{gardenLabel}</span>
+        </p>
+      </div>
+
       {query.error ? (
         <div
           role="alert"
@@ -175,7 +240,7 @@ export function AnalyticsDashboard() {
                   Seus hábitos de observação
                 </h2>
                 <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                  Resumo do histórico local de visitas
+                  Resumo de {gardenLabel}
                 </p>
               </div>
               <a
@@ -239,6 +304,12 @@ export function AnalyticsDashboard() {
                 detail="Espécies do catálogo já observadas"
                 icon={Sparkles}
               />
+              <MetricCard
+                label="Espécies presentes"
+                value={numberFormat.format(speciesPresent)}
+                detail={`Registradas em ${gardenLabel}`}
+                icon={Bird}
+              />
             </div>
           </section>
 
@@ -248,7 +319,7 @@ export function AnalyticsDashboard() {
                 Frequência por horário
               </h2>
               <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                Visitas de todo o histórico, distribuídas pelas 24 horas do dia
+                Visitas de {gardenLabel}, distribuídas pelas 24 horas do dia
               </p>
             </div>
             <div className="h-64 w-full" role="img" aria-label="Gráfico de visitas por hora">

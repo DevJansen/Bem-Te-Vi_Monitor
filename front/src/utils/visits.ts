@@ -7,26 +7,7 @@
  */
 
 import type { BirdSpecies, BirdVisit } from "@/types";
-import { formatSpeciesLabel } from "@/utils/format";
-
-/** Espécies genéricas (fallback do YOLO) que ainda não foram identificadas. */
-const GENERIC_SPECIES = new Set([
-  "bird",
-  "passaro",
-  "passaro desconhecido",
-  "ave",
-  "ave (genérica)",
-  "ave nao identificada",
-  "ave não identificada",
-  "não identificada",
-  "nao identificada",
-  "unidentified",
-]);
-
-/** Indica se a espécie ainda é o rótulo genérico do detector ("bird"). */
-export function isGenericSpecies(species: string): boolean {
-  return GENERIC_SPECIES.has(species.trim().toLocaleLowerCase("pt-BR"));
-}
+import { formatSpeciesLabel, isGenericSpecies } from "@/utils/format";
 
 /** Nomes popular e científico resolvidos (catálogo, IA externa ou metadados). */
 export function resolveVisitNames(visit: BirdVisit): {
@@ -56,7 +37,10 @@ export function resolveVisitNames(visit: BirdVisit): {
   return { commonName, scientificName };
 }
 
-/** Rótulo da espécie: nome popular identificado ou o fallback "Ave (genérica)". */
+/**
+ * Rótulo da espécie da visita: nome popular identificado ou, quando ainda não
+ * houve identificação, o rótulo oficial **"Pássaro Desconhecido"**.
+ */
 export function resolveVisitSpeciesLabel(visit: BirdVisit): string {
   // Visitantes Especiais (esquilos, gatos…) não são aves: exibem o rótulo do
   // grupo em vez de tentar resolver um nome de espécie de ave.

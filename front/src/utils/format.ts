@@ -27,9 +27,25 @@ export function formatPercent(value: number): string {
 }
 
 /**
+ * Normaliza um rótulo para comparação: minúsculas, sem acentos e com espaços
+ * colapsados. Assim "Pássaro Desconhecido", "Passaro Desconhecido" e
+ * "PASSARO  DESCONHECIDO" caem todos na mesma chave.
+ */
+function normalizarRotulo(valor: string): string {
+  return valor
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+/**
  * Rótulos genéricos do detector (YOLO/BirdNET) que significam apenas
  * "ave não identificada". A nomenclatura oficial do Bem-Ti-Vi é
  * **"Pássaro Desconhecido"** — nunca "Ave Genérica" nem "Bird".
+ *
+ * As chaves estão já sem acento (ver `normalizarRotulo`).
  */
 const ROTULOS_GENERICOS = new Set([
   "",
@@ -39,14 +55,11 @@ const ROTULOS_GENERICOS = new Set([
   "passaro",
   "passaros",
   "passaro desconhecido",
-  "pássaro desconhecido",
   "ave generica",
-  "ave genérica",
   "ave (generica)",
+  "passaro (generico)",
   "ave nao identificada",
-  "ave não identificada",
   "nao identificada",
-  "não identificada",
   "desconhecida",
   "desconhecido",
   "unidentified",
@@ -55,7 +68,7 @@ const ROTULOS_GENERICOS = new Set([
 
 /** Indica se o rótulo de espécie é genérico (não houve identificação real). */
 export function isGenericSpecies(species: string | null | undefined): boolean {
-  return ROTULOS_GENERICOS.has((species ?? "").trim().toLowerCase());
+  return ROTULOS_GENERICOS.has(normalizarRotulo(species ?? ""));
 }
 
 export function formatSpeciesLabel(species: string): string {
