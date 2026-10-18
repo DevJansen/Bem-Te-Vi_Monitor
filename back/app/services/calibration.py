@@ -45,6 +45,13 @@ _NUMERIC_FIELDS = (
     "motion_sensitivity",
 )
 
+# Parâmetros "anti-spam" temporais: ajustáveis em separado e **sem** alterar o
+# rótulo do perfil (mover a presença/cooldown não torna o perfil "custom").
+_ANTISPAM_FIELDS = (
+    "presence_grace_seconds",
+    "alert_cooldown_seconds",
+)
+
 # Valores pré-definidos de cada perfil, explicados no painel web.
 PROFILE_PRESETS: dict[CalibrationProfile, dict[str, float]] = {
     # Passarinhos Parados / Alimentador (recomendado): confiança menor para
@@ -117,6 +124,12 @@ class CalibrationService:
             if payload.night_fauna_enabled is not None:
                 values["night_fauna_enabled"] = bool(payload.night_fauna_enabled)
 
+            # 2c) Anti-spam temporal (presença/cooldown), independentes do perfil.
+            for field in _ANTISPAM_FIELDS:
+                override = getattr(payload, field)
+                if override is not None:
+                    values[field] = min(600.0, max(0.0, float(override)))
+
             # 3) Define o rótulo final do perfil.
             values["profile"] = self._resolve_profile(profile, values, payload)
 
@@ -131,19 +144,27 @@ class CalibrationService:
             values["night_vision_threshold"] = min(
                 255.0, max(0.0, float(values.get("night_vision_threshold", 60.0)))
             )
+            values["presence_grace_seconds"] = min(
+                600.0, max(0.0, float(values.get("presence_grace_seconds", 30.0)))
+            )
+            values["alert_cooldown_seconds"] = min(
+                600.0, max(0.0, float(values.get("alert_cooldown_seconds", 30.0)))
+            )
 
             updated = CalibrationOut(**values)
             self._write(updated)
             self._current = updated
             self._apply_runtime()
             logger.info(
-                "Calibração atualizada: perfil=%s conf=%.2f persistência=%.1fs movimento=%.2f noite=%s fauna=%s",
+                "Calibração atualizada: perfil=%s conf=%.2f persistência=%.1fs movimento=%.2f noite=%s fauna=%s presença=%.0fs cooldown=%.0fs",
                 updated.profile.value,
                 updated.yolo_confidence,
                 updated.object_persistence_time,
                 updated.motion_sensitivity,
                 updated.night_vision_mode.value,
                 updated.night_fauna_enabled,
+                updated.presence_grace_seconds,
+                updated.alert_cooldown_seconds,
             )
             return updated.model_copy()
 
@@ -204,6 +225,12 @@ class CalibrationService:
                 255.0, max(0.0, float(self._settings.night_vision_threshold))
             ),
             night_fauna_enabled=bool(self._settings.night_fauna_enabled),
+            presence_grace_seconds=min(
+                600.0, max(0.0, float(self._settings.presence_grace_seconds))
+            ),
+            alert_cooldown_seconds=min(
+                600.0, max(0.0, float(self._settings.alert_cooldown_seconds))
+            ),
             profile=RECOMMENDED_PROFILE if coincide else CalibrationProfile.CUSTOM,
             recommended_profile=RECOMMENDED_PROFILE,
         )

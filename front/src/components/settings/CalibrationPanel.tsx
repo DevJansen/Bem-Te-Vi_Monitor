@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   Bird,
   CheckCircle2,
+  Clock3,
   Gauge,
   LoaderCircle,
   Moon,
@@ -25,6 +26,10 @@ const CONF_MAX = 1.0;
 /** Limites (segundos) do controle de permanência imóvel. */
 const PERSISTENCE_MIN = 3;
 const PERSISTENCE_MAX = 15;
+/** Limites (segundos) dos controles anti-spam (presença e cooldown). */
+const ANTISPAM_MIN = 0;
+const ANTISPAM_MAX = 600;
+const ANTISPAM_STEP = 5;
 
 /** Converte a confiança do YOLO (menor = mais sensível) para 0–100 no slider. */
 function confidenceToSensitivity(confidence: number): number {
@@ -50,6 +55,8 @@ export function CalibrationPanel({ onCalibrationChange }: Props) {
   const [nightMode, setNightMode] = useState<NightVisionMode>("auto");
   const [nightThreshold, setNightThreshold] = useState(60);
   const [nightFauna, setNightFauna] = useState(false);
+  const [graceSeconds, setGraceSeconds] = useState(30);
+  const [cooldownSeconds, setCooldownSeconds] = useState(30);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -65,6 +72,12 @@ export function CalibrationPanel({ onCalibrationChange }: Props) {
     setNightMode(data.night_vision_mode ?? "auto");
     setNightThreshold(Math.round(data.night_vision_threshold ?? 60));
     setNightFauna(Boolean(data.night_fauna_enabled));
+    setGraceSeconds(
+      Math.min(ANTISPAM_MAX, Math.max(ANTISPAM_MIN, Math.round(data.presence_grace_seconds ?? 30))),
+    );
+    setCooldownSeconds(
+      Math.min(ANTISPAM_MAX, Math.max(ANTISPAM_MIN, Math.round(data.alert_cooldown_seconds ?? 30))),
+    );
     onCalibrationChange?.(data);
   };
 
@@ -124,6 +137,8 @@ export function CalibrationPanel({ onCalibrationChange }: Props) {
         night_vision_mode: nightMode,
         night_vision_threshold: nightThreshold,
         night_fauna_enabled: nightFauna,
+        presence_grace_seconds: graceSeconds,
+        alert_cooldown_seconds: cooldownSeconds,
       });
       applyLoaded(updated);
       setMessage("Calibração manual aplicada.");
@@ -319,6 +334,34 @@ export function CalibrationPanel({ onCalibrationChange }: Props) {
             onChange={setMotion}
             tooltip="Controla o quanto de movimento é preciso para a IA começar a procurar uma ave. Mais sensível detecta aves que chegam com pouca movimentação; menos sensível reduz o esforço em cenas muito ruidosas."
             valueLabel={`${motion}%`}
+          />
+
+          <SliderField
+            icon={<Clock3 className="h-4 w-4" />}
+            label="Tempo de presença da ave"
+            leftLabel="Encerra rápido (0s)"
+            rightLabel="Paciente (10 min)"
+            min={ANTISPAM_MIN}
+            max={ANTISPAM_MAX}
+            step={ANTISPAM_STEP}
+            value={graceSeconds}
+            onChange={setGraceSeconds}
+            tooltip="Quanto a ave precisa ficar AUSENTE para a visita ser encerrada. Enquanto ela permanecer no comedouro — mesmo sumindo por instantes — o sistema entende que é a MESMA ave e não cria um registro novo. Valores maiores agrupam melhor; valores menores separam visitas rápidas."
+            valueLabel={`${graceSeconds}s`}
+          />
+
+          <SliderField
+            icon={<Timer className="h-4 w-4" />}
+            label="Intervalo mínimo entre alertas"
+            leftLabel="Sem pausa (0s)"
+            rightLabel="Espaçado (10 min)"
+            min={ANTISPAM_MIN}
+            max={ANTISPAM_MAX}
+            step={ANTISPAM_STEP}
+            value={cooldownSeconds}
+            onChange={setCooldownSeconds}
+            tooltip="Tempo mínimo (piso global) antes de um novo alerta/registro na mesma zona. Evita uma enxurrada de notificações quando várias aves (ou a mesma ave) passam em sequência. Cada zona pode ter o seu próprio valor, mas nunca menor que este piso."
+            valueLabel={`${cooldownSeconds}s`}
           />
         </div>
 

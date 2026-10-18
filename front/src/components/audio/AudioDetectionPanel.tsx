@@ -3,8 +3,7 @@ import {
   AlertCircle,
   AudioLines,
   Bot,
-  ChevronLeft,
-  ChevronRight,
+  ChevronDown,
   LoaderCircle,
   Music2,
   RefreshCw,
@@ -13,7 +12,7 @@ import {
   Trash2,
   Wand2,
 } from "lucide-react";
-import type { AudioAnalysisStatus, AudioDetection, AudioDetectionPage, BirdSpecies } from "@/types";
+import type { AudioAnalysisStatus, AudioDetection, BirdSpecies } from "@/types";
 import {
   deleteAudioDetection,
   fetchAudioAnalysisStatus,
@@ -47,16 +46,17 @@ const statusLabels: Record<AudioAnalysisStatus["status"], string> = {
 /**
  * Aba **Detecção Sonora** (Bioacústica / BirdNET).
  *
- * Lista os cantos identificados em blocos de 5 itens por página, com paginação
- * fluida, player de áudio integrado a cada card e ações para **identificar a
- * espécie manualmente** (vinculando ao card da Life List) ou **acionar a IA
- * externa** sobre o espectrograma do áudio — além de consultar a ficha
- * ornitológica profunda da espécie.
+ * Lista os cantos identificados em **blocos de 5 itens**, carregados de forma
+ * incremental pelo botão **"Ver mais…"** (sem paginação numérica), com player de
+ * áudio integrado a cada card e ações para **identificar a espécie manualmente**
+ * (vinculando ao card da Life List) ou **acionar a IA externa** sobre o
+ * espectrograma do áudio — além de consultar a ficha ornitológica profunda.
  */
 export function AudioDetectionPanel({ species }: Props) {
-  const [offset, setOffset] = useState(0);
-  const [page, setPage] = useState<AudioDetectionPage | null>(null);
+  const [items, setItems] = useState<AudioDetection[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -64,38 +64,52 @@ export function AudioDetectionPanel({ species }: Props) {
 
   const statusQuery = usePolling(fetchAudioAnalysisStatus, 8_000);
 
-  const load = useCallback(
-    async (targetOffset: number) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await fetchAudioDetectionPage(PAGE_SIZE, targetOffset);
-        setPage(data);
-      } catch (cause) {
-        setError(
-          getErrorMessage(cause, "Não foi possível carregar as detecções sonoras."),
-        );
-      } finally {
-        setLoading(false);
-      }
-    },
-    [],
-  );
+  /** Carrega o primeiro bloco (ou recarrega do zero a partir do topo). */
+  const reload = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await fetchAudioDetectionPage(PAGE_SIZE, 0);
+      setItems(data.items);
+      setTotal(data.total);
+    } catch (cause) {
+      setError(
+        getErrorMessage(cause, "Não foi possível carregar as detecções sonoras."),
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    void load(offset);
-  }, [load, offset]);
+    void reload();
+  }, [reload]);
+
+  /** Anexa o próximo bloco de 5 ao final da lista ("Ver mais…"). */
+  const loadMore = useCallback(async () => {
+    setLoadingMore(true);
+    setError(null);
+    try {
+      const data = await fetchAudioDetectionPage(PAGE_SIZE, items.length);
+      setItems((current) => [...current, ...data.items]);
+      setTotal(data.total);
+    } catch (cause) {
+      setError(
+        getErrorMessage(cause, "Não foi possível carregar mais detecções."),
+      );
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [items.length]);
 
   const refresh = useCallback(() => {
-    void load(offset);
+    void reload();
     void statusQuery.refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [load, offset]);
+  }, [reload]);
 
-  const total = page?.total ?? 0;
-  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
-  const items = page?.items ?? [];
+  // Enquanto houver mais itens no servidor do que já carregamos, mostra "Ver mais…".
+  const hasMore = items.length < total;
 
   const speciesOptions = useMemo(
     () =>
@@ -111,15 +125,8 @@ export function AudioDetectionPanel({ species }: Props) {
   );
 
   const applyUpdated = (updated: AudioDetection) => {
-    setPage((current) =>
-      current
-        ? {
-            ...current,
-            items: current.items.map((item) =>
-              item.id === updated.id ? updated : item,
-            ),
-          }
-        : current,
+    setItems((current) =>
+      current.map((item) => (item.id === updated.id ? updated : item)),
     );
   };
 
@@ -176,10 +183,9 @@ export function AudioDetectionPanel({ species }: Props) {
     try {
       await deleteAudioDetection(detection.id);
       setNotice("Detecção sonora removida do histórico.");
-      // Recua uma página se a última ficou vazia.
-      const nextOffset = items.length === 1 && offset > 0 ? offset - PAGE_SIZE : offset;
-      if (nextOffset !== offset) setOffset(nextOffset);
-      else await load(offset);
+      // Remove o card da lista e ajusta o total (sem recarregar tudo).
+      setItems((current) => current.filter((item) => item.id !== detection.id));
+      setTotal((current) => Math.max(0, current - 1));
       void statusQuery.refresh();
     } catch (cause) {
       setError(getErrorMessage(cause, "Não foi possível remover a detecção."));
@@ -258,8 +264,8 @@ export function AudioDetectionPanel({ species }: Props) {
         </p>
       ) : null}
 
-      {/* Blocos de 5 itens por página */}
-      {loading && !page ? (
+      {/* Blocos de 5 itens, carregados incrementalmente */}
+      {loading && items.length === 0 ? (
         <p className="flex items-center gap-2 rounded-xl border border-dark-700 bg-dark-800 p-6 text-sm text-[var(--color-text-muted)]">
           <LoaderCircle className="h-4 w-4 animate-spin" />
           Carregando detecções sonoras…
@@ -405,53 +411,31 @@ export function AudioDetectionPanel({ species }: Props) {
         </ul>
       )}
 
-      {/* Paginação fluida */}
+      {/* Carregamento incremental: "Ver mais…" em vez de paginação numérica */}
       {total > 0 ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dark-700 bg-dark-800 px-4 py-2.5">
           <p className="text-xs text-[var(--color-text-muted)]">
-            {total} detecção(ões) · página {currentPage} de {pageCount}
+            Mostrando {items.length} de {total} detecção(ões)
           </p>
-          <div className="flex items-center gap-1">
+          {hasMore ? (
             <button
               type="button"
-              onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-              disabled={offset === 0 || loading}
-              className="inline-flex items-center gap-1 rounded-md border border-dark-700 px-2.5 py-1.5 text-xs text-[var(--color-text-muted)] transition hover:bg-dark-700 hover:text-[var(--color-text-primary)] disabled:opacity-40"
+              onClick={() => void loadMore()}
+              disabled={loadingMore}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-200 transition hover:bg-violet-500/20 disabled:opacity-50"
             >
-              <ChevronLeft className="h-3.5 w-3.5" />
-              Anterior
+              {loadingMore ? (
+                <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5" />
+              )}
+              {loadingMore ? "Carregando…" : "Ver mais…"}
             </button>
-            {Array.from({ length: pageCount }, (_, index) => index)
-              .slice(
-                Math.max(0, currentPage - 3),
-                Math.min(pageCount, Math.max(0, currentPage - 3) + 5),
-              )
-              .map((index) => (
-                <button
-                  key={index}
-                  type="button"
-                  onClick={() => setOffset(index * PAGE_SIZE)}
-                  disabled={loading}
-                  className={cn(
-                    "h-7 w-7 rounded-md text-xs font-medium transition",
-                    index === currentPage - 1
-                      ? "bg-violet-500/20 text-violet-200"
-                      : "text-[var(--color-text-muted)] hover:bg-dark-700",
-                  )}
-                >
-                  {index + 1}
-                </button>
-              ))}
-            <button
-              type="button"
-              onClick={() => setOffset(offset + PAGE_SIZE)}
-              disabled={offset + PAGE_SIZE >= total || loading}
-              className="inline-flex items-center gap-1 rounded-md border border-dark-700 px-2.5 py-1.5 text-xs text-[var(--color-text-muted)] transition hover:bg-dark-700 hover:text-[var(--color-text-primary)] disabled:opacity-40"
-            >
-              Próxima
-              <ChevronRight className="h-3.5 w-3.5" />
-            </button>
-          </div>
+          ) : (
+            <span className="text-xs text-[var(--color-text-muted)]">
+              Fim da lista
+            </span>
+          )}
         </div>
       ) : null}
 

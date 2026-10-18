@@ -278,6 +278,10 @@ class CameraPipeline(threading.Thread):
         )
         # Fauna noturna: expande (opcionalmente) as classes aceitas na inferência.
         self._apply_detection_classes(calibration.night_fauna_enabled)
+        # Anti-spam temporal: presença/cooldown (piso global) aplicados sem
+        # reiniciar a câmera — vale para o validador de zonas já em execução.
+        self.zone_validator.presence_grace_seconds = calibration.presence_grace_seconds
+        self.zone_validator.alert_cooldown_seconds = calibration.alert_cooldown_seconds
 
     def _apply_detection_classes(self, fauna_enabled: bool) -> None:
         """Define as classes aceitas pelo YOLO (ave sempre; fauna se habilitada)."""

@@ -132,7 +132,8 @@ O **álbum de fotos** dos seus pássaros. Aqui você:
 - vê a foto e a miniatura de cada visita (as fotos tratadas automaticamente
   aparecem com o selo **HD**);
 - confere o **recorte focado da ave** (close-up com a plumagem em detalhe),
-  mostrado como miniatura **Recorte** no canto do cartão;
+  mostrado como miniatura **Recorte · IA** no canto do cartão — e **um clique nele
+  já abre a Ficha Ornitológica (IA)** daquela ave, sem passo extra;
 - **assiste ao clipe** gravado (clique na imagem ou em "Reproduzir clipe");
 - **pergunta o nome** da ave clicando em **🤖 Perguntar à IA Externa** (se estiver configurada);
 - abre a **🔎 Ficha ornitológica (IA)** de uma ave já identificada para uma consulta
@@ -172,8 +173,8 @@ Na aba **Resumos do Dia (Time-Lapse)**, o Bem-Ti-Vi junta os clipes de cada dia 
 ### 🔊 4. Detecção Sonora
 
 A aba de **destaque** para quem gosta de "ouvir" o jardim. Aqui ficam os cantos
-identificados pelo **BirdNET**, mostrados em **blocos de 5 por página**, com
-**paginação fluida** (Anterior/Próxima e os números das páginas).
+identificados pelo **BirdNET**, mostrados em **blocos de 5**, que você carrega aos
+poucos clicando em **"Ver mais…"** (sem pular de página em página).
 
 Cada canto é um cartão com:
 
@@ -193,6 +194,8 @@ ouvidas) e um botão para **atualizar** a lista na hora.
 
 **Para que serve:** revisar, ouvir e identificar os cantos — inclusive aves que
 aparecem pouco e você quase nunca vê.
+
+![Tela Detecção Sonora — cartões de cantos com player, associação e IA](docs/images/deteccao-sonora.png)
 
 #### ⚠️ Sobre os pássaros não identificados
 
@@ -461,11 +464,13 @@ Na tela **Configurações → Calibração e Ajustes**, você escolhe o equilíb
 | **Passarinhos Parados / Alimentador** (recomendado) | Comedouros e bebedouros, onde o pássaro fica parado comendo |
 | **Alta Movimentação / Voo Rápido** | Aves em movimento rápido |
 
-Se quiser ajustar na mão, há três controles com explicação ao lado:
+Se quiser ajustar na mão, há cinco controles com explicação ao lado:
 
 - **Sensibilidade da IA** — quanto mais sensível, mais fácil detectar (mas pode dar mais falsos alarmes).
 - **Tempo de permanência imóvel** — quanto tempo a visita continua mesmo com o pássaro parado.
 - **Sensibilidade de movimento** — quanto movimento é preciso para a IA começar a procurar.
+- **Tempo de presença da ave** — quanto tempo a ave precisa **sumir** para o sistema entender que aquela visita terminou (anti-spam: mesma ave = um só registro).
+- **Intervalo mínimo entre alertas** — a pausa mínima entre um alerta e o próximo na mesma zona, para não encher o Telegram/Discord.
 
 A mesma tela traz a **Visão Noturna (Infravermelho)**, com o modo (automático,
 sempre ligada ou desligada), o limiar de luminosidade e a opção de monitorar a

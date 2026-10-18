@@ -462,8 +462,9 @@ sem reiniciar o backend.
 ### Detecção Sonora (aba dedicada)
 
 Além de ver, o Bem-Ti-Vi **escuta**. A aba **Detecção Sonora** reúne os cantos
-identificados pelo **BirdNET** em blocos de **5 itens por página**, com
-**paginação fluida**, e dá ações de curadoria a cada registro:
+identificados pelo **BirdNET** em **blocos de 5 itens**, carregados de forma
+**incremental** pelo botão **"Ver mais…"** (sem paginação numérica), e dá ações de
+curadoria a cada registro:
 
 - **Player integrado por card:** cada detecção tem o **clipe de áudio** gravado
   (WAV) reproduzível ali mesmo — botão play/pause, barra de progresso arrastável,
@@ -785,15 +786,18 @@ o pipeline de vídeo — o envio é assíncrono (`NotificationService` + `notifi
 Na seção **Calibração e Ajustes** o usuário escolhe entre dois perfis prontos —
 **Passarinhos Parados / Alimentador** (recomendado) e **Alta Movimentação / Voo
 Rápido** — ou ajusta manualmente, com sliders explicativos, a *Sensibilidade da
-IA*, o *Tempo de permanência imóvel* (3–15 s) e a *Sensibilidade de movimento
-inicial*. O perfil recomendado já vem **ativo por padrão** (confiança `0.22`,
-permanência `10 s`, movimento `0.80`), entregando alta sensibilidade sem ajustes
-manuais. A **regra anti-spam** (mesma ave = mesmo evento) atua de forma
-transparente: enquanto a ave permanece no comedouro, o Alaris segue rastreando,
-mas não cria novos alertas/registros; um novo evento só nasce após a ave sair
-por completo da zona e outra pousar. A mesma tela traz a **Visão Noturna
-(Infravermelho)**: modo automático/sempre/desligado, o limiar de luminosidade e a
-opção de monitorar a fauna noturna além de aves. Em **Preferências da IA e
+IA*, o *Tempo de permanência imóvel* (3–15 s), a *Sensibilidade de movimento
+inicial*, o *Tempo de presença da ave* (`PRESENCE_GRACE_SECONDS`) e o *Intervalo
+mínimo entre alertas* (`ALERT_COOLDOWN_SECONDS`) — os dois últimos aplicados ao
+vivo no validador de zonas, sem reiniciar as câmeras. O perfil recomendado já vem
+**ativo por padrão** (confiança `0.22`, permanência `10 s`, movimento `0.80`),
+entregando alta sensibilidade sem ajustes manuais. A **regra anti-spam** (mesma
+ave = mesmo evento) atua de forma transparente: enquanto a ave permanece no
+comedouro, o Alaris segue rastreando, mas não cria novos alertas/registros; um
+novo evento só nasce após a ave sair por completo da zona e outra pousar. A mesma
+tela traz a **Visão Noturna (Infravermelho)**: modo automático/sempre/desligado, o
+limiar de luminosidade e a opção de monitorar a fauna noturna além de aves. Em
+**Preferências da IA e
 alertas** ficam os limites de notificação, gravação pré/pós-detecção e o
 liga/desliga de notificações. Tudo é aplicado em tempo de execução, sem reiniciar
 o backend.
@@ -898,7 +902,7 @@ aviawatch/
 | POST | `/api/analytics/timelapses/generate` | Gera sob demanda o resumo de um dia (`day` opcional; `force` regera) |
 | DELETE | `/api/analytics/timelapses/{arquivo}` | Remove um resumo do dia |
 | GET | `/api/audio-detections?limit=30` | Detecções sonoras recentes, confiança e visita visual associada |
-| GET | `/api/audio-detections/page?limit=5&offset=` | Página de detecções sonoras para a aba **Detecção Sonora** (blocos de 5, paginação fluida) |
+| GET | `/api/audio-detections/page?limit=5&offset=` | Página de detecções sonoras para a aba **Detecção Sonora** (blocos de 5, carregamento incremental pelo botão "Ver mais…") |
 | GET | `/api/audio-detections/status` | Estado da análise BirdNET e câmeras monitoradas |
 | GET | `/api/audio-detections/devices` | Dispositivos de áudio de entrada disponíveis (microfones) |
 | GET | `/api/audio-detections/{id}/audio` | Clipe de áudio (WAV) da detecção, para o player integrado ao card |

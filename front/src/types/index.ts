@@ -648,6 +648,10 @@ export type Calibration = {
   night_vision_threshold: number;
   /** Expansão opcional das classes detectadas (fauna noturna além de aves). */
   night_fauna_enabled: boolean;
+  /** Ausência (s) necessária para encerrar a presença da mesma ave (anti-spam). */
+  presence_grace_seconds: number;
+  /** Piso global do cooldown (s) entre alertas na mesma zona. */
+  alert_cooldown_seconds: number;
   profile: CalibrationProfile;
   recommended_profile: CalibrationProfile;
 };
@@ -660,6 +664,8 @@ export type CalibrationUpdate = {
   night_vision_mode?: NightVisionMode;
   night_vision_threshold?: number;
   night_fauna_enabled?: boolean;
+  presence_grace_seconds?: number;
+  alert_cooldown_seconds?: number;
 };
 
 export type AudioDetection = {

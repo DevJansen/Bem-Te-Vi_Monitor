@@ -361,6 +361,11 @@ class CalibrationOut(BaseModel):
     night_vision_threshold: float = Field(default=60.0, ge=0.0, le=255.0)
     # Expansão opcional das classes detectadas (fauna noturna além de aves).
     night_fauna_enabled: bool = False
+    # Anti-spam temporal: ausência (s) necessária para ENCERRAR a presença da
+    # mesma ave (mesma ave = mesmo evento). Ajustável pelo painel.
+    presence_grace_seconds: float = Field(default=30.0, ge=0.0, le=600.0)
+    # Piso global do cooldown (s) entre alertas na mesma zona.
+    alert_cooldown_seconds: float = Field(default=30.0, ge=0.0, le=600.0)
     # Perfil atualmente selecionado.
     profile: CalibrationProfile = CalibrationProfile.CUSTOM
     # Perfil sugerido como ponto de partida para o usuário.
@@ -378,6 +383,9 @@ class CalibrationUpdate(BaseModel):
     night_vision_mode: NightVisionMode | None = None
     night_vision_threshold: float | None = Field(default=None, ge=0.0, le=255.0)
     night_fauna_enabled: bool | None = None
+    # Anti-spam temporal (presença/cooldown), independentes do perfil.
+    presence_grace_seconds: float | None = Field(default=None, ge=0.0, le=600.0)
+    alert_cooldown_seconds: float | None = Field(default=None, ge=0.0, le=600.0)
 
 
 class AudioDetectionOut(BaseModel):

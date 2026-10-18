@@ -406,9 +406,16 @@ export function GalleryGrid({
                     </span>
                   ) : null}
                   {/* Recorte focado da ave (close-up tratado pelo Alaris Core):
-                      permite ver a plumagem em detalhe sem abrir o registro. */}
+                      clicar nele abre **direto** a ficha ornitológica da IA
+                      externa daquela ave — sem passo extra. */}
                   {visit.metadata?.crop_path && !cropFailures.has(visit.id) ? (
-                    <span className="pointer-events-none absolute bottom-2 left-2 flex flex-col items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setConsultVisit(visit)}
+                      title="Abrir a ficha ornitológica (IA) desta ave"
+                      aria-label={`Abrir a ficha ornitológica da IA para ${formatSpeciesLabel(visit.species)}`}
+                      className="group/crop absolute bottom-2 left-2 flex flex-col items-center gap-1 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+                    >
                       <img
                         src={visitCropUrl(visit.id)}
                         alt={`Recorte focado da ave: ${formatSpeciesLabel(visit.species)}`}
@@ -417,13 +424,12 @@ export function GalleryGrid({
                             new Set(current).add(visit.id),
                           )
                         }
-                        title="Recorte focado da ave (close-up tratado pelo Alaris Core)"
-                        className="h-16 w-16 rounded-xl border-2 border-emerald-400/50 bg-black object-cover shadow-xl"
+                        className="h-16 w-16 rounded-xl border-2 border-emerald-400/50 bg-black object-cover shadow-xl transition group-hover/crop:scale-105 group-hover/crop:border-violet-400"
                       />
-                      <span className="rounded-full bg-black/70 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-200 backdrop-blur">
-                        Recorte
+                      <span className="rounded-full bg-black/70 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-200 backdrop-blur transition group-hover/crop:text-violet-200">
+                        Recorte · IA
                       </span>
-                    </span>
+                    </button>
                   ) : null}
                 </div>
                 <div className="space-y-1 p-3">

@@ -67,10 +67,11 @@ export function VisitDeepDiveModal({
   // Ficha ornitológica da IA externa (consulta profunda) aberta sobre o modal.
   const [consultOpen, setConsultOpen] = useState(false);
 
-  // Sempre reabre no quadro HD e fecha com a tecla Esc.
+  // Abre já no **recorte da ave** (close-up, mais legível) quando ele existir;
+  // caso contrário, no quadro HD. Fecha com a tecla Esc.
   useEffect(() => {
     if (visit) {
-      setImageView("frame");
+      setImageView(visit.metadata?.crop_path ? "crop" : "frame");
       setCropFailed(false);
       setConsultOpen(false);
     }
