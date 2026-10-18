@@ -82,7 +82,7 @@ class LaudoOrnithologico:
         pdf.set_text_color(255, 255, 255)
         pdf.set_font("Arial", "B", 18)
         pdf.set_xy(10, 8)
-        pdf.cell(0, 8, "Laudo Ornitológico Bem-Ti-Vi", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 8, "Laudo Ornitológico Bem-Te-Vi", new_x="LMARGIN", new_y="NEXT")
         pdf.set_font("Arial", "", 10)
         pdf.cell(
             0,
@@ -285,7 +285,7 @@ class LaudoOrnithologico:
         pdf.cell(
             0,
             10,
-            "Bem-Ti-Vi - Plataforma de Observação de Aves | Laudo gerado automaticamente",
+            "Bem-Te-Vi - Plataforma de Observação de Aves | Laudo gerado automaticamente",
             align="C",
         )
 

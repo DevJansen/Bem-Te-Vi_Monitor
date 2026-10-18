@@ -130,7 +130,7 @@ def get_report_pdf():
             media_type="application/pdf",
             headers={
                 "Content-Disposition": (
-                    "attachment; filename=laudo-ornitologico-aviawatch.pdf"
+                    "attachment; filename=laudo-ornitologico-bem-te-vi.pdf"
                 )
             },
         )

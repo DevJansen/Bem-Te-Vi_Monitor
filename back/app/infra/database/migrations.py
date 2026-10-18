@@ -1,4 +1,4 @@
-"""Versioned SQLite migrations for Bem-Ti-Vi."""
+"""Versioned SQLite migrations for Bem-Te-Vi."""
 
 from __future__ import annotations
 

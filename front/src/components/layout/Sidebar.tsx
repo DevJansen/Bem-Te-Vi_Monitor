@@ -92,7 +92,7 @@ function BrandBlock({ compact = false }: { compact?: boolean }) {
       </div>
       <div>
         <p className="font-display text-base font-bold tracking-tight text-[var(--color-text-primary)]">
-          Bem-Ti-Vi
+          Bem-Te-Vi
         </p>
         {!compact ? (
           <p className="text-xs text-[var(--color-text-muted)]">Monitoramento local</p>

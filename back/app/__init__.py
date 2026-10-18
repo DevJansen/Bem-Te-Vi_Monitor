@@ -1,1 +1,1 @@
-"""Bem-Ti-Vi backend application package."""
+"""Bem-Te-Vi backend application package."""

@@ -42,7 +42,7 @@ function normalizarRotulo(valor: string): string {
 
 /**
  * Rótulos genéricos do detector (YOLO/BirdNET) que significam apenas
- * "ave não identificada". A nomenclatura oficial do Bem-Ti-Vi é
+ * "ave não identificada". A nomenclatura oficial do Bem-Te-Vi é
  * **"Pássaro Desconhecido"** — nunca "Ave Genérica" nem "Bird".
  *
  * As chaves estão já sem acento (ver `normalizarRotulo`).

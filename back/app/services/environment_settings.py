@@ -261,7 +261,7 @@ def test_environment_connection(
             )
 
         if not telegram.send_message(
-            "Bem-Ti-Vi — teste de alerta.\n"
+            "Bem-Te-Vi — teste de alerta.\n"
             "Se você recebeu esta mensagem, os alertas estão funcionando!"
         ):
             raise RuntimeError(

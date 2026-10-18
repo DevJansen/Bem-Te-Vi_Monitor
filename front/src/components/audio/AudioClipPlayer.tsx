@@ -21,7 +21,7 @@ function formatSeconds(value: number): string {
  * Player compacto do clipe de áudio de uma detecção sonora.
  *
  * Construído sobre o elemento `<audio>` nativo, mas com controles próprios no
- * estilo *dark* do Bem-Ti-Vi: botão play/pause, barra de progresso arrastável,
+ * estilo *dark* do Bem-Te-Vi: botão play/pause, barra de progresso arrastável,
  * volume com mute e tempos. O som começa sempre em volume moderado e sem
  * autoplay (política dos navegadores) — o observador escolhe quando ouvir.
  */

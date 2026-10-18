@@ -1,14 +1,14 @@
-# Bem-Ti-Vi — Guia do Usuário
+# Bem-Te-Vi — Guia do Usuário
 
-> **Para quem quer entender e usar o Bem-Ti-Vi sem precisar entender de programação.**
+> **Para quem quer entender e usar o Bem-Te-Vi sem precisar entender de programação.**
 >
 > (Se você é desenvolvedor e quer detalhes técnicos de instalação e configuração, veja o [`README.md`](README.md).)
 
 ---
 
-## O que é o Bem-Ti-Vi?
+## O que é o Bem-Te-Vi?
 
-O Bem-Ti-Vi é um **vigia de pássaros automático** para o seu computador. Você aponta uma
+O Bem-Te-Vi é um **vigia de pássaros automático** para o seu computador. Você aponta uma
 câmera (uma webcam ou uma câmera IP) para um comedouro, bebedouro ou cantinho onde os
 passarinhos costumam aparecer, e o sistema **sozinho**:
 
@@ -61,7 +61,7 @@ quando você pede especificamente para uma inteligência artificial adivinhar o 
 
 ---
 
-## As telas do Bem-Ti-Vi
+## As telas do Bem-Te-Vi
 
 O menu lateral tem sete telas. Vamos explicar cada uma como se estivéssemos juntos:
 
@@ -95,7 +95,7 @@ O menu lateral tem sete telas. Vamos explicar cada uma como se estivéssemos jun
 Onde você **cadastra e cuida** das câmeras.
 
 - **Adicionar câmera:** escolha o tipo (webcam `USB`, ou câmera IP `RTSP`/`ONVIF`) e preencha o endereço e, se houver, usuário e senha.
-- **Localização global (opcional):** para câmeras em outros países (lives do YouTube, streams externos), abra **Localização & fuso horário**, informe a **cidade/país** e toque em **Buscar**. O Bem-Ti-Vi descobre as coordenadas e o fuso sozinho — e o card da câmera passa a mostrar o **clima e o horário locais do jardim**.
+- **Localização global (opcional):** para câmeras em outros países (lives do YouTube, streams externos), abra **Localização & fuso horário**, informe a **cidade/país** e toque em **Buscar**. O Bem-Te-Vi descobre as coordenadas e o fuso sozinho — e o card da câmera passa a mostrar o **clima e o horário locais do jardim**.
 - **Ligar/desligar** cada câmera com um toque.
 - **Controles no cartão (ao vivo):** ligar/desligar a **IA (Alaris)**, ouvir o **áudio
   ao vivo** da câmera e ativar/desativar a **Bioacústica (BirdNET)** — em cartões
@@ -158,7 +158,7 @@ No topo da Galeria há **quatro abas**, separando cada tipo de mídia:
 
 #### 🎞️ Resumos do Dia (Time-Lapse)
 
-Na aba **Resumos do Dia (Time-Lapse)**, o Bem-Ti-Vi junta os clipes de cada dia em **um
+Na aba **Resumos do Dia (Time-Lapse)**, o Bem-Te-Vi junta os clipes de cada dia em **um
 único vídeo acelerado**, para você rever os melhores momentos em segundos.
 
 - o vídeo do dia já aparece pronto no player, com a data, a quantidade de clipes e a duração;
@@ -269,7 +269,7 @@ Onde você ajusta o comportamento. Tem cinco blocos:
 
 ### 🔍 Como o sistema "vê" o pássaro?
 
-O Bem-Ti-Vi usa uma inteligência artificial chamada **YOLOv8**, treinada para reconhecer
+O Bem-Te-Vi usa uma inteligência artificial chamada **YOLOv8**, treinada para reconhecer
 objetos. Ele é ajustado para procurar apenas a classe **"pássaro"**. Quando detecta um, ele:
 
 1. marca uma caixa ao redor do pássaro;
@@ -285,7 +285,7 @@ Dá para ajustar o quanto a IA deve ser "confiante" para contar um pássaro (vej
 
 ### 📸 A foto automática (melhor quadro em HD)
 
-Você não precisa escolher o melhor momento: o Bem-Ti-Vi faz isso por você. Entre os
+Você não precisa escolher o melhor momento: o Bem-Te-Vi faz isso por você. Entre os
 cerca de **6 segundos** de gravação de cada visita, ele analisa todos os quadros em
 que o pássaro aparece e fica com o **mais nítido** — evitando fotos borradas de asa
 em movimento — e ainda realça o contraste e reduz o ruído da imagem. Na Galeria,
@@ -297,7 +297,7 @@ procurar o melhor instante manualmente.
 
 ### 🧠 A IA que conta bando, entende comportamento e conhece as espécies
 
-O "cérebro" do Bem-Ti-Vi ficou bem mais esperto. Agora ele:
+O "cérebro" do Bem-Te-Vi ficou bem mais esperto. Agora ele:
 
 - **conta quantos pássaros** estão no comedouro ao mesmo tempo. Se chegarem 3
   cambacicas e 2 saíras juntas, ele registra isso e mostra um selo **👥 N** na foto;
@@ -312,10 +312,10 @@ O "cérebro" do Bem-Ti-Vi ficou bem mais esperto. Agora ele:
   — ou seja, aceita detectar o pássaro mesmo com a imagem mais apagada, para não
   perder o registro;
 - **avisa quando uma ave volta**: se uma espécie que você não via há **mais de 6
-  meses** aparecer de novo, o Bem-Ti-Vi cria um **alerta de reaparecimento** (uma
+  meses** aparecer de novo, o Bem-Te-Vi cria um **alerta de reaparecimento** (uma
   "anomalia"), que pode ser visto na lista de anomalias da API/painel.
 
-**Para que serve:** transformar o Bem-Ti-Vi num verdadeiro caderno de campo
+**Para que serve:** transformar o Bem-Te-Vi num verdadeiro caderno de campo
 automático — não só "tem um pássaro", mas *quantos*, *fazendo o quê* e *que
 espécie* é, com foco em aves raras e migratórias.
 
@@ -325,7 +325,7 @@ espécie* é, com foco em aves raras e migratórias.
 
 ### 🌙 Visão noturna e monitoramento 24 horas
 
-O Bem-Ti-Vi também **enxerga no escuro**. Muitas câmeras têm visão infravermelha
+O Bem-Te-Vi também **enxerga no escuro**. Muitas câmeras têm visão infravermelha
 (ficam em preto e branco à noite); o sistema realça o contraste dessas imagens
 antes de procurar o pássaro, então ele continua detectando mesmo com pouca luz.
 
@@ -348,7 +348,7 @@ Como você percebe que a visão noturna está ligada:
 
 ### 🔊 Reconhecimento de canto (BirdNET)
 
-Além da visão, o Bem-Ti-Vi pode **escutar** o ambiente e identificar o pássaro pelo canto,
+Além da visão, o Bem-Te-Vi pode **escutar** o ambiente e identificar o pássaro pelo canto,
 usando um sistema chamado **BirdNET**. É opcional e precisa ser ativado nas Configurações.
 
 - Funciona com o **microfone** da câmera USB ou com um microfone do computador.
@@ -364,7 +364,7 @@ usando um sistema chamado **BirdNET**. É opcional e precisa ser ativado nas Con
 
 ### 🤖 Identificação por IA externa (perguntar o nome)
 
-Quando você clica em **🤖 Perguntar à IA Externa** numa foto, o Bem-Ti-Vi envia **aquela foto**
+Quando você clica em **🤖 Perguntar à IA Externa** numa foto, o Bem-Te-Vi envia **aquela foto**
 para um serviço de inteligência artificial (como a OpenAI, OpenRouter, Groq, Ollama ou Gemini)
 e pergunta: *"Que espécie é essa?"* Ele responde com o nome comum e o científico.
 
@@ -372,10 +372,10 @@ e pergunta: *"Que espécie é essa?"* Ele responde com o nome comum e o científ
 
 - Só acontece **quando você clica**. Nada é enviado sozinho.
 - É preciso **configurar uma chave** de algum provedor (nas Configurações).
-- O Bem-Ti-Vi aceita vários provedores. No card "IA Externa" você escolhe o **provedor** numa
+- O Bem-Te-Vi aceita vários provedores. No card "IA Externa" você escolhe o **provedor** numa
   lista e o **modelo** é sugerido automaticamente — não precisa digitar endereço nenhum.
 - A foto fica guardada no seu computador e é enviada apenas durante essa consulta.
-- O Bem-Ti-Vi envia a **foto tratada** (a melhor versão da ave, já realçada e recortada).
+- O Bem-Te-Vi envia a **foto tratada** (a melhor versão da ave, já realçada e recortada).
 - Ao identificar, a espécie é **cadastrada sozinha no Catálogo (Life List)** e a visita já fica
   associada a ela — assim a ave aparece no Álbum de Conquistas com a melhor foto disponível.
 - Depois de identificada, use **🔎 Ficha ornitológica (IA)** (na Galeria) ou
@@ -388,12 +388,12 @@ e pergunta: *"Que espécie é essa?"* Ele responde com o nome comum e o científ
   ave (ou abra a ficha técnica dela e toque em **🔎 Ficha ornitológica (IA)**). Aqui a
   consulta parte da espécie cadastrada e da **foto de referência**, e o resultado fica
   guardado na própria espécie.
-- Se a espécie **já estava** no seu catálogo, o Bem-Ti-Vi **não duplica** o card: apenas
+- Se a espécie **já estava** no seu catálogo, o Bem-Te-Vi **não duplica** o card: apenas
   soma mais uma visita e guarda a nova foto/vídeo naquela espécie.
 
 ### 🌦️ Clima e estatísticas
 
-O Bem-Ti-Vi consulta o tempo no seu endereço (via Open-Meteo) e cruza com as visitas.
+O Bem-Te-Vi consulta o tempo no seu endereço (via Open-Meteo) e cruza com as visitas.
 Assim você descobre, por exemplo, se choveu mais no dia em que os pássaros sumiram.
 
 **Câmeras em outros países:** se você cadastrou a localização de uma câmera
@@ -495,12 +495,12 @@ Não automaticamente. Ele detecta e registra. Para saber o nome, você pode (a) 
 Sim, via RTSP ou ONVIF. Basta informar o endereço e as credenciais.
 
 **Funciona de noite, com a câmera em preto e branco (infravermelho)?**
-Sim. O Bem-Ti-Vi realça o contraste dessas imagens escuras e continua detectando. Na tela
+Sim. O Bem-Te-Vi realça o contraste dessas imagens escuras e continua detectando. Na tela
 **Configurações** você ainda pode ligar a **Visão Noturna** e até monitorar a fauna noturna
 (gatos, cachorros) além de aves.
 
 **Apaguei sem querer. Como recuperei?**
-Se o arquivo estiver na Lixeira do computador, você pode restaurá-lo. Se excluiu dentro do Bem-Ti-Vi, o registro e os arquivos locais são removidos.
+Se o arquivo estiver na Lixeira do computador, você pode restaurá-lo. Se excluiu dentro do Bem-Te-Vi, o registro e os arquivos locais são removidos.
 
 **O que é a "Lista de Vida"?**
 É uma lista de todas as espécies que você já registrou. Cada nova espécie desbloqueada vira uma "conquista".
@@ -519,7 +519,7 @@ Se o arquivo estiver na Lixeira do computador, você pode restaurá-lo. Se exclu
 
 ## Segurança e privacidade
 
-- O Bem-Ti-Vi foi feito para rodar **só no seu computador**.
+- O Bem-Te-Vi foi feito para rodar **só no seu computador**.
 - As chaves (Telegram, Discord, IA) são guardadas num arquivo local e **nunca são mostradas** na tela — a tela exibe apenas um começo mascarado, como `AIza...****`.
 - O painel de configuração só aceita acesso do próprio computador (não funciona pela internet).
 - Por padrão, **toda** a API só responde ao seu computador. Para acessar de outro aparelho seria preciso mudar uma opção avançada (`ALLOW_REMOTE_ACCESS`) — e o recomendado, nesse caso, é usar uma VPN.

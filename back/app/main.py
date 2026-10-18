@@ -1,4 +1,4 @@
-"""Bem-Ti-Vi API — entry point."""
+"""Bem-Te-Vi API — entry point."""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 instalar_sanitizador()
-logger = logging.getLogger("aviawatch")
+logger = logging.getLogger("bem-te-vi")
 
 
 @asynccontextmanager
@@ -95,7 +95,7 @@ async def lifespan(app: FastAPI):
         supervisor.sync_from_db()
         audio_analysis.start()
         logger.info(
-            "Bem-Ti-Vi ready — data dir=%s (local only, no cloud sync)",
+            "Bem-Te-Vi ready — data dir=%s (local only, no cloud sync)",
             settings.app_data_dir,
         )
     except Exception:
@@ -109,7 +109,7 @@ async def lifespan(app: FastAPI):
     app.state.settings = settings
     yield
 
-    logger.info("Shutting down Bem-Ti-Vi…")
+    logger.info("Shutting down Bem-Te-Vi…")
     retention_worker.stop()
     try:
         timelapse_scheduler.stop()
@@ -143,7 +143,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Bem-Ti-Vi",
+    title="Bem-Te-Vi",
     description="Sistema local de monitoramento de avifauna por IA",
     version="0.2.0",
     lifespan=lifespan,
@@ -210,7 +210,7 @@ async def root() -> str:
 <head>
   <meta charset="utf-8" />
   <meta http-equiv="refresh" content="0;url=http://127.0.0.1:5173" />
-  <title>Bem-Ti-Vi API</title>
+  <title>Bem-Te-Vi API</title>
   <style>
     body { font-family: Segoe UI, sans-serif; background:#0a0f0d; color:#e8f5ef;
            display:flex; min-height:100vh; align-items:center; justify-content:center; }
@@ -220,7 +220,7 @@ async def root() -> str:
 </head>
 <body>
   <div class="box">
-    <h1>Bem-Ti-Vi — API</h1>
+    <h1>Bem-Te-Vi — API</h1>
     <p>Esta é a porta da <strong>API</strong> (8000), não o painel.</p>
     <p>Abra o painel em <a href="http://127.0.0.1:5173">http://127.0.0.1:5173</a></p>
     <p>Docs: <a href="/docs">/docs</a></p>
@@ -231,12 +231,12 @@ async def root() -> str:
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok", "service": "aviawatch"}
+    return {"status": "ok", "service": "bem-te-vi"}
 
 
 @app.get("/api/health")
 async def api_health() -> dict[str, str]:
-    return {"status": "ok", "service": "aviawatch-api"}
+    return {"status": "ok", "service": "bem-te-vi-api"}
 
 
 def run() -> None:

@@ -1,4 +1,4 @@
-"""Smoke test das rotas usadas pelo frontend Bem-Ti-Vi."""
+"""Smoke test das rotas usadas pelo frontend Bem-Te-Vi."""
 
 from __future__ import annotations
 

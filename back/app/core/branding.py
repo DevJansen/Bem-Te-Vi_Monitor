@@ -1,4 +1,4 @@
-"""Identidade do motor de inteligência do Bem-Ti-Vi: **Alaris**.
+"""Identidade do motor de inteligência do Bem-Te-Vi: **Alaris**.
 
 Toda a telemetria, os metadados de visita e a interface exibem o sistema sob o
 nome **Alaris** (ex.: ``\"engine\": \"Alaris Core v1.0\"``), para que o produto

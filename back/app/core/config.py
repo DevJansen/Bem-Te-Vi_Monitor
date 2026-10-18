@@ -16,7 +16,7 @@ DEFAULT_APP_DATA_DIR = BASE_DIR / "app-data"
 
 
 class Settings(BaseModel):
-    app_name: str = "Bem-Ti-Vi"
+    app_name: str = "Bem-Te-Vi"
     port: int = Field(default=8000)
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
@@ -221,7 +221,7 @@ class Settings(BaseModel):
 
     @property
     def db_path(self) -> Path:
-        return self.app_data_dir / "aviawatch.db"
+        return self.app_data_dir / "bem-te-vi.db"
 
     @property
     def captures_dir(self) -> Path:

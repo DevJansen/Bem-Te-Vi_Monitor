@@ -3,7 +3,7 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 
 echo ========================================
-echo   Bem-Ti-Vi - inicializacao local
+echo   Bem-Te-Vi - inicializacao local
 echo ========================================
 echo.
 
@@ -98,8 +98,8 @@ echo.
 echo [start] Iniciando uvicorn ^(API^) e Vite ^(UI^) simultaneamente...
 echo.
 
-start "Bem-Ti-Vi Backend" /D "%~dp0back" cmd /k "call venv\Scripts\activate.bat && python -m uvicorn app.main:app --host 127.0.0.1 --port 8000"
-start "Bem-Ti-Vi Frontend" /D "%~dp0front" cmd /k "npm run dev -- --host 127.0.0.1 --port 5173"
+start "Bem-Te-Vi Backend" /D "%~dp0back" cmd /k "call venv\Scripts\activate.bat && python -m uvicorn app.main:app --host 127.0.0.1 --port 8000"
+start "Bem-Te-Vi Frontend" /D "%~dp0front" cmd /k "npm run dev -- --host 127.0.0.1 --port 5173"
 
 echo [check] Aguardando API em http://127.0.0.1:8000/api/health ...
 set /a _tries=0
@@ -109,7 +109,7 @@ set /a _tries+=1
 powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:8000/api/health' -UseBasicParsing -TimeoutSec 2; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
 if not errorlevel 1 goto api_ok
 if %_tries% GEQ 40 (
-  echo [aviso] A API ainda nao respondeu. Veja a janela "Bem-Ti-Vi Backend".
+  echo [aviso] A API ainda nao respondeu. Veja a janela "Bem-Te-Vi Backend".
   goto wait_front
 )
 ping -n 3 127.0.0.1 >nul
@@ -127,7 +127,7 @@ set /a _tries+=1
 powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:5173/' -UseBasicParsing -TimeoutSec 2; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
 if not errorlevel 1 goto ui_ok
 if %_tries% GEQ 30 (
-  echo [aviso] O frontend ainda nao respondeu. Veja a janela "Bem-Ti-Vi Frontend".
+  echo [aviso] O frontend ainda nao respondeu. Veja a janela "Bem-Te-Vi Frontend".
   goto print_urls
 )
 ping -n 3 127.0.0.1 >nul
@@ -140,7 +140,7 @@ start "" "http://127.0.0.1:5173"
 :print_urls
 echo.
 echo ========================================
-echo   Bem-Ti-Vi em execucao
+echo   Bem-Te-Vi em execucao
 echo ========================================
 echo   PAINEL ^(abra este^):  http://127.0.0.1:5173
 echo   Backend API:          http://127.0.0.1:8000/api/health
@@ -151,8 +151,8 @@ echo IMPORTANTE: o painel e a porta 5173 ^(nao a 8000^).
 echo A porta 8000 e so a API.
 echo.
 echo Duas janelas precisam ficar abertas:
-echo   - Bem-Ti-Vi Backend
-echo   - Bem-Ti-Vi Frontend
+echo   - Bem-Te-Vi Backend
+echo   - Bem-Te-Vi Frontend
 echo.
 pause
 endlocal

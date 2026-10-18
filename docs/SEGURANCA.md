@@ -1,4 +1,4 @@
-# Bem-Ti-Vi — Relatório de Auditoria de Segurança e Proteção de Dados
+# Bem-Te-Vi — Relatório de Auditoria de Segurança e Proteção de Dados
 
 **Escopo:** Backend (FastAPI + YOLOv8 + SQLite) e Frontend (React + Vite).
 **Foco:** Gestão de segredos, higiene do Git, OWASP Top 10 e conformidade com
@@ -102,7 +102,7 @@ back/app-data/*
 **2.3 — Vazamento no histórico.** Foram commitados em `f133209`:
 
 ```
-back/app-data/aviawatch.db (+ -wal, -shm)
+back/app-data/bem-te-vi.db (+ -wal, -shm)
 back/app-data/calibration.json
 back/app-data/captures/clips/*.mp4
 back/app-data/captures/thumbs/*.jpg

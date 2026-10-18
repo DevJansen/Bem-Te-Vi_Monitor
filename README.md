@@ -1,14 +1,12 @@
-# Bem-Ti-Vi
+# Bem-Te-Vi
 
 Sistema **local** de monitoramento de avifauna por IA.
 
-> **Sobre o nome:** o projeto nasceu como *AviaWatch* e foi rebatizado de
-> **Bem-Ti-Vi** — em homenagem ao pássaro que "avisa" quando chega visita ao
-> jardim. O repositório no GitHub e a pasta local continuam com o nome antigo
-> (`AviaWatch` / `aviawatch`) apenas por compatibilidade; o **motor de IA**
-> segue assinando como **Alaris Core**.
+> **Sobre o nome:** o projeto nasceu como *AviaWatch* e hoje se chama
+> **Bem-Te-Vi** — em homenagem ao pássaro que "avisa" quando chega visita ao
+> jardim. O **motor de IA** segue assinando como **Alaris Core**.
 
-O Bem-Ti-Vi recebe vídeo de câmeras USB, RTSP, ONVIF, HLS, HTTP ou WebRTC —
+O Bem-Te-Vi recebe vídeo de câmeras USB, RTSP, ONVIF, HLS, HTTP ou WebRTC —
 inclusive streams externos ao vivo (de outras casas/locais remotos) —, detecta
 aves com YOLOv8 e registra visitas em SQLite. O painel web permite desenhar zonas
 de inclusão e exclusão por câmera, consultar snapshots e clipes e, opcionalmente,
@@ -46,11 +44,11 @@ npm --version
 
 ## Instalação e execução rápida (Windows) — `start.bat`
 
-O jeito mais simples de subir o Bem-Ti-Vi:
+O jeito mais simples de subir o Bem-Te-Vi:
 
 ### Passo 1 — Abrir a pasta do projeto
 
-No Explorador de Arquivos, vá até a pasta `aviawatch` (onde estão `start.bat`, `back\` e `front\`).
+No Explorador de Arquivos, vá até a pasta `Bem-Te-Vi` (onde estão `start.bat`, `back\` e `front\`).
 
 ### Passo 2 — (Opcional) Configurar integrações
 
@@ -178,7 +176,7 @@ backend.
   correspondente em `TELEGRAM_CHAT_ID`.
 - **Discord:** nas configurações do servidor/canal, crie um webhook em
   **Integrações → Webhooks** e guarde a URL completa em `DISCORD_WEBHOOK_URL`.
-- **IA externa:** use a chave do provedor de sua preferência. O Bem-Ti-Vi aceita
+- **IA externa:** use a chave do provedor de sua preferência. O Bem-Te-Vi aceita
   dois modos:
   - **Google Gemini** (`AI_EXTERNAL_PROVIDER=google`): usa o **endpoint oficial**
     do Google Generative Language
@@ -201,7 +199,7 @@ se houver suspeita de exposição.
 Dê um duplo clique em `start.bat`, ou no Prompt:
 
 ```bat
-cd caminho\para\aviawatch
+cd caminho\para\Bem-Te-Vi
 start.bat
 ```
 
@@ -218,8 +216,8 @@ O script irá, nesta ordem:
 
 Duas janelas de console serão abertas:
 
-- `Bem-Ti-Vi Backend`
-- `Bem-Ti-Vi Frontend`
+- `Bem-Te-Vi Backend`
+- `Bem-Te-Vi Frontend`
 
 ### Passo 4 — Abrir o painel
 
@@ -233,7 +231,7 @@ O `start.bat` tenta abrir o navegador sozinho. Se não abrir, use:
 
 ### Passo 5 — Encerrar
 
-Feche as janelas `Bem-Ti-Vi Backend` e `Bem-Ti-Vi Frontend`, ou pressione `Ctrl+C` em cada uma.
+Feche as janelas `Bem-Te-Vi Backend` e `Bem-Te-Vi Frontend`, ou pressione `Ctrl+C` em cada uma.
 
 > Na **primeira execução**, o download do modelo YOLO (`yolov8n.pt`) e dos pacotes Python/Node pode demorar vários minutos.
 
@@ -246,7 +244,7 @@ Use estes passos se preferir não usar o `start.bat`.
 ### Backend (Python)
 
 ```bat
-cd aviawatch\back
+cd Bem-Te-Vi\back
 python -m venv venv
 venv\Scripts\activate
 python -m pip install --upgrade pip
@@ -264,7 +262,7 @@ A API fica em http://127.0.0.1:8000 — docs em http://127.0.0.1:8000/docs
 Em **outro** terminal:
 
 ```bat
-cd aviawatch\front
+cd Bem-Te-Vi\front
 npm install
 npm run dev -- --host 127.0.0.1 --port 5173
 ```
@@ -299,7 +297,7 @@ Pelo front (com Vite rodando), as mesmas rotas passam pelo proxy:
 - http://127.0.0.1:5173/api/health  
 - http://127.0.0.1:5173/api/stats  
 
-Se o painel mostrar “Não foi possível conectar à API”, confirme se a janela **Bem-Ti-Vi Backend** está aberta e sem erros.
+Se o painel mostrar “Não foi possível conectar à API”, confirme se a janela **Bem-Te-Vi Backend** está aberta e sem erros.
 
 ---
 
@@ -434,7 +432,7 @@ sem reiniciar o backend.
   (`openai`), usa-se a API de chat compatível com a OpenAI (`AI_EXTERNAL_BASE_URL`,
   `AI_EXTERNAL_MODEL`) — OpenAI, OpenRouter, Groq ou Ollama. Basta definir
   `AI_EXTERNAL_API_KEY`.
-- Ao identificar, o Bem-Ti-Vi **cadastra automaticamente a espécie no Catálogo
+- Ao identificar, o Bem-Te-Vi **cadastra automaticamente a espécie no Catálogo
   Local (Life List)** e associa a visita (a foto tratada vira a imagem de
   referência da espécie), sem gerar duplicatas. Pela API, o parâmetro
   `add_to_catalog=false` desativa esse cadastro automático.
@@ -461,7 +459,7 @@ sem reiniciar o backend.
 
 ### Detecção Sonora (aba dedicada)
 
-Além de ver, o Bem-Ti-Vi **escuta**. A aba **Detecção Sonora** reúne os cantos
+Além de ver, o Bem-Te-Vi **escuta**. A aba **Detecção Sonora** reúne os cantos
 identificados pelo **BirdNET** em **blocos de 5 itens**, carregados de forma
 **incremental** pelo botão **"Ver mais…"** (sem paginação numérica), e dá ações de
 curadoria a cada registro:
@@ -485,7 +483,7 @@ O mesmo painel aparece na **Galeria → aba "Áudios"**, mantendo **imagens/víd
 
 ### Montar resumos do dia (time-lapse)
 
-O Bem-Ti-Vi junta os clipes de um dia em um único vídeo acelerado — o **Resumo do
+O Bem-Te-Vi junta os clipes de um dia em um único vídeo acelerado — o **Resumo do
 Dia** — para rever os melhores momentos em segundos, sem assistir a cada gravação
 individual.
 
@@ -511,7 +509,7 @@ a geração fica indisponível (com aviso no log) e o restante do sistema segue 
 
 ### Monitorar 24 horas com visão noturna (infravermelho)
 
-O Bem-Ti-Vi continua enxergando no escuro. Quando a luminosidade cai (ou a
+O Bem-Te-Vi continua enxergando no escuro. Quando a luminosidade cai (ou a
 câmera entra em modo infravermelho e passa a entregar imagens em preto e branco),
 o backend realça o contraste e reduz o ruído de cada quadro **antes** da
 inferência do YOLOv8, ajudando a IA a identificar formas mesmo à noite.
@@ -555,7 +553,7 @@ cd back
 venv\Scripts\python.exe -m tools.exportar_modelo --formato onnx
 ```
 
-Com `YOLO_ACCELERATION=auto`, o Bem-Ti-Vi passa a usar o `.onnx`/`.engine`
+Com `YOLO_ACCELERATION=auto`, o Bem-Te-Vi passa a usar o `.onnx`/`.engine`
 automaticamente. Ajuste `YOLO_DEVICE`, `YOLO_HALF`, `YOLO_IMGSZ` e `YOLO_TTA`
 conforme o hardware. A telemetria do backend informa o backend em uso.
 
@@ -601,7 +599,7 @@ pelo UTC: uma visita às 10h na Costa Rica não aparece mais como "madrugada" no
 Brasil. Câmeras sem fuso cadastrado continuam usando o UTC (comportamento
 anterior, sem quebrar o histórico).
 
-**6. IA visível — Alaris Core.** O motor de IA do Bem-Ti-Vi assina como
+**6. IA visível — Alaris Core.** O motor de IA do Bem-Te-Vi assina como
 **Alaris Core v1.0** (a assinatura aparece em `GET /api/ai/status` e nos metadados
 de cada visita). O painel ganha um **Núcleo de IA** (widget futurista em Dark Mode
 com pulsos neon, selo "Potencializado por Alaris AI") que mostra em tempo real o
@@ -824,7 +822,7 @@ o backend.
 ## Estrutura do projeto
 
 ```
-aviawatch/
+Bem-Te-Vi/
 ├── back/                 # FastAPI + OpenCV + YOLOv8 + SQLite
 │   ├── app/
 │   │   ├── api/         # Analytics (resumo/distribuição por jardim)
@@ -1031,7 +1029,7 @@ espaço.
 | `python` não reconhecido | Reinstale o Python marcando “Add to PATH” e abra um terminal novo |
 | `npm` não reconhecido | Reinstale o Node.js LTS e abra um terminal novo |
 | Porta 8000 ou 5173 em uso | No PowerShell: `Get-NetTCPConnection -LocalPort 8000 -State Listen` e encerre o PID (`Stop-Process -Id <PID> -Force`). Depois rode `start.bat` de novo |
-| Front sem dados / 404 nas rotas | Confirme que a API em `:8000` é a do Bem-Ti-Vi atual (`/docs` deve listar `/api/visits`, `/api/stats`, `/api/settings`). Outro processo antigo na porta 8000 causa 404 |
+| Front sem dados / 404 nas rotas | Confirme que a API em `:8000` é a do Bem-Te-Vi atual (`/docs` deve listar `/api/visits`, `/api/stats`, `/api/settings`). Outro processo antigo na porta 8000 causa 404 |
 | Front sem dados | Confirme http://127.0.0.1:8000/api/health e a janela do backend |
 | Identificação externa indisponível | Confira `AI_EXTERNAL_API_KEY`, `AI_EXTERNAL_PROVIDER`, o modelo com suporte a visão e o acesso de rede ao provedor escolhido. No **Google Gemini** o provedor deve ser `google` (a URL base é ignorada); um **HTTP 404** indica que a chamada caiu numa rota padrão da OpenAI em vez do endpoint oficial do Google |
 | Importação de gravação rejeitada | Use MP4, AVI, MOV ou MKV com menos de 2 GB e associe o arquivo a uma câmera cadastrada |
@@ -1058,7 +1056,7 @@ espaço.
 - Cabeçalhos de segurança HTTP (CSP, `X-Frame-Options`, `nosniff` etc.) em todas as respostas  
 - Validação do cabeçalho `Host` (`ALLOWED_HOSTS`) contra Host Header Injection  
 - Consultas SQLite sempre parametrizadas e caminhos de mídia validados contra *path traversal*  
-- Sem telemetria do Bem-Ti-Vi  
+- Sem telemetria do Bem-Te-Vi  
 
 > A auditoria completa (achados, correções e remediação de histórico do Git) está em
 > [`docs/SEGURANCA.md`](docs/SEGURANCA.md).
