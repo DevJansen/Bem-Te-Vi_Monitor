@@ -36,6 +36,22 @@ def _exe_name(base: str) -> str:
     return f"{base}.exe" if os.name == "nt" else base
 
 
+def _bundled_ffmpeg() -> str | None:
+    """FFmpeg empacotado via pip (``imageio-ffmpeg``), usado como último recurso.
+
+    Garante que os recursos de áudio (BirdNET/bioacústica e enumeração de
+    dispositivos) funcionem mesmo quando o usuário não instalou o FFmpeg no
+    sistema. O pacote fornece apenas o ``ffmpeg`` — não o ``ffprobe``.
+    """
+    try:
+        import imageio_ffmpeg  # type: ignore
+
+        exe = imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:  # pragma: no cover - depende do ambiente de instalação
+        return None
+    return exe if exe and os.path.isfile(exe) else None
+
+
 def _search(base: str) -> str | None:
     """Procura um executável do FFmpeg em PATH, winget e pastas comuns."""
     exe = _exe_name(base)
@@ -55,6 +71,10 @@ def _search(base: str) -> str | None:
         candidate = os.path.join(directory, exe)
         if os.path.isfile(candidate):
             return candidate
+
+    # Último recurso: binário embutido no pacote Python (sem instalação no SO).
+    if base == "ffmpeg":
+        return _bundled_ffmpeg()
     return None
 
 

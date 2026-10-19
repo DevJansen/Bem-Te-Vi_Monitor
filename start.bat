@@ -2,66 +2,83 @@
 setlocal EnableExtensions
 cd /d "%~dp0"
 
+set "PY=back\venv\Scripts\python.exe"
+set "REQ_FILE=back\requirements.txt"
+set "REQ_STAMP=back\venv\.requirements.sha256"
+set "PKG_LOCK=front\package-lock.json"
+set "NPM_STAMP=front\node_modules\.package-lock.sha256"
+
 echo ========================================
 echo   Bem-Te-Vi - inicializacao local
 echo ========================================
 echo.
 
-REM --- Pre-requisitos ---
+REM =====================================================================
+REM  1. Pre-requisitos (Python 3.11+ e Node.js/npm no PATH)
+REM =====================================================================
 where python >nul 2>&1
-if errorlevel 1 (
-  echo [erro] Python nao encontrado no PATH.
-  echo        Instale Python 3.11+ em https://www.python.org/downloads/
-  echo        Marque a opcao "Add python.exe to PATH" na instalacao.
-  pause
-  exit /b 1
-)
+if errorlevel 1 goto :fail_python
+
+python -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)" >nul 2>&1
+if errorlevel 1 goto :fail_python_version
 
 where npm >nul 2>&1
-if errorlevel 1 (
-  echo [erro] npm / Node.js nao encontrado no PATH.
-  echo        Instale Node.js 20+ LTS em https://nodejs.org/
-  pause
-  exit /b 1
-)
+if errorlevel 1 goto :fail_npm
 
-REM --- Backend: venv ---
-if not exist "back\venv\Scripts\python.exe" (
+REM =====================================================================
+REM  2. Backend: ambiente virtual Python
+REM =====================================================================
+if not exist "%PY%" (
   echo [back] Criando ambiente virtual Python...
   python -m venv "back\venv"
-  if errorlevel 1 (
-    echo [erro] Falha ao criar venv.
-    pause
-    exit /b 1
-  )
+  if errorlevel 1 goto :fail_venv
 )
 
 call "back\venv\Scripts\activate.bat"
 
-REM Instala deps so se faltar pacote essencial (evita demora a cada start)
-back\venv\Scripts\python.exe -c "import fastapi,uvicorn,cv2,dotenv,requests,cryptography,numpy,multipart" >nul 2>&1
-if errorlevel 1 (
-  echo [back] Instalando dependencias Python ^(primeira vez pode demorar^)...
-  python -m pip install --upgrade pip
-  pip install -r "back\requirements.txt"
-  if errorlevel 1 (
-    echo [erro] Falha ao instalar dependencias do backend.
-    pause
-    exit /b 1
-  )
-) else (
-  echo [back] Dependencias Python OK.
-)
+REM =====================================================================
+REM  3. Backend: dependencias Python
+REM     Instala sempre que o requirements.txt mudar (comparacao por hash),
+REM     para que um "git pull" nunca deixe pacotes faltando.
+REM =====================================================================
+set "REQ_HASH="
+for /f "usebackq delims=" %%H in (`powershell -NoProfile -Command "if (Test-Path '%REQ_FILE%') { (Get-FileHash -Algorithm SHA256 '%REQ_FILE%').Hash }"`) do set "REQ_HASH=%%H"
+set "REQ_HASH_OLD="
+if exist "%REQ_STAMP%" set /p REQ_HASH_OLD=<"%REQ_STAMP%"
 
-REM ultralytics e opcional na subida da API; tenta instalar se faltar
-back\venv\Scripts\python.exe -c "import ultralytics" >nul 2>&1
-if errorlevel 1 (
-  echo [back] Instalando ultralytics ^(IA^)...
-  pip install "ultralytics>=8.3.0"
-  if errorlevel 1 (
-    echo [aviso] ultralytics nao instalou. A API sobe, mas a deteccao YOLO ficara off.
-  )
-)
+if not "%REQ_HASH%"=="" if /i "%REQ_HASH%"=="%REQ_HASH_OLD%" goto :backend_ok
+
+echo [back] Instalando/atualizando dependencias Python ^(a primeira vez pode demorar^)...
+"%PY%" -m pip install --upgrade pip
+"%PY%" -m pip install -r "%REQ_FILE%"
+if errorlevel 1 goto :fail_pip
+>"%REQ_STAMP%" echo %REQ_HASH%
+goto :backend_check
+
+:backend_ok
+echo [back] Dependencias Python OK.
+
+REM Sanidade: garante que os imports essenciais resolvem de fato.
+:backend_check
+"%PY%" -c "import fastapi, uvicorn, cv2, dotenv, requests, cryptography, numpy, multipart, pydantic, slowapi, fpdf, imageio_ffmpeg" >nul 2>&1
+if not errorlevel 1 goto :backend_ready
+
+echo [back] Dependencias incompletas detectadas; reinstalando...
+"%PY%" -m pip install -r "%REQ_FILE%"
+if errorlevel 1 goto :fail_pip
+>"%REQ_STAMP%" echo %REQ_HASH%
+
+"%PY%" -c "import fastapi, uvicorn, cv2, dotenv, requests, cryptography, numpy, multipart, pydantic, slowapi, fpdf, imageio_ffmpeg" >nul 2>&1
+if errorlevel 1 goto :fail_pip
+
+:backend_ready
+REM A IA de deteccao (ultralytics) e opcional na subida da API: sem ela o painel
+REM abre, mas a deteccao YOLO fica desativada. Avisa em vez de abortar.
+"%PY%" -c "import ultralytics" >nul 2>&1
+if not errorlevel 1 goto :backend_ultralytics_ok
+echo [aviso] ultralytics nao instalou. O painel abre, mas a deteccao YOLO ficara off.
+echo         Para tentar de novo: back\venv\Scripts\python.exe -m pip install ultralytics
+:backend_ultralytics_ok
 
 if not exist "back\.env" (
   if exist "back\.env.example" (
@@ -70,26 +87,45 @@ if not exist "back\.env" (
   )
 )
 
-REM --- Frontend ---
-if not exist "front\node_modules\vite" (
-  echo [front] Instalando dependencias Node.js ^(primeira vez^)...
-  pushd front
-  call npm install
-  if errorlevel 1 (
-    echo [erro] Falha ao instalar dependencias do frontend.
-    popd
-    pause
-    exit /b 1
-  )
-  popd
-) else (
-  echo [front] Dependencias Node.js OK.
-)
+REM FFmpeg: o sistema usa o do PATH/winget ou, se faltar, o embutido no pacote
+REM Python (imageio-ffmpeg). Este aviso e apenas informativo.
+where ffmpeg >nul 2>&1
+if errorlevel 1 echo [info] FFmpeg do sistema nao encontrado no PATH; usando o embutido (audio/BirdNET).
 
-REM --- Libera porta 8000 se outro processo estiver ocupando ---
+REM =====================================================================
+REM  4. Frontend: dependencias Node.js
+REM     Mesma logica: reinstala quando o package-lock.json mudar.
+REM =====================================================================
+set "PKG_HASH="
+for /f "usebackq delims=" %%H in (`powershell -NoProfile -Command "if (Test-Path '%PKG_LOCK%') { (Get-FileHash -Algorithm SHA256 '%PKG_LOCK%').Hash }"`) do set "PKG_HASH=%%H"
+set "PKG_HASH_OLD="
+if exist "%NPM_STAMP%" set /p PKG_HASH_OLD=<"%NPM_STAMP%"
+
+if not exist "front\node_modules" goto :npm_install
+if "%PKG_HASH%"=="" goto :npm_install
+if /i "%PKG_HASH%"=="%PKG_HASH_OLD%" goto :front_ok
+
+:npm_install
+echo [front] Instalando/atualizando dependencias Node.js ^(a primeira vez pode demorar^)...
+pushd front
+call npm install --no-audit --no-fund
+set "NPM_EXIT=%errorlevel%"
+popd
+if not "%NPM_EXIT%"=="0" goto :fail_node
+if "%PKG_HASH%"=="" goto :front_ready
+>"%NPM_STAMP%" echo %PKG_HASH%
+goto :front_ready
+
+:front_ok
+echo [front] Dependencias Node.js OK.
+
+:front_ready
+
+REM =====================================================================
+REM  5. Libera portas 8000 (API) e 5173 (painel), se estiverem ocupadas
+REM =====================================================================
 powershell -NoProfile -Command "try { $cs = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction Stop; foreach ($c in $cs) { Write-Host ('[aviso] Encerrando PID ' + $c.OwningProcess + ' na porta 8000'); Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue } } catch { }"
 
-REM --- Libera porta 5173 se necessario ---
 powershell -NoProfile -Command "try { $cs = Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction Stop; foreach ($c in $cs) { Write-Host ('[aviso] Encerrando PID ' + $c.OwningProcess + ' na porta 5173'); Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue } } catch { }"
 
 ping -n 2 127.0.0.1 >nul
@@ -156,3 +192,51 @@ echo   - Bem-Te-Vi Frontend
 echo.
 pause
 endlocal
+exit /b 0
+
+REM =====================================================================
+REM  Tratamento de erros (mensagens claras em pt-BR)
+REM =====================================================================
+:fail_python
+echo [erro] Python nao encontrado no PATH.
+echo        Instale Python 3.11+ em https://www.python.org/downloads/
+echo        Marque a opcao "Add python.exe to PATH" na instalacao.
+echo        Depois abra um terminal NOVO e rode o start.bat de novo.
+goto :fail_end
+
+:fail_python_version
+echo [erro] A versao do Python encontrada e antiga.
+python --version
+echo        O Bem-Te-Vi exige Python 3.11 ou superior.
+echo        Instale a versao atual em https://www.python.org/downloads/
+goto :fail_end
+
+:fail_npm
+echo [erro] npm / Node.js nao encontrado no PATH.
+echo        Instale Node.js 20+ LTS em https://nodejs.org/
+echo        Depois abra um terminal NOVO e rode o start.bat de novo.
+goto :fail_end
+
+:fail_venv
+echo [erro] Falha ao criar o ambiente virtual em back\venv.
+echo        Verifique o espaco em disco e as permissoes da pasta.
+goto :fail_end
+
+:fail_pip
+echo [erro] Falha ao instalar as dependencias Python.
+echo        Verifique sua conexao com a internet e tente de novo:
+echo        back\venv\Scripts\python.exe -m pip install -r back\requirements.txt
+goto :fail_end
+
+:fail_node
+echo [erro] Falha ao instalar as dependencias Node.js.
+echo        Verifique sua conexao com a internet e tente de novo:
+echo        cd front ^&^& npm install
+goto :fail_end
+
+:fail_end
+echo.
+echo A inicializacao foi interrompida.
+pause
+endlocal
+exit /b 1

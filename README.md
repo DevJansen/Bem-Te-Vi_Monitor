@@ -40,6 +40,10 @@ python --version
 npm --version
 ```
 
+> O **FFmpeg é opcional**: se não estiver instalado no sistema, o Bem-Te-Vi usa o
+> binário embutido no pacote Python `imageio-ffmpeg`, instalado automaticamente.
+> Nenhum outro software precisa ser instalado.
+
 ---
 
 ## Instalação e execução rápida (Windows) — `start.bat`
@@ -205,10 +209,10 @@ start.bat
 
 O script irá, nesta ordem:
 
-1. Verificar se Python e Node.js estão no PATH  
+1. Verificar Python (3.11+) e Node.js (20+) no PATH  
 2. Criar o ambiente virtual em `back\venv` (se ainda não existir)  
-3. Instalar as dependências Python (`back\requirements.txt`)  
-4. Instalar as dependências Node (`front\package.json`)  
+3. Instalar/atualizar as dependências Python (`back\requirements.txt`) — só reinstala quando o arquivo muda  
+4. Instalar/atualizar as dependências Node (`front\package.json` / `package-lock.json`) — idem  
 5. **Iniciar ao mesmo tempo:**
    - **Backend:** `uvicorn` em `http://127.0.0.1:8000`
    - **Frontend:** `vite` em `http://127.0.0.1:5173`
@@ -234,6 +238,10 @@ O `start.bat` tenta abrir o navegador sozinho. Se não abrir, use:
 Feche as janelas `Bem-Te-Vi Backend` e `Bem-Te-Vi Frontend`, ou pressione `Ctrl+C` em cada uma.
 
 > Na **primeira execução**, o download do modelo YOLO (`yolov8n.pt`) e dos pacotes Python/Node pode demorar vários minutos.
+>
+> As dependências são conferidas a cada execução pelo **hash** do `requirements.txt`
+> e do `package-lock.json`: depois de um `git pull`, o `start.bat` reinstala sozinho
+> o que faltar, sem precisar apagar `back\venv` nem `front\node_modules`.
 
 ---
 
@@ -256,6 +264,14 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 A API fica em http://127.0.0.1:8000 — docs em http://127.0.0.1:8000/docs
+
+Para rodar os testes automatizados, instale também as dependências de
+desenvolvimento e execute o `pytest`:
+
+```bat
+pip install -r requirements-dev.txt
+python -m pytest tests -q
+```
 
 ### Frontend (Node.js)
 
@@ -504,8 +520,11 @@ para 1280×720 (`scale`+`pad`) e recodificados em **H.264** (`yuv420p`,
 `+faststart`), garantindo um MP4 que o navegador reproduz. O dia é interpretado no
 **fuso local** do computador e convertido para o intervalo UTC na consulta ao
 banco. O player fica embutido na própria aba e usa o endpoint
-`/api/videos/timelapse/{arquivo}`, com suporte a `Range`. Sem o `ffmpeg` instalado,
-a geração fica indisponível (com aviso no log) e o restante do sistema segue normal.
+`/api/videos/timelapse/{arquivo}`, com suporte a `Range`. Se o `ffmpeg` não estiver
+instalado no sistema, o Bem-Te-Vi usa automaticamente o binário embutido no pacote
+Python `imageio-ffmpeg` (instalado pelo `requirements.txt`); só quando nem esse
+binário existe a geração fica indisponível (com aviso no log) e o restante do
+sistema segue normal.
 
 ### Monitorar 24 horas com visão noturna (infravermelho)
 
@@ -952,10 +971,13 @@ threshold padrão é 70%; detecções acima do valor configurado são salvas com
 eventos `AUDIO_DETECTION` no SQLite e associadas à visita visual da mesma câmera
 quando houver uma em até 30 segundos.
 
-Para usar esse recurso, instale as dependências Python de `back\requirements.txt`,
-disponibilize o executável **FFmpeg** no `PATH` e instale um runtime TensorFlow
-Lite/TensorFlow compatível com a versão de Python selecionada. O modelo BirdNET é
-inicializado sob demanda; a configuração de análise fica desativada por padrão.
+Para usar esse recurso, instale as dependências Python de `back\requirements.txt`
+e um runtime TensorFlow Lite/TensorFlow compatível com a versão de Python
+selecionada (o `ai-edge-litert` já vem no `requirements.txt`). O **FFmpeg** é
+necessário para capturar o áudio: o sistema procura o executável no `PATH`, nas
+pastas do winget e, por fim, usa o binário embutido no pacote `imageio-ffmpeg`.
+O modelo BirdNET é inicializado sob demanda; a configuração de análise fica
+desativada por padrão.
 O painel mostra o motivo quando algum pré-requisito não está disponível. A análise
 é executada localmente e não envia áudio para serviços externos.
 
@@ -1030,11 +1052,12 @@ espaço.
 | `npm` não reconhecido | Reinstale o Node.js LTS e abra um terminal novo |
 | Porta 8000 ou 5173 em uso | No PowerShell: `Get-NetTCPConnection -LocalPort 8000 -State Listen` e encerre o PID (`Stop-Process -Id <PID> -Force`). Depois rode `start.bat` de novo |
 | Front sem dados / 404 nas rotas | Confirme que a API em `:8000` é a do Bem-Te-Vi atual (`/docs` deve listar `/api/visits`, `/api/stats`, `/api/settings`). Outro processo antigo na porta 8000 causa 404 |
+| `ModuleNotFoundError` ao iniciar a API | Alguma dependência nova não foi instalada. Rode o `start.bat` de novo (ele reinstala pelo hash do `requirements.txt`) ou `back\venv\Scripts\python.exe -m pip install -r back\requirements.txt` |
 | Front sem dados | Confirme http://127.0.0.1:8000/api/health e a janela do backend |
 | Identificação externa indisponível | Confira `AI_EXTERNAL_API_KEY`, `AI_EXTERNAL_PROVIDER`, o modelo com suporte a visão e o acesso de rede ao provedor escolhido. No **Google Gemini** o provedor deve ser `google` (a URL base é ignorada); um **HTTP 404** indica que a chamada caiu numa rota padrão da OpenAI em vez do endpoint oficial do Google |
 | Importação de gravação rejeitada | Use MP4, AVI, MOV ou MKV com menos de 2 GB e associe o arquivo a uma câmera cadastrada |
 | Análise offline falhou | Confirme se o vídeo abre em outro player e se o modelo YOLO foi carregado; tente exportar novamente o arquivo do cartão |
-| Clipe não reproduz na Galeria | Os clipes novos usam H.264 (compatível com navegadores). Instale o `ffmpeg` e coloque-o no `PATH` para garantir a melhor compatibilidade. Clipes antigos em `mp4v` podem não abrir no player: use **Baixar clipe** |
+| Clipe não reproduz na Galeria | Os clipes novos usam H.264 (compatível com navegadores). O Bem-Te-Vi usa o `ffmpeg` do sistema ou o embutido no pacote `imageio-ffmpeg`; se nenhum estiver disponível, instale o `ffmpeg` e coloque-o no `PATH`. Clipes antigos em `mp4v` podem não abrir no player: use **Baixar clipe** |
 | Teste de conexão falha | Confirme token/URL e acesso à Internet; os testes não enviam mensagens e usam os valores digitados ou salvos |
 | Tela de variáveis retorna 403 | A configuração de segredos só aceita conexões locais; abra o painel local padrão em `127.0.0.1` |
 | YOLO / ultralytics lento na 1ª vez | Normal — baixa pesos e dependências na primeira instalação |

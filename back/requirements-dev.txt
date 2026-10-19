@@ -1,0 +1,14 @@
+# Dependências adicionais para desenvolvimento e testes (não são necessárias
+# para executar o painel pelo start.bat).
+#
+# Instale com:
+#   back\venv\Scripts\python.exe -m pip install -r back\requirements-dev.txt
+#
+# Rode a suíte de testes com:
+#   back\venv\Scripts\python.exe -m pytest back\tests -q
+
+-r requirements.txt
+
+pytest>=8.3.0
+# Cliente HTTP usado pelo fastapi.testclient (TestClient).
+httpx>=0.28.0

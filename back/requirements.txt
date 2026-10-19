@@ -1,11 +1,19 @@
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
+# Rate limiting das rotas sensíveis (brute force) — ver app/core/rate_limiter.py
+slowapi>=0.1.9
 opencv-python>=4.10.0
 ultralytics>=8.3.0
 pydantic>=2.9.0
 python-dotenv>=1.0.0
 python-multipart>=0.0.20
 requests>=2.32.0
+# Laudo Ornitológico em PDF (módulo importado como `fpdf`).
+fpdf2>=2.7.9
+# FFmpeg embutido (último recurso quando o FFmpeg do sistema não está no PATH).
+# Mantém o áudio/BirdNET e a enumeração de microfones funcionando "de fábrica",
+# sem exigir instalação manual de software no Windows.
+imageio-ffmpeg>=0.5.1
 cryptography>=43.0.0
 numpy>=1.26.0
 # Tradutor de links: extrai o stream direto (HLS/m3u8) de Lives do YouTube para
