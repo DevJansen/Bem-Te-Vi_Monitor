@@ -237,6 +237,8 @@ export type BirdVisit = {
   humidity: number | null;
   weather_code: string | null;
   wind_speed: number | null;
+  /** Nitidez (variância do Laplaciano) usada pela curadoria de Momentos Raros. */
+  sharpness?: number | null;
   metadata: {
     crop_path?: string | null;
     identification_status?: string;
@@ -886,6 +888,132 @@ export type WeatherInsights = {
   species_timing: SpeciesWeatherTiming[];
   insights: InsightCard[];
   generated_at: string;
+};
+
+/* ——— Insights meteorológicos preditivos (alimentação × previsão) ——— */
+
+export type FeedingWeatherCurrent = {
+  temperature: number | null;
+  humidity: number | null;
+  wind_speed: number | null;
+  condition: string;
+  icon: string;
+  is_day: boolean | null;
+  local_time_label: string | null;
+};
+
+export type FeedingWeatherForecast = {
+  rain_expected: boolean;
+  rain_in_hours: number | null;
+  peak_probability: number;
+  precipitation_mm: number;
+  condition: string;
+  icon: string;
+  category: string;
+  min_temperature: number | null;
+  max_temperature: number | null;
+  max_wind_kmh: number | null;
+};
+
+export type FeedingWeatherHistory = {
+  visits: number;
+  rainy_visits_per_day: number | null;
+  dry_visits_per_day: number | null;
+  lift_percent: number;
+  confidence: "alta" | "média" | "estimativa" | string;
+  best_window: string | null;
+};
+
+export type FeedingWeatherGarden = {
+  camera_id: string;
+  garden: string;
+  country: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  timezone: string | null;
+  available: boolean;
+  current: FeedingWeatherCurrent | null;
+  forecast: FeedingWeatherForecast | null;
+  history: FeedingWeatherHistory;
+  headline: string;
+  detail: string;
+  action: string;
+  tone: "positive" | "info" | "warning" | "neutral" | string;
+  icon: string;
+};
+
+export type FeedingWeatherInsights = {
+  generated_at: string;
+  gardens: FeedingWeatherGarden[];
+  highlight: FeedingWeatherGarden | null;
+};
+
+/* ——— Radar Global de Jardins ——— */
+
+export type GardenRadarSpecies = {
+  species: string;
+  visits: number;
+};
+
+export type GardenRadarGarden = {
+  camera_id: string;
+  name: string;
+  garden: string;
+  country: string | null;
+  latitude: number;
+  longitude: number;
+  timezone: string | null;
+  is_active: boolean;
+  ai_enabled: boolean;
+  audio_enabled: boolean;
+  status: string;
+  weather: CameraWeather;
+  visits_today: number;
+  species_today: number;
+  total_visits: number;
+  last_visit_at: string | null;
+  top_species: GardenRadarSpecies[];
+  stream_url: string;
+  audio_url: string | null;
+};
+
+export type GardenRadar = {
+  generated_at: string;
+  gardens: GardenRadarGarden[];
+  without_location: number;
+};
+
+/* ——— Momentos Raros / Fotos de Postal ——— */
+
+export type RareMoment = {
+  visit_id: string;
+  camera_id: string;
+  camera_name: string | null;
+  garden: string | null;
+  species: string;
+  scientific_name: string | null;
+  detected_at: string;
+  confidence: number;
+  sharpness: number;
+  sharpness_score: number;
+  rarity: "Rara" | "Incomum" | "Comum" | string;
+  is_rare: boolean;
+  thumbnail_url: string | null;
+  clip_url: string | null;
+  postcard_url: string;
+  reason: string;
+};
+
+export type RareMomentList = {
+  generated_at: string;
+  days: number;
+  moments: RareMoment[];
+  scanned: number;
+};
+
+export type RareMomentRefresh = {
+  scanned: number;
+  pending: number;
 };
 
 /* ——— Motor de IA (AI Core) ——— */

@@ -149,8 +149,9 @@ class CameraWeatherService:
         self._lock = threading.Lock()
         # chave → (instantâneo, instante monotônico da captura)
         self._cache: dict[str, tuple[CameraWeatherSnapshot, float]] = {}
-        # Garante uma única requisição HTTP simultânea (evita "estampede").
-        self._fetch_lock = threading.Lock()
+        # Um lock por localização: jardins diferentes podem buscar em paralelo
+        # sem "estampede" de requisições para a mesma coordenada.
+        self._fetch_locks: dict[str, threading.Lock] = {}
 
     def current_for(
         self,
@@ -177,8 +178,11 @@ class CameraWeatherService:
                 if (now - stored_at) < ttl_seconds:
                     return snapshot
 
-        # Se outro thread já está buscando, devolve o cache (mesmo expirado).
-        if not self._fetch_lock.acquire(blocking=False):
+        # Se outro thread já está buscando esta coordenada, devolve o cache
+        # (mesmo expirado) sem iniciar uma segunda requisição.
+        with self._lock:
+            key_lock = self._fetch_locks.setdefault(key, threading.Lock())
+        if not key_lock.acquire(blocking=False):
             with self._lock:
                 cached = self._cache.get(key)
                 return cached[0] if cached else None
@@ -186,7 +190,7 @@ class CameraWeatherService:
         try:
             fetched = self._fetch(latitude, longitude, timezone_name)
         finally:
-            self._fetch_lock.release()
+            key_lock.release()
 
         if fetched is None:
             with self._lock:

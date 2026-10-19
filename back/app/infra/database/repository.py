@@ -815,6 +815,7 @@ class VisitRepository:
             humidity=_optional_float(row.get("humidity")),
             weather_code=row.get("weather_code"),
             wind_speed=_optional_float(row.get("wind_speed")),
+            sharpness=_optional_float(row.get("sharpness")),
             metadata=metadata,
         )
 

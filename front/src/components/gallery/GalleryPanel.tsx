@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { AudioLines, Film, Images, Squirrel } from "lucide-react";
+import { AudioLines, Film, Images, Sparkles, Squirrel } from "lucide-react";
 import type { BirdSpecies, BirdVisit } from "@/types";
 import { GalleryGrid } from "@/components/gallery/GalleryGrid";
+import { RareMomentsGallery } from "@/components/gallery/RareMomentsGallery";
 import { TimelapseGallery } from "@/components/gallery/TimelapseGallery";
 import { AudioDetectionPanel } from "@/components/audio/AudioDetectionPanel";
 import { cn } from "@/utils/cn";
@@ -18,7 +19,7 @@ type Props = {
   onFocusHandled?: () => void;
 };
 
-type GalleryView = "captures" | "guests" | "timelapses" | "audio";
+type GalleryView = "captures" | "rare" | "guests" | "timelapses" | "audio";
 
 /**
  * Aba Galeria com visões distintas e separadas: as **capturas de imagem/vídeo**
@@ -56,6 +57,12 @@ export function GalleryPanel({
           onClick={() => setView("captures")}
         />
         <TabButton
+          active={view === "rare"}
+          icon={Sparkles}
+          label="Momentos Raros"
+          onClick={() => setView("rare")}
+        />
+        <TabButton
           active={view === "audio"}
           icon={AudioLines}
           label="Áudios"
@@ -85,6 +92,8 @@ export function GalleryPanel({
           focusVisitId={focusVisitId}
           onFocusHandled={onFocusHandled}
         />
+      ) : view === "rare" ? (
+        <RareMomentsGallery />
       ) : view === "guests" ? (
         <GalleryGrid
           visits={visits.filter((v) => v.visitor_kind !== "bird")}

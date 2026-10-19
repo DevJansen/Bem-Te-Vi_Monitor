@@ -8,6 +8,7 @@ import { CameraWall } from "@/components/dashboard/CameraWall";
 import { AiStreamLog } from "@/components/dashboard/AiStreamLog";
 import { LiveStreamView } from "@/components/dashboard/LiveStreamView";
 import { WeatherWidget } from "@/components/dashboard/WeatherWidget";
+import { FeedingWeatherPanel } from "@/components/dashboard/FeedingWeatherPanel";
 import { VisitsChart } from "@/components/dashboard/VisitsChart";
 import { SpeciesRanking } from "@/components/dashboard/SpeciesRanking";
 import { TodayVisitsPanel } from "@/components/dashboard/TodayVisitsPanel";
@@ -251,6 +252,7 @@ export function App() {
                 onCameraUpdated={handleCameraUpdated}
               />
               <WeatherWidget cameras={camerasQuery.data ?? []} />
+              <FeedingWeatherPanel />
               <AnomalyAlertsPanel />
               <div className="mb-3 flex items-center gap-2">
                 <label className="text-xs text-[var(--color-text-muted)]">Jardim:</label>

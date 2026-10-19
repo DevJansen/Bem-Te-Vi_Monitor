@@ -236,6 +236,9 @@ class VisitOut(BaseModel):
     humidity: float | None = None
     weather_code: str | None = None
     wind_speed: float | None = None
+    # Nitidez (variância do Laplaciano) calculada pelo Alaris Core para a
+    # curadoria "Momentos Raros". Pode ser nula enquanto a foto não foi avaliada.
+    sharpness: float | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -1019,6 +1022,169 @@ class WeatherInsightsOut(BaseModel):
     generated_at: str = Field(
         default_factory=lambda: datetime.utcnow().isoformat() + "Z"
     )
+
+
+# --------------------------------------------------------------------------- #
+# Insights meteorológicos preditivos (alimentação × previsão)
+# --------------------------------------------------------------------------- #
+class FeedingWeatherCurrentOut(BaseModel):
+    """Condições **agora** no jardim (Open-Meteo current)."""
+
+    temperature: float | None = None
+    humidity: float | None = None
+    wind_speed: float | None = None
+    condition: str = "Sem dados"
+    icon: str = "🌡️"
+    is_day: bool | None = None
+    local_time_label: str | None = None
+
+
+class FeedingWeatherForecastOut(BaseModel):
+    """Próximas horas no jardim, com foco na chuva."""
+
+    rain_expected: bool = False
+    rain_in_hours: int | None = None
+    peak_probability: int = Field(default=0, ge=0, le=100)
+    precipitation_mm: float = 0.0
+    condition: str = "Sem dados"
+    icon: str = "🌡️"
+    category: str = "Sem dados"
+    min_temperature: float | None = None
+    max_temperature: float | None = None
+    max_wind_kmh: float | None = None
+
+
+class FeedingWeatherHistoryOut(BaseModel):
+    """Comportamento histórico do jardim em dias de chuva × secos."""
+
+    visits: int = Field(default=0, ge=0)
+    rainy_visits_per_day: float | None = None
+    dry_visits_per_day: float | None = None
+    lift_percent: float = 0.0
+    # "alta", "média" ou "estimativa" (sem histórico suficiente).
+    confidence: str = "estimativa"
+    best_window: str | None = None
+
+
+class FeedingWeatherGardenOut(BaseModel):
+    """Card de um jardim: previsão + histórico + frase do Alaris Core."""
+
+    camera_id: str
+    garden: str
+    country: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    timezone: str | None = None
+    available: bool = False
+    current: FeedingWeatherCurrentOut | None = None
+    forecast: FeedingWeatherForecastOut | None = None
+    history: FeedingWeatherHistoryOut = Field(
+        default_factory=FeedingWeatherHistoryOut
+    )
+    headline: str = ""
+    detail: str = ""
+    action: str = ""
+    # "positive", "info", "warning" ou "neutral".
+    tone: str = "neutral"
+    icon: str = "🌦️"
+
+
+class FeedingWeatherInsightsOut(BaseModel):
+    """Resposta do endpoint de insights preditivos de alimentação."""
+
+    generated_at: str = Field(
+        default_factory=lambda: datetime.utcnow().isoformat() + "Z"
+    )
+    gardens: list[FeedingWeatherGardenOut] = Field(default_factory=list)
+    highlight: FeedingWeatherGardenOut | None = None
+
+
+# --------------------------------------------------------------------------- #
+# Radar Global de Jardins
+# --------------------------------------------------------------------------- #
+class GardenRadarSpeciesOut(BaseModel):
+    """Espécie mais frequente em um jardim hoje."""
+
+    species: str
+    visits: int = Field(ge=0)
+
+
+class GardenRadarGardenOut(BaseModel):
+    """Um jardim geolocalizado no mapa-múndi do painel."""
+
+    camera_id: str
+    name: str
+    garden: str
+    country: str | None = None
+    latitude: float
+    longitude: float
+    timezone: str | None = None
+    is_active: bool = True
+    ai_enabled: bool = True
+    audio_enabled: bool = False
+    status: str = "idle"
+    weather: CameraWeatherOut = Field(default_factory=CameraWeatherOut)
+    visits_today: int = Field(default=0, ge=0)
+    species_today: int = Field(default=0, ge=0)
+    total_visits: int = Field(default=0, ge=0)
+    last_visit_at: str | None = None
+    top_species: list[GardenRadarSpeciesOut] = Field(default_factory=list)
+    stream_url: str = ""
+    audio_url: str | None = None
+
+
+class GardenRadarOut(BaseModel):
+    """Todos os jardins com coordenadas + contagem dos sem localização."""
+
+    generated_at: str = Field(
+        default_factory=lambda: datetime.utcnow().isoformat() + "Z"
+    )
+    gardens: list[GardenRadarGardenOut] = Field(default_factory=list)
+    without_location: int = 0
+
+
+# --------------------------------------------------------------------------- #
+# Momentos Raros / Fotos de Postal
+# --------------------------------------------------------------------------- #
+class RareMomentOut(BaseModel):
+    """Uma captura selecionada pela curadoria do Alaris Core."""
+
+    visit_id: str
+    camera_id: str
+    camera_name: str | None = None
+    garden: str | None = None
+    species: str
+    scientific_name: str | None = None
+    detected_at: str
+    confidence: float
+    sharpness: float = 0.0
+    # Escore normalizado de 0 a 100 (nitidez + raridade).
+    sharpness_score: int = Field(default=0, ge=0, le=100)
+    # "Rara", "Incomum" ou "Comum".
+    rarity: str = "Comum"
+    is_rare: bool = False
+    thumbnail_url: str | None = None
+    clip_url: str | None = None
+    postcard_url: str
+    reason: str = "Nitidez de postal"
+
+
+class RareMomentListOut(BaseModel):
+    """Curadoria semanal pronta para a galeria estilo revista."""
+
+    generated_at: str = Field(
+        default_factory=lambda: datetime.utcnow().isoformat() + "Z"
+    )
+    days: int = Field(default=7, ge=1)
+    moments: list[RareMomentOut] = Field(default_factory=list)
+    scanned: int = Field(default=0, ge=0)
+
+
+class RareMomentRefreshOut(BaseModel):
+    """Resultado de uma varredura manual de nitidez."""
+
+    scanned: int = Field(default=0, ge=0)
+    pending: int = Field(default=0, ge=0)
 
 
 # --------------------------------------------------------------------------- #

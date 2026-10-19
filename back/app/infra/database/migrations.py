@@ -291,6 +291,19 @@ MIGRATIONS: list[tuple[int, str]] = [
             ON audio_detections(species_id);
         """,
     ),
+    (
+        14,
+        """
+        -- Momentos Raros / Fotos de Postal: a nitidez (variância do Laplaciano)
+        -- de cada captura é calculada uma única vez pelo Alaris Core e cacheada
+        -- aqui. A curadoria semanal usa esse escore para escolher as fotos mais
+        -- nítidas e combina com a raridade da espécie no histórico local.
+        ALTER TABLE visits ADD COLUMN sharpness REAL;
+
+        CREATE INDEX IF NOT EXISTS idx_visits_sharpness
+            ON visits(sharpness);
+        """,
+    ),
 ]
 
 

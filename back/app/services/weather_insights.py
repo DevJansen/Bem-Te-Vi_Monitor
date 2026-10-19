@@ -506,3 +506,189 @@ def build_weather_insights(
         "species_timing": species_timing,
         "insights": insights,
     }
+
+
+def _clamp(value: float, minimum: float, maximum: float) -> float:
+    return max(minimum, min(maximum, value))
+
+
+def _rain_window_label(hours: int | None) -> str:
+    """Frase curta para o momento da chuva prevista."""
+    if hours is None:
+        return "nas próximas horas"
+    if hours <= 0:
+        return "agora"
+    if hours == 1:
+        return "em ~1 hora"
+    return f"em ~{hours} horas"
+
+
+def build_feeding_insight(
+    *,
+    camera_id: str,
+    garden: str,
+    country: str | None,
+    latitude: float | None,
+    longitude: float | None,
+    timezone_name: str | None,
+    history_rows: list[dict[str, Any]],
+    forecast: Any | None,
+    current: Any | None = None,
+) -> dict[str, Any]:
+    """Cruza a **previsão** de um jardim com o comportamento histórico das aves.
+
+    A pergunta que o card responde é prática: *vai chover no meu jardim e isso
+    muda a atividade dos pássaros?* O Alaris Core mede, no histórico daquele
+    jardim, quantas visitas por dia acontecem em dias de chuva versus dias
+    secos. Essa diferença vira a estimativa percentual exibida no painel.
+
+    Quando ainda não há histórico suficiente, usa uma prior conservadora
+    (aves de comedouro costumam intensificar a alimentação antes da chuva) e
+    deixa claro no campo ``history.confidence`` que se trata de uma estimativa.
+    """
+    history = build_weather_insights(
+        history_rows, total_visits=len(history_rows)
+    )
+    rainy = history.get("rainy") or {}
+    dry = history.get("dry") or {}
+
+    rainy_rate = float(rainy.get("visits_per_day") or 0.0)
+    dry_rate = float(dry.get("visits_per_day") or 0.0)
+    if rainy_rate > 0 and dry_rate > 0:
+        lift = (rainy_rate / dry_rate - 1.0) * 100.0
+        confidence = (
+            "alta"
+            if min(int(rainy.get("visits") or 0), int(dry.get("visits") or 0)) >= 8
+            else "média"
+        )
+    else:
+        # Prior comportamental: alimentação de reforço antes de tempo ruim.
+        lift = 25.0
+        confidence = "estimativa"
+    lift = _clamp(lift, -70.0, 90.0)
+
+    best_range = history.get("best_temperature_range") or {}
+    best_window = best_range.get("avg_hour_label")
+    if not best_window:
+        for condition in history.get("conditions") or []:
+            if int(condition.get("visits") or 0) > 0:
+                best_window = condition.get("avg_hour_label")
+                break
+
+    current_payload: dict[str, Any] | None = None
+    if current is not None:
+        if isinstance(current, dict):
+            current_payload = {
+                "temperature": current.get("temperature"),
+                "humidity": current.get("humidity"),
+                "wind_speed": current.get("wind_speed"),
+                "condition": current.get("condition", "Sem dados"),
+                "icon": current.get("icon", "🌡️"),
+                "is_day": current.get("is_day"),
+                "local_time_label": current.get("local_time_label"),
+            }
+        else:
+            current_payload = {
+                "temperature": getattr(current, "temperature", None),
+                "humidity": getattr(current, "humidity", None),
+                "wind_speed": getattr(current, "wind_speed", None),
+                "condition": getattr(current, "condition", "Sem dados"),
+                "icon": getattr(current, "icon", "🌡️"),
+                "is_day": getattr(current, "is_day", None),
+                "local_time_label": getattr(current, "local_time_label", None),
+            }
+
+    available = bool(forecast is not None and getattr(forecast, "available", False))
+    forecast_payload: dict[str, Any] | None = None
+    icon = "🌦️"
+    tone = "neutral"
+    if available:
+        rain_expected = bool(getattr(forecast, "rain_expected", False))
+        rain_in_hours = getattr(forecast, "rain_in_hours", None)
+        condition = getattr(forecast, "condition", "Sem dados")
+        category = getattr(forecast, "category", "Sem dados")
+        icon = getattr(forecast, "icon", "🌦️")
+        forecast_payload = {
+            "rain_expected": rain_expected,
+            "rain_in_hours": rain_in_hours,
+            "peak_probability": int(getattr(forecast, "peak_probability", 0) or 0),
+            "precipitation_mm": float(
+                getattr(forecast, "precipitation_mm", 0.0) or 0.0
+            ),
+            "condition": condition,
+            "icon": icon,
+            "category": category,
+            "min_temperature": getattr(forecast, "min_temperature", None),
+            "max_temperature": getattr(forecast, "max_temperature", None),
+            "max_wind_kmh": getattr(forecast, "max_wind_kmh", None),
+        }
+
+        if rain_expected:
+            when = _rain_window_label(rain_in_hours)
+            before = rain_in_hours is None or rain_in_hours <= 4
+            moment = "antes da chuva" if before else "durante a chuva"
+            verb = "intensificar" if lift >= 0 else "reduzir"
+            percent = abs(lift)
+            headline = (
+                f"{icon} {condition} prevista para {garden} {when}. "
+                f"Atividade de pássaros tende a {verb} {percent:.0f}% {moment}."
+            )
+            detail = (
+                "O Alaris Core otimizou o buffer de captura e a sensibilidade "
+                "para luz baixa."
+            )
+            action = "Buffer de captura reforçado · sensibilidade para luz baixa"
+            tone = (
+                "warning"
+                if category in (CATEGORY_STORM, "Chuva forte")
+                or condition in ("Tempestade", "Chuva forte")
+                else "info"
+            )
+        else:
+            headline = (
+                f"{icon} Tempo firme em {garden} nas próximas horas. "
+                "Condições estáveis para a visita das aves."
+            )
+            detail = (
+                "Bom momento para observar."
+                + (
+                    f" Historicamente, a atividade se concentra por volta de {best_window}."
+                    if best_window
+                    else ""
+                )
+                + " O Alaris Core mantém a captura em ritmo normal."
+            )
+            action = "Captura em ritmo normal · condições estáveis"
+            tone = "positive"
+    else:
+        headline = f"🌐 Sem previsão online para {garden} agora."
+        detail = (
+            "O Alaris Core segue monitorando normalmente e tentará atualizar a "
+            "previsão em alguns minutos."
+        )
+        action = "Monitoramento local contínuo"
+
+    return {
+        "camera_id": camera_id,
+        "garden": garden,
+        "country": country,
+        "latitude": latitude,
+        "longitude": longitude,
+        "timezone": timezone_name,
+        "available": available,
+        "current": current_payload,
+        "forecast": forecast_payload,
+        "history": {
+            "visits": len(history_rows),
+            "rainy_visits_per_day": _round(rainy_rate, 2) if rainy_rate else None,
+            "dry_visits_per_day": _round(dry_rate, 2) if dry_rate else None,
+            "lift_percent": round(lift, 1),
+            "confidence": confidence,
+            "best_window": best_window,
+        },
+        "headline": headline,
+        "detail": detail,
+        "action": action,
+        "tone": tone,
+        "icon": icon,
+    }

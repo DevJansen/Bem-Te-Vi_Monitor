@@ -322,17 +322,26 @@ class AnalyticsRepository:
             ).fetchone()
         return int(row["c"]) if row else 0
 
-    def weather_visit_rows(self) -> list[dict[str, Any]]:
+    def weather_visit_rows(
+        self, camera_id: str | None = None
+    ) -> list[dict[str, Any]]:
         """Visitas que têm algum dado meteorológico registrado.
 
         Traz apenas as colunas necessárias para os insights de clima e hábitos
         (data/hora, temperatura, umidade, condição e espécie resolvida). A
         agregação estatística fica em ``app.services.weather_insights``.
+
+        Quando ``camera_id`` é informado, o histórico fica restrito àquele
+        jardim — é o que permite ao card preditivo comparar a chuva prevista
+        com o comportamento **daquela** câmera, e não com a média global.
         """
+        filtro = " AND v.camera_id = ?" if camera_id else ""
+        params: tuple[Any, ...] = (camera_id,) if camera_id else ()
         with db_session(self.db_path) as conn:
             rows = conn.execute(
-                """
+                f"""
                 SELECT
+                    v.camera_id,
                     v.detected_at,
                     v.temperature,
                     v.humidity,
@@ -346,11 +355,102 @@ class AnalyticsRepository:
                 FROM visits v
                 LEFT JOIN bird_species bs ON bs.id = v.species_id
                 WHERE (v.temperature IS NOT NULL OR v.weather_code IS NOT NULL)
-                    AND v.visitor_kind = 'bird'
+                    AND v.visitor_kind = 'bird'{filtro}
                 ORDER BY v.detected_at ASC
-                """
+                """,
+                params,
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def garden_radar(self) -> dict[str, Any]:
+        """Jardins geolocalizados + resumo de hoje para o Radar Global.
+
+        Devolve somente câmeras com latitude/longitude (as demais não têm como
+        aparecer no mapa). Para cada jardim: visitas de hoje, espécies
+        distintas, total histórico, última visita e as 5 espécies mais vistas
+        hoje. O clima é anexado pelo controller (cache da Open-Meteo).
+        """
+        today_prefix = datetime.now(timezone.utc).date().isoformat()
+        with db_session(self.db_path) as conn:
+            rows = conn.execute(
+                f"""
+                SELECT
+                    c.id, c.name, c.location_label, c.country,
+                    c.latitude, c.longitude, c.timezone,
+                    c.is_active, c.ai_enabled, c.audio_enabled,
+                    (
+                        SELECT COUNT(*) FROM visits v
+                        WHERE v.camera_id = c.id AND v.visitor_kind = 'bird'
+                    ) AS total_visits,
+                    (
+                        SELECT COUNT(*) FROM visits v
+                        WHERE v.camera_id = c.id AND v.visitor_kind = 'bird'
+                          AND {SQL_DATA_LOCAL} = ?
+                    ) AS visits_today,
+                    (
+                        SELECT COUNT(DISTINCT v.species) FROM visits v
+                        WHERE v.camera_id = c.id AND v.visitor_kind = 'bird'
+                          AND {SQL_DATA_LOCAL} = ?
+                    ) AS species_today,
+                    (
+                        SELECT MAX(v.detected_at) FROM visits v
+                        WHERE v.camera_id = c.id AND v.visitor_kind = 'bird'
+                    ) AS last_visit_at
+                FROM cameras c
+                WHERE c.latitude IS NOT NULL
+                  AND c.longitude IS NOT NULL
+                  AND COALESCE(c.is_archived, 0) = 0
+                ORDER BY c.name COLLATE NOCASE ASC
+                """,
+                (today_prefix, today_prefix),
+            ).fetchall()
+
+            species_rows = conn.execute(
+                f"""
+                SELECT
+                    v.camera_id,
+                    COALESCE(
+                        bs.common_name,
+                        NULLIF(NULLIF(v.species, 'bird'), 'passaro'),
+                        'Pássaro Desconhecido'
+                    ) AS species_name,
+                    COUNT(*) AS c
+                FROM visits v
+                LEFT JOIN bird_species bs ON bs.id = v.species_id
+                WHERE v.visitor_kind = 'bird' AND {SQL_DATA_LOCAL} = ?
+                GROUP BY v.camera_id, species_name
+                ORDER BY c DESC
+                """,
+                (today_prefix,),
+            ).fetchall()
+
+            sem_local = conn.execute(
+                """
+                SELECT COUNT(*) AS c FROM cameras
+                WHERE (latitude IS NULL OR longitude IS NULL)
+                  AND COALESCE(is_archived, 0) = 0
+                """
+            ).fetchone()
+
+        top_by_camera: dict[str, list[dict[str, Any]]] = {}
+        for row in species_rows:
+            bucket = top_by_camera.setdefault(row["camera_id"], [])
+            if len(bucket) < 5:
+                bucket.append(
+                    {"species": row["species_name"], "visits": int(row["c"])}
+                )
+
+        gardens = [
+            {
+                **dict(row),
+                "top_species": top_by_camera.get(row["id"], []),
+            }
+            for row in rows
+        ]
+        return {
+            "gardens": gardens,
+            "without_location": int(sem_local["c"]) if sem_local else 0,
+        }
 
     def lifelist(self) -> list[dict[str, Any]]:
         with db_session(self.db_path) as conn:

@@ -46,6 +46,10 @@ import type {
   CollectorLevel,
   BioacousticsCross,
   BioacousticsSummary,
+  FeedingWeatherInsights,
+  GardenRadar,
+  RareMomentList,
+  RareMomentRefresh,
   Zone,
 } from "@/types";
 
@@ -764,4 +768,58 @@ export function resolveMediaUrl(pathOrUrl: string | null | undefined): string | 
  */
 export function visitCropUrl(visitId: string): string {
   return `/api/visits/${encodeURIComponent(visitId)}/crop`;
+}
+
+/* ——— Insights preditivos, Radar Global e Momentos Raros ——— */
+
+/** Previsão de chuva × histórico de alimentação de cada jardim. */
+export async function fetchFeedingWeatherInsights(
+  cameraId?: string,
+): Promise<FeedingWeatherInsights> {
+  const { data } = await api.get<FeedingWeatherInsights>(
+    "/analytics/weather-feeding-insights",
+    {
+      params: cameraId ? { camera_id: cameraId } : undefined,
+      // A primeira chamada consulta a Open-Meteo para cada jardim.
+      timeout: 30_000,
+    },
+  );
+  return data;
+}
+
+/** Jardins geolocalizados + clima/horário + resumo do dia (Radar Global). */
+export async function fetchGardenRadar(): Promise<GardenRadar> {
+  const { data } = await api.get<GardenRadar>("/analytics/garden-radar", {
+    timeout: 30_000,
+  });
+  return data;
+}
+
+/** Curadoria de Momentos Raros (fotos mais nítidas + espécies raras). */
+export async function fetchRareMoments(params?: {
+  days?: number;
+  limit?: number;
+}): Promise<RareMomentList> {
+  const { data } = await api.get<RareMomentList>("/gallery/rare-moments", {
+    params,
+    timeout: 30_000,
+  });
+  return data;
+}
+
+/** Força a varredura de nitidez das capturas ainda não avaliadas. */
+export async function refreshRareMoments(
+  limit = 120,
+): Promise<RareMomentRefresh> {
+  const { data } = await api.post<RareMomentRefresh>(
+    "/gallery/rare-moments/refresh",
+    null,
+    { params: { limit }, timeout: 60_000 },
+  );
+  return data;
+}
+
+/** URL de download da foto de postal (moldura + marca d'água). */
+export function rareMomentPostcardUrl(visitId: string): string {
+  return `/api/gallery/rare-moments/${encodeURIComponent(visitId)}/postcard`;
 }

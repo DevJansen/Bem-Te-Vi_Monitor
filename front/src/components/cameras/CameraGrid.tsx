@@ -1,9 +1,10 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import {
   Clock,
   Crosshair,
   Frame,
   Globe2,
+  LayoutGrid,
   Moon,
   Plus,
   Trash2,
@@ -16,6 +17,14 @@ import { StatusDot } from "@/components/common/StatusDot";
 import { statusLabel } from "@/utils/format";
 import { CameraControlToolbar } from "@/components/dashboard/CameraControlToolbar";
 import { cn } from "@/utils/cn";
+
+// O mapa-múndi (Natural Earth embutido) fica em um chunk separado: a grade de
+// câmeras abre instantaneamente e o Radar Global só é baixado ao ser aberto.
+const GardenRadarMap = lazy(() =>
+  import("@/components/cameras/GardenRadarMap").then((module) => ({
+    default: module.GardenRadarMap,
+  })),
+);
 
 type Props = {
   cameras: Camera[];
@@ -38,6 +47,8 @@ export function CameraGrid({
   onEditRoi,
   onCameraUpdated,
 }: Props) {
+  const [view, setView] = useState<"grid" | "radar">("grid");
+
   return (
     <section>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -49,17 +60,67 @@ export function CameraGrid({
             Fontes USB, RTSP, HLS, HTTP e WebRTC · credenciais criptografadas
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onAdd}
-          className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-3 py-2 text-sm font-semibold text-dark-900 transition hover:bg-emerald-400"
-        >
-          <Plus className="h-4 w-4" />
-          Adicionar câmera externa
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div
+            role="tablist"
+            aria-label="Visualização da central de câmeras"
+            className="inline-flex gap-1 rounded-lg border border-dark-700 bg-dark-800 p-1"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === "grid"}
+              onClick={() => setView("grid")}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition",
+                view === "grid"
+                  ? "bg-emerald-500/15 text-emerald-300"
+                  : "text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]",
+              )}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              Grade
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === "radar"}
+              onClick={() => setView("radar")}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition",
+                view === "radar"
+                  ? "bg-sky-500/15 text-sky-300"
+                  : "text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]",
+              )}
+            >
+              <Globe2 className="h-3.5 w-3.5" />
+              Radar Global
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={onAdd}
+            className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-3 py-2 text-sm font-semibold text-dark-900 transition hover:bg-emerald-400"
+          >
+            <Plus className="h-4 w-4" />
+            Adicionar câmera externa
+          </button>
+        </div>
       </div>
 
-      {loading && cameras.length === 0 ? (
+      {view === "radar" ? (
+        <Suspense
+          fallback={
+            <div className="flex min-h-[320px] items-center justify-center rounded-2xl border border-dark-700 bg-dark-800">
+              <p className="text-sm text-[var(--color-text-muted)]">
+                Carregando Radar Global…
+              </p>
+            </div>
+          }
+        >
+          <GardenRadarMap />
+        </Suspense>
+      ) : loading && cameras.length === 0 ? (
         <p className="text-sm text-[var(--color-text-muted)]">Carregando câmeras…</p>
       ) : cameras.length === 0 ? (
         <div className="rounded-xl border border-dashed border-dark-700 bg-dark-800 px-6 py-12 text-center">

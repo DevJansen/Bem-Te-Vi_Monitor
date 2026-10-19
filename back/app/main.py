@@ -106,11 +106,24 @@ async def lifespan(app: FastAPI):
     # Gera o resumo do dia (time-lapse) no fim do dia e recupera dias pendentes.
     timelapse_scheduler = TimelapseScheduler()
     timelapse_scheduler.start()
+    # Curadoria de "Momentos Raros": mede a nitidez das capturas novas em
+    # segundo plano (primeira passada após alguns segundos, depois a cada N h).
+    rare_moments_worker = None
+    if settings.rare_moments_enabled:
+        from app.services.rare_moments import RareMomentsWorker
+
+        rare_moments_worker = RareMomentsWorker()
+        rare_moments_worker.start()
     app.state.settings = settings
     yield
 
     logger.info("Shutting down Bem-Te-Vi…")
     retention_worker.stop()
+    try:
+        if rare_moments_worker is not None:
+            rare_moments_worker.stop()
+    except Exception:
+        logger.exception("Rare moments curator shutdown error")
     try:
         timelapse_scheduler.stop()
     except Exception:

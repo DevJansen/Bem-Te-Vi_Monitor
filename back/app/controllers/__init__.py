@@ -10,6 +10,7 @@ from app.controllers import (
     bioacoustics,
     cameras,
     events,
+    gallery,
     offline,
     settings,
     species,
@@ -29,6 +30,7 @@ api_router.include_router(anomalies.router)
 api_router.include_router(audio_detections.router)
 api_router.include_router(events.router)
 api_router.include_router(cameras.router)
+api_router.include_router(gallery.router)
 api_router.include_router(visits.router)
 api_router.include_router(species.router)
 api_router.include_router(offline.router)

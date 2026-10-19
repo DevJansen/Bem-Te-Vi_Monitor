@@ -125,6 +125,9 @@ O arquivo `back\.env.example` contém os nomes e os valores padrão. Copie-o par
 | `LATITUDE` | Latitude do alimentador (usada pela integração meteorológica) | Padrão: `-23.5505` (São Paulo/SP) |
 | `LONGITUDE` | Longitude do alimentador (usada pela integração meteorológica) | Padrão: `-46.6333` (São Paulo/SP) |
 | `WEATHER_CACHE_MINUTES` | Intervalo (min) de atualização do cache local de clima | Padrão: `30`; mínimo: `5` |
+| `RARE_MOMENTS_ENABLED` | Liga/desliga o agendador de curadoria dos Momentos Raros | Padrão: `true` (`false` desativa a varredura automática) |
+| `RARE_MOMENTS_SCAN_HOURS` | Intervalo (h) entre varreduras automáticas de nitidez das capturas | Padrão: `6`; faixa: `1` a `48` |
+| `RARE_MOMENTS_DAYS` | Janela padrão (dias) da curadoria exibida na galeria | Padrão: `7`; faixa: `1` a `90` |
 | `TIMELAPSE_ENABLED` | Liga/desliga a geração automática do resumo do dia | Padrão: `true` (`false` desativa o agendador) |
 | `TIMELAPSE_SPEED` | Fator de aceleração dos clipes no time-lapse | Padrão: `8` (8× mais rápido); faixa: `1` a `60` |
 | `TIMELAPSE_HOUR` | Hora local em que o resumo do dia é montado automaticamente | Padrão: `23` (0 a 23) |
@@ -916,6 +919,11 @@ Bem-Te-Vi/
 | GET | `/api/streams/proxy/{id}` | **Proxy seguro de vídeo (MJPEG)**: anonimiza a URL e as credenciais da câmera externa — o navegador nunca as vê |
 | GET | `/api/analytics/weather-correlation` | Relação entre o clima (chuva/temperatura/vento) e as visitas |
 | GET | `/api/analytics/weather-insights` | Insights automáticos cruzando clima e hábitos: faixas de temperatura, chuva × seco, horário no frio × no calor e horário por espécie |
+| GET | `/api/analytics/weather-feeding-insights` | **Previsão de alimentação**: cruza a previsão horária (Open-Meteo) de cada jardim com o histórico chuva × seco e devolve titular, detalhe, ação sugerida, tom, confiança e o destaque entre jardins |
+| GET | `/api/analytics/garden-radar` | **Radar Global**: todos os jardins com coordenadas — clima local, estado online, estatísticas de hoje, principais espécies e URL do vídeo ao vivo; informa também quantos jardins ficaram sem localização |
+| GET | `/api/gallery/rare-moments?days=&limit=` | **Momentos Raros**: curadoria que pontua a nitidez (variância do Laplaciano) e a raridade da espécie, com foto-destaque, grade diversificada e contadores |
+| POST | `/api/gallery/rare-moments/refresh` | Força uma varredura imediata das capturas ainda não pontuadas (usado pelo botão "Atualizar curadoria") |
+| GET | `/api/gallery/rare-moments/{visit_id}/postcard` | **Foto de postal**: gera na hora um JPEG com moldura elegante, legenda (nome popular/científico), data, jardim e marca d'água Bem-Te-Vi |
 | GET | `/api/analytics/timelapses` | Lista os resumos do dia (time-lapses) já gerados |
 | POST | `/api/analytics/timelapses/generate` | Gera sob demanda o resumo de um dia (`day` opcional; `force` regera) |
 | DELETE | `/api/analytics/timelapses/{arquivo}` | Remove um resumo do dia |
@@ -962,6 +970,57 @@ momento da captura e monta, automaticamente:
 
 O cálculo usa o **horário local** do computador e exige apenas visitas com dados de
 clima; quanto mais capturas, mais confiáveis ficam os insights.
+
+### Previsão de alimentação (`weather_forecast.py` + `weather_insights.py`)
+
+O `WeatherForecastService` estende a mesma chamada Open-Meteo que já busca o clima
+atual (`current` + `forecast_hours`) para trazer a **previsão horária** seguinte, sem
+requisições extras. A resposta é normalizada em janelas com data/hora local,
+temperatura, precipitação, probabilidade de chuva e código WMO, e fica em cache por
+coordenada com **trava por chave** (`threading.Lock` por lat/lon) para permitir buscas
+paralelas de vários jardins sem serializar chamadas.
+
+O `build_feeding_insight()` recebe o histórico (`weather_visit_rows`) e a previsão e
+monta um `FeedingWeatherHighlight`: quando há chuva à frente, calcula o **lift** de
+atividade esperado (média de visitas/dia em dias de chuva ÷ dias secos), estima em
+quantas horas a chuva chega e escolhe um tom/ícone; sem histórico de chuva, cai em uma
+**estimativa inicial** conservadora com confiança declarada. Se nenhuma câmera tiver
+coordenadas, o endpoint usa `LATITUDE`/`LONGITUDE` como **Jardim Principal** e agrega
+o histórico de todas as câmeras, de modo que o card funciona na instalação padrão. O
+endpoint `/api/analytics/weather-feeding-insights` roda os jardins em um
+`ThreadPoolExecutor` com orçamento curto e devolve **dados parciais** em caso de
+timeout, sem bloquear o painel. Nada disso depende de internet para a captura
+continuar.
+
+### Radar Global de Jardins
+
+O `AnalyticsRepository.garden_radar()` agrega, por câmera com coordenadas, o clima
+local (via cache do `CameraWeatherService`), o estado online (`CameraManager`), as
+visitas/espécies de hoje e o histórico total, além da URL do player ao vivo. O
+frontend renderiza um **mapa-múndi em SVG** com a costa de Natural Earth 1:110m
+embutida no bundle (`worldMapPath.ts`, projeção equirretangular 1000×500) — funciona
+**offline**, sem tiles externos nem dependências novas. O componente
+`GardenRadarMap` é carregado por `React.lazy` (chunk próprio) e desenha marcadores
+pulsantes proporcionais; ao selecionar um jardim, abre o painel lateral com clima,
+vídeo/áudio ao vivo, estatísticas e espécies daquele local.
+
+### Momentos Raros / Fotos de Postal (`rare_moments.py`)
+
+Ao salvar a visita, o melhor quadro calcula a **variância do Laplaciano** e a grava
+em `visits.sharpness` (migração v14, com índice). O `RareMomentsService`:
+
+- **pontua** candidatas não avaliadas (`score_pending`) reabrindo a imagem do recorte e
+  medindo a nitidez — até 80 por requisição, para resposta rápida;
+- **cura** os destaques combinando nitidez normalizada e **raridade** derivada de
+  `bird_species.ecological_status` + contagem de avistagens (1–2 = Rara, 3–9 =
+  Incomum, 10+ = Comum), limitando a 2 fotos por espécie e depois preenchendo;
+- gera o **postal** com Pillow: recorte centralizado, moldura, faixa de legenda
+  (nome popular/científico), data/hora **no fuso do jardim**, e marca d'água
+  Bem-Te-Vi; usa fontes do sistema (`segoeui`) com fallback para a fonte padrão.
+
+O `RareMomentsWorker` roda em background (`RARE_MOMENTS_SCAN_HOURS`, com atraso
+inicial) e o endpoint `POST /api/gallery/rare-moments/refresh` força a varredura sob
+demanda. Toda a curadoria é local; nada sai do computador.
 
 ### Bioacústica com BirdNET
 

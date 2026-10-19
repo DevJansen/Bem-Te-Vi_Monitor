@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 
 from fastapi import APIRouter, HTTPException, Query
@@ -10,8 +11,14 @@ from fastapi import APIRouter, HTTPException, Query
 from app.core.config import get_settings
 from app.domain.models import (
     AchievementOut,
+    CameraWeatherOut,
     CollectorLevelOut,
     AnalyticsSummaryOut,
+    FeedingWeatherGardenOut,
+    FeedingWeatherInsightsOut,
+    GardenRadarGardenOut,
+    GardenRadarOut,
+    GardenRadarSpeciesOut,
     HourlyDistributionOut,
     LifeListSpeciesOut,
     TimelapseGenerateRequest,
@@ -21,9 +28,13 @@ from app.domain.models import (
     WeatherCorrelationOut,
     WeatherInsightsOut,
 )
+from app.infra.camera.manager import get_camera_manager
 from app.infra.database.analytics_repository import AnalyticsRepository
+from app.infra.database.repository import CameraRepository
+from app.services.camera_weather import get_camera_weather_service
 from app.services.timelapse_service import get_timelapse_service
-from app.services.weather_insights import build_weather_insights
+from app.services.weather_forecast import get_weather_forecast_service
+from app.services.weather_insights import build_feeding_insight, build_weather_insights
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
@@ -262,3 +273,264 @@ def delete_timelapse(filename: str) -> dict[str, bool]:
             detail="Resumo do dia não encontrado.",
         )
     return {"ok": True}
+
+
+# --------------------------------------------------------------------------- #
+# Radar Global + Insights preditivos de alimentação
+# --------------------------------------------------------------------------- #
+def _camera_weather_out(row: dict, snapshot) -> CameraWeatherOut:
+    """Converte o instantâneo da Open-Meteo no DTO do radar/insights."""
+    latitude = float(row["latitude"])
+    longitude = float(row["longitude"])
+    if snapshot is None:
+        return CameraWeatherOut(
+            available=False,
+            latitude=latitude,
+            longitude=longitude,
+            timezone=row.get("timezone"),
+        )
+    return CameraWeatherOut(
+        available=snapshot.available,
+        latitude=latitude,
+        longitude=longitude,
+        timezone=snapshot.timezone or row.get("timezone"),
+        utc_offset_seconds=snapshot.utc_offset_seconds,
+        local_time=snapshot.local_time,
+        local_time_label=snapshot.local_time_label,
+        temperature=snapshot.temperature,
+        humidity=snapshot.humidity,
+        wind_speed=snapshot.wind_speed,
+        condition=snapshot.condition,
+        category=snapshot.category,
+        icon=snapshot.icon,
+        weather_code=snapshot.code,
+        is_day=snapshot.is_day,
+        fetched_at=snapshot.fetched_at,
+        source=snapshot.source,
+    )
+
+
+def _safe_camera_weather(row: dict):
+    try:
+        return get_camera_weather_service().current_for(
+            float(row["latitude"]),
+            float(row["longitude"]),
+            timezone_name=row.get("timezone"),
+        )
+    except Exception:
+        logger.exception("Falha ao buscar o clima do jardim %s", row.get("id"))
+        return None
+
+
+@router.get("/garden-radar", response_model=GardenRadarOut)
+def get_garden_radar() -> GardenRadarOut:
+    """Jardins geolocalizados para o Radar Global Interativo.
+
+    Cada jardim traz o clima/horário locais, o resumo de hoje, as espécies mais
+    frequentes e as URLs do vídeo/áudio ao vivo. As consultas de clima são
+    feitas em paralelo com um orçamento curto: se a internet estiver lenta, o
+    jardim aparece mesmo assim (com ``available=False``) e o clima é preenchido
+    no próximo ciclo do painel.
+    """
+    try:
+        data = _repository().garden_radar()
+    except Exception as exc:
+        logger.exception("get_garden_radar failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível montar o Radar Global de jardins.",
+        ) from exc
+
+    rows = data["gardens"]
+    snapshots: dict[str, object] = {}
+    if rows:
+        pool = ThreadPoolExecutor(max_workers=4)
+        futures = {
+            pool.submit(_safe_camera_weather, row): row["id"] for row in rows
+        }
+        try:
+            for future in as_completed(futures, timeout=7.0):
+                snapshots[futures[future]] = future.result()
+        except TimeoutError:
+            logger.info("Radar Global: orçamento de clima esgotado, seguindo sem ele")
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
+
+    manager = get_camera_manager()
+    gardens: list[GardenRadarGardenOut] = []
+    for row in rows:
+        try:
+            status = manager.get_status(row["id"])
+        except Exception:
+            status = "idle"
+        garden = row.get("location_label") or row.get("name") or "Jardim sem nome"
+        gardens.append(
+            GardenRadarGardenOut(
+                camera_id=row["id"],
+                name=row["name"],
+                garden=garden,
+                country=row.get("country"),
+                latitude=float(row["latitude"]),
+                longitude=float(row["longitude"]),
+                timezone=row.get("timezone"),
+                is_active=bool(row.get("is_active")),
+                ai_enabled=bool(row.get("ai_enabled", 1)),
+                audio_enabled=bool(row.get("audio_enabled", 0)),
+                status=str(status),
+                weather=_camera_weather_out(row, snapshots.get(row["id"])),
+                visits_today=int(row.get("visits_today") or 0),
+                species_today=int(row.get("species_today") or 0),
+                total_visits=int(row.get("total_visits") or 0),
+                last_visit_at=row.get("last_visit_at"),
+                top_species=[
+                    GardenRadarSpeciesOut(**item)
+                    for item in (row.get("top_species") or [])
+                ],
+                stream_url=f"/api/video-feed/{row['id']}?boxes=true",
+                audio_url=(
+                    f"/api/bioacoustics/audio/{row['id']}"
+                    if row.get("audio_enabled")
+                    else None
+                ),
+            )
+        )
+
+    return GardenRadarOut(
+        gardens=gardens,
+        without_location=int(data.get("without_location") or 0),
+    )
+
+
+@router.get(
+    "/weather-feeding-insights", response_model=FeedingWeatherInsightsOut
+)
+def get_feeding_weather_insights(
+    camera_id: str | None = Query(
+        default=None,
+        description="Restringe o card preditivo a um jardim (câmera).",
+    ),
+) -> FeedingWeatherInsightsOut:
+    """Previsão de chuva × comportamento histórico de alimentação.
+
+    Para cada jardim geolocalizado, o Alaris Core busca as próximas 12 horas na
+    Open-Meteo e compara com o histórico **daquele** jardim (visitas/dia em dias
+    de chuva versus dias secos). Sem nenhuma câmera geolocalizada, usa a
+    localização global do alimentador (`LATITUDE`/`LONGITUDE`) como "Jardim
+    Principal". O resultado alimenta o card "Insights Meteorológicos" do Painel,
+    com uma frase pronta em pt-BR.
+    """
+    settings = get_settings()
+    repository = _repository()
+    forecast_service = get_weather_forecast_service()
+
+    cameras = CameraRepository(settings.db_path).list_all()
+    if camera_id:
+        cameras = [camera for camera in cameras if camera["id"] == camera_id]
+
+    located = [
+        camera
+        for camera in cameras
+        if camera.get("latitude") is not None and camera.get("longitude") is not None
+    ][:24]
+
+    # Nenhuma câmera geolocalizada: usa a localização global do alimentador
+    # (LATITUDE/LONGITUDE) como "Jardim Principal". Assim o card preditivo
+    # funciona já na instalação padrão, sem exigir coordenadas por câmera.
+    if not located:
+        base = cameras[0] if cameras else None
+        located = [
+            {
+                "id": base["id"] if base else "local",
+                "name": base["name"] if base else "Jardim Principal",
+                "location_label": base["location_label"] if base else None,
+                "country": base["country"] if base else None,
+                "timezone": base["timezone"] if base else None,
+                "latitude": settings.latitude,
+                "longitude": settings.longitude,
+            }
+        ]
+
+    cameras = located
+
+    def _history_for(camera: dict) -> list[dict]:
+        # O jardim sintético ("local") agrega o histórico de todas as câmeras.
+        return repository.weather_visit_rows(
+            camera_id=None if camera["id"] == "local" else camera["id"]
+        )
+
+    def _load(camera: dict):
+        forecast = forecast_service.next_hours(
+            float(camera["latitude"]),
+            float(camera["longitude"]),
+            timezone_name=camera.get("timezone"),
+            hours=12,
+        )
+        return forecast, _history_for(camera)
+
+    loaded: dict[str, tuple[object | None, list[dict]]] = {}
+    if cameras:
+        pool = ThreadPoolExecutor(max_workers=4)
+        futures = {pool.submit(_load, camera): camera["id"] for camera in cameras}
+        try:
+            for future in as_completed(futures, timeout=9.0):
+                loaded[futures[future]] = future.result()
+        except TimeoutError:
+            logger.info(
+                "Insights de alimentação: orçamento da previsão esgotado"
+            )
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
+
+    gardens: list[FeedingWeatherGardenOut] = []
+    for camera in cameras:
+        forecast, history = loaded.get(camera["id"], (None, None))
+        if history is None:
+            try:
+                history = _history_for(camera)
+            except Exception:
+                logger.exception(
+                    "Falha ao carregar o histórico do jardim %s", camera["id"]
+                )
+                history = []
+        garden = (
+            camera.get("location_label")
+            or camera.get("name")
+            or "Jardim sem nome"
+        )
+        current = (
+            forecast.current_payload
+            if forecast is not None and getattr(forecast, "available", False)
+            else None
+        )
+        insight = build_feeding_insight(
+            camera_id=camera["id"],
+            garden=garden,
+            country=camera.get("country"),
+            latitude=float(camera["latitude"]),
+            longitude=float(camera["longitude"]),
+            timezone_name=camera.get("timezone"),
+            history_rows=history,
+            forecast=forecast,
+            current=current,
+        )
+        gardens.append(FeedingWeatherGardenOut(**insight))
+
+    # Chuva iminente primeiro; depois os jardins com mais histórico.
+    gardens.sort(
+        key=lambda item: (
+            0 if (item.forecast and item.forecast.rain_expected) else 1,
+            item.forecast.rain_in_hours
+            if (item.forecast and item.forecast.rain_in_hours is not None)
+            else 99,
+            -item.history.visits,
+        )
+    )
+    highlight = next(
+        (
+            garden
+            for garden in gardens
+            if garden.forecast and garden.forecast.rain_expected
+        ),
+        gardens[0] if gardens else None,
+    )
+    return FeedingWeatherInsightsOut(gardens=gardens, highlight=highlight)

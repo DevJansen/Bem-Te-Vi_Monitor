@@ -53,6 +53,9 @@ quando você pede especificamente para uma inteligência artificial adivinhar o 
 | 📊 **Estatísticas** | Mostra horários de pico, ranking e gráficos |
 | 🏆 **Lista de Vida e conquistas** | Você "desbloqueia" espécies como num jogo |
 | 🌦️ **Clima** | Mostra o tempo e como ele influencia as visitas |
+| 🔮 **Previsão de alimentação** | Antecipa a chuva no seu jardim e estima se a atividade das aves vai aumentar ou diminuir |
+| 🌍 **Radar Global de Jardins** | Mapa-múndi com todos os jardins; um clique abre o clima, o vídeo ao vivo e as espécies daquele lugar |
+| 🏅 **Momentos Raros** | Curadoria automática das fotos mais nítidas e das espécies raras, com download em "foto de postal" |
 | 🔔 **Alertas** | Avisa no Telegram ou no Discord (opcional) |
 | 📁 **Importar vídeos** | Analisa gravações antigas do cartão de memória |
 | 📖 **Catálogo** | Cadastra as aves que você conhece |
@@ -115,6 +118,7 @@ Onde você **cadastra e cuida** das câmeras.
 - **Adicionar câmera:** escolha o tipo (webcam `USB`, ou câmera IP `RTSP`/`ONVIF`) e preencha o endereço e, se houver, usuário e senha.
 - **Localização global (opcional):** para câmeras em outros países (lives do YouTube, streams externos), abra **Localização & fuso horário**, informe a **cidade/país** e toque em **Buscar**. O Bem-Te-Vi descobre as coordenadas e o fuso sozinho — e o card da câmera passa a mostrar o **clima e o horário locais do jardim**.
 - **Ligar/desligar** cada câmera com um toque.
+- **Radar Global de Jardins:** no topo da aba, alterne entre **Grade** e **Radar Global** para ver todas as câmeras com localização em um mapa-múndi. Clique em um marcador para abrir, ali mesmo, o **clima local**, o **vídeo ao vivo**, as **estatísticas de hoje** e as **espécies** daquele jardim. Câmeras sem latitude/longitude não aparecem no mapa (o painel avisa quantas ficaram de fora).
 - **Controles no cartão (ao vivo):** ligar/desligar a **IA (Alaris)**, ouvir o **áudio
   ao vivo** da câmera e ativar/desativar a **Bioacústica (BirdNET)** — em cartões
   translúcidos, sem sair do Painel.
@@ -166,13 +170,35 @@ O **álbum de fotos** dos seus pássaros. Aqui você:
 
 #### 🎞️ Abas da Galeria
 
-No topo da Galeria há **quatro abas**, separando cada tipo de mídia:
+No topo da Galeria há **cinco abas**, separando cada tipo de mídia:
 
 - **Fotos e Vídeos** — as visitas individuais (foto, recorte e clipe);
+- **Momentos Raros** — a curadoria automática das fotos mais nítidas e das
+  espécies raras/incomuns (veja abaixo);
 - **Áudios** — a **galeria de cantos** do BirdNET (o mesmo painel da aba *Detecção Sonora*),
   com imagens/vídeos e áudios em **galerias separadas**;
 - **Convidados do Jardim** — os visitantes que não são aves (esquilos, gatos…);
 - **Resumos do Dia (Time-Lapse)** — os vídeos acelerados de cada dia.
+
+#### 🏅 Momentos Raros · Fotos de Postal
+
+Uma sub-aba dedicada a **descobrir as melhores fotos** do seu jardim, sem você
+precisar procurar. O **Alaris Core** mede a **nitidez** de cada captura
+(variância do Laplaciano, o mesmo critério usado para escolher o melhor quadro) e
+combina com a **raridade da espécie** no seu histórico — 1 ou 2 avistagens já
+valem um selo **Rara**.
+
+- a **foto da semana** abre como uma capa de revista, com espécie, data e jardim;
+- as demais formam uma **grade de revista**, cada uma com o selo de raridade e a
+  **nota de nitidez**;
+- escolha o período (**7, 14 ou 30 dias**) e use **Atualizar curadoria** para
+  avaliar as fotos novas na hora (a varredura também roda sozinha, de tempo em tempo);
+- clique em **Baixar postal** para salvar uma versão pronta para compartilhar:
+  **moldura elegante, legenda com o nome (popular e científico), data, jardim e a
+  marca d'água oficial Bem-Te-Vi** — gerada na hora, no seu computador.
+
+**Para que serve:** guardar e compartilhar as visitas mais especiais sem garimpar
+a galeria inteira.
 
 #### 🎞️ Resumos do Dia (Time-Lapse)
 
@@ -432,6 +458,46 @@ de forma automática, em cards e gráficos fáceis de ler:
   a temperatura (ex.: *"os beija-flores aparecem mais cedo quando está mais quente"*).
 
 Quanto mais dias de observação você tiver, mais espertos ficam os insights.
+
+### 🔮 Previsão de alimentação (Insights Meteorológicos do Alaris Core)
+
+No **Painel**, o card **Insights Meteorológicos do Alaris Core** dá um passo além
+do histórico: ele olha para **frente**. Para cada jardim com localização
+cadastrada, o Alaris Core consulta a **previsão das próximas horas** (Open-Meteo)
+e cruza com o **comportamento daquele jardim** — quantas visitas por dia costumam
+acontecer em dias de chuva versus dias secos. Se nenhuma câmera tiver localização
+cadastrada, ele usa a **localização principal do alimentador** (a mesma do clima
+global) como *Jardim Principal*, então funciona já na instalação padrão.
+
+- se **vem chuva**, o card avisa quando (ex.: *"🌧️ Chuva leve prevista para o
+  Jardim Principal em ~3 horas. Atividade de pássaros tende a intensificar 35%
+  antes da chuva. O Alaris Core otimizou o buffer de captura e a sensibilidade
+  para luz baixa."*);
+- se o **tempo segue firme**, mostra que é um bom momento para observar e lembra o
+  **horário de pico histórico** daquele jardim;
+- o selo de **confiança** indica se a estimativa vem de histórico sólido
+  (*alta*/*média*) ou se ainda é uma **estimativa inicial** (sem dias de chuva
+  registrados, usa uma referência conservadora);
+- com **mais de um jardim**, use as etiquetas para alternar entre eles.
+
+Sem internet, o card apenas informa que está sem previsão e continua monitorando —
+a captura **nunca** depende do clima.
+
+### 🌍 Radar Global de Jardins
+
+Na aba **Câmeras**, o botão **Radar Global** troca a grade por um **mapa-múndi
+minimalista** (desenhado no próprio painel, funciona **offline**, sem mapas
+externos). Cada jardim com coordenadas vira um **marcador pulsante** — verde
+quando está online. Ao clicar em um marcador, o painel lateral mostra:
+
+- o **clima e o horário locais** do jardim naquele instante;
+- o **vídeo ao vivo** da câmera (e o botão de **áudio**, quando a Bioacústica
+  está ligada);
+- as **estatísticas de hoje** (visitas, espécies e total histórico);
+- as **espécies mais vistas hoje**, com barras proporcionais.
+
+Se alguma câmera não tem latitude/longitude, o rodapé do mapa mostra quantas
+ficaram de fora — basta editar a câmera e informar a localização para ela aparecer.
 
 ### 🔔 Alertas no Telegram e no Discord
 

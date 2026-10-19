@@ -218,6 +218,14 @@ class Settings(BaseModel):
     ai_insights_enabled: bool = True
     # Capacidade do buffer circular do log cognitivo (últimos eventos em memória).
     ai_cognitive_log_capacity: int = Field(default=400, ge=50, le=5000)
+    # --- Momentos Raros / Fotos de Postal ---
+    # Curadoria automática: calcula a nitidez (variância do Laplaciano) das
+    # capturas e destaca as melhores da semana + espécies raras/incomuns.
+    rare_moments_enabled: bool = True
+    # Intervalo (horas) entre varreduras automáticas das capturas novas.
+    rare_moments_scan_hours: float = Field(default=6.0, ge=1.0, le=48.0)
+    # Janela (dias) padrão da galeria "Momentos Raros".
+    rare_moments_days: int = Field(default=7, ge=1, le=90)
 
     @property
     def db_path(self) -> Path:
@@ -546,6 +554,17 @@ class Settings(BaseModel):
             not in {"0", "false", "no", "off", "não", "nao"},
             ai_cognitive_log_capacity=min(
                 5000, max(50, int(os.getenv("AI_COGNITIVE_LOG_CAPACITY", "400")))
+            ),
+            rare_moments_enabled=os.getenv("RARE_MOMENTS_ENABLED", "true")
+            .strip()
+            .lower()
+            not in {"0", "false", "no", "off", "não", "nao"},
+            rare_moments_scan_hours=min(
+                48.0,
+                max(1.0, float(os.getenv("RARE_MOMENTS_SCAN_HOURS", "6"))),
+            ),
+            rare_moments_days=min(
+                90, max(1, int(os.getenv("RARE_MOMENTS_DAYS", "7")))
             ),
         )
 

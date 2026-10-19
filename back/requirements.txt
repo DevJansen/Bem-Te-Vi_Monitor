@@ -10,6 +10,9 @@ python-multipart>=0.0.20
 requests>=2.32.0
 # Laudo Ornitológico em PDF (módulo importado como `fpdf`).
 fpdf2>=2.7.9
+# Composição das "Fotos de Postal" (moldura + legenda + marca d'água) e
+# manipulação de imagens em app/services/rare_moments.py.
+pillow>=10.1.0
 # FFmpeg embutido (último recurso quando o FFmpeg do sistema não está no PATH).
 # Mantém o áudio/BirdNET e a enumeração de microfones funcionando "de fábrica",
 # sem exigir instalação manual de software no Windows.
