@@ -1,1094 +1,553 @@
-# Bem-Te-Vi
+# Bem-Te-Vi — Guia do Usuário
 
-Sistema **local** de monitoramento de avifauna por IA.
-
-> **Sobre o nome:** o projeto nasceu como *AviaWatch* e hoje se chama
-> **Bem-Te-Vi** — em homenagem ao pássaro que "avisa" quando chega visita ao
-> jardim. O **motor de IA** segue assinando como **Alaris Core**.
-
-O Bem-Te-Vi recebe vídeo de câmeras USB, RTSP, ONVIF, HLS, HTTP ou WebRTC —
-inclusive streams externos ao vivo (de outras casas/locais remotos) —, detecta
-aves com YOLOv8 e registra visitas em SQLite. O painel web permite desenhar zonas
-de inclusão e exclusão por câmera, consultar snapshots e clipes e, opcionalmente,
-pedir a identificação de uma ave a uma API externa. Alertas pelo Telegram e Discord também
-são opcionais. O processamento e os arquivos permanecem locais por padrão.
-
-> **Quer entender como usar sem precisar programar?** Leia o
-> [**Guia do Usuário (README-USO.md)**](README-USO.md) — explica todas as funcionalidades
-> em linguagem simples, com exemplos do dia a dia.
-
----
-
-## Requisitos
-
-Instale **antes** de executar o projeto:
-
-| Software | Versão mínima | Download |
-|----------|---------------|----------|
-| Python | 3.11+ | https://www.python.org/downloads/ |
-| Node.js (inclui npm) | 20+ LTS | https://nodejs.org/ |
-| Windows | 10/11 | — |
-
-### Dicas na instalação
-
-1. **Python:** na tela inicial do instalador, marque **“Add python.exe to PATH”**.
-2. **Node.js:** use o instalador LTS; o `npm` já vem incluído.
-3. Abra um **novo** Prompt de Comando ou PowerShell e confira:
-
-```bat
-python --version
-npm --version
-```
-
-> O **FFmpeg é opcional**: se não estiver instalado no sistema, o Bem-Te-Vi usa o
-> binário embutido no pacote Python `imageio-ffmpeg`, instalado automaticamente.
-> Nenhum outro software precisa ser instalado.
-
----
-
-## Instalação e execução rápida (Windows) — `start.bat`
-
-O jeito mais simples de subir o Bem-Te-Vi:
-
-### Passo 1 — Abrir a pasta do projeto
-
-No Explorador de Arquivos, vá até a pasta `Bem-Te-Vi` (onde estão `start.bat`, `back\` e `front\`).
-
-### Passo 2 — (Opcional) Configurar integrações
-
-1. Copie `back\.env.example` para `back\.env` (o `start.bat` também faz isso automaticamente se o `.env` não existir).
-2. Edite `back\.env` se quiser Telegram/Discord ou identificação por IA externa:
-
-```env
-TELEGRAM_BOT_TOKEN=
-TELEGRAM_CHAT_ID=
-DISCORD_WEBHOOK_URL=
-AI_EXTERNAL_API_KEY=
-AI_EXTERNAL_PROVIDER=
-AI_EXTERNAL_BASE_URL=https://api.openai.com/v1
-AI_EXTERNAL_MODEL=gpt-4o-mini
-PORT=8000
-```
-
-Deixe os campos vazios para manter Telegram, Discord ou identificação externa
-desabilitados. As integrações também podem ser configuradas depois em
-**Configurações → Variáveis de ambiente**.
-
-> **Proteja o arquivo:** não compartilhe nem publique `back\.env`. Não cole tokens
-> em chamados, capturas de tela ou commits. O arquivo contém segredos e deve ficar
-> apenas na máquina que executa o backend.
-
-O backend usa confiança YOLO de `0.22` (alta sensibilidade, ideal para aves
-distantes, pequenas, camufladas ou paradas ao pousar), tempo de permanência de
-`10` segundos para aves imóveis, sensibilidade de movimento de `0.80`, mantém
-pelo menos `3` segundos de pré-gravação e remove clipes, snapshots e recortes
-locais com mais de 30 dias. Esses padrões podem ser ajustados no `back\.env`
-(`YOLO_CONFIDENCE`, `OBJECT_PERSISTENCE_TIME`, `MOTION_SENSITIVITY`,
-`PRESENCE_GRACE_SECONDS`, `ALERT_COOLDOWN_SECONDS`, `PRE_RECORD_SECONDS` e
-`MEDIA_RETENTION_DAYS`) ou em tempo real no painel, em
-**Configurações → Calibração e Ajustes**. O limite mínimo de confiança é `0.05`
-e a retenção deve ser de pelo menos um dia.
-
-### Variáveis disponíveis
-
-O arquivo `back\.env.example` contém os nomes e os valores padrão. Copie-o para
-`back\.env` e preencha somente as integrações que pretende usar:
-
-| Variável | Para que serve | Exemplo/observação |
-|----------|----------------|-------------------|
-| `TELEGRAM_BOT_TOKEN` | Token do bot do Telegram | Obtenha um bot com o BotFather; trate como senha |
-| `TELEGRAM_CHAT_ID` | Destino dos alertas no Telegram | ID da conversa, grupo ou canal acessível pelo bot |
-| `DISCORD_WEBHOOK_URL` | Envio de alertas ao Discord | URL secreta de um webhook do seu servidor |
-| `AI_EXTERNAL_API_KEY` | Identificação opcional de espécies | Chave do provedor de IA; necessária somente para identificação externa |
-| `AI_EXTERNAL_PROVIDER` | Provedor da IA externa | `google` (Google Gemini, endpoint oficial) ou `openai` (compatível com a OpenAI). Vazio → detecta pela URL base |
-| `AI_EXTERNAL_BASE_URL` | URL base do provedor compatível com OpenAI | Padrão: `https://api.openai.com/v1`. Aceita OpenRouter, Groq, Ollama etc. **Ignorada no Google Gemini** (usa o endpoint oficial `generativelanguage.googleapis.com`) |
-| `AI_EXTERNAL_MODEL` | Modelo com suporte a visão | Padrão: `gpt-4o-mini`. Para o Gemini: `gemini-2.5-flash` ou `gemini-1.5-flash` |
-| `PORT` | Porta configurada na aplicação | Padrão: `8000`; os comandos de inicialização fornecidos usam a porta `8000` |
-| `YOLO_MODEL` | Arquivo/modelo de detecção | Padrão: `yolov8n.pt` |
-| `YOLO_CONFIDENCE` | Sensibilidade da detecção (menor = mais sensível) | Padrão: `0.22`; faixa: `0.05` a `1.0` |
-| `OBJECT_PERSISTENCE_TIME` | Tempo (s) que o rastreio mantém a visita com a ave imóvel | Padrão: `10.0`; faixa: `0` a `30` |
-| `MOTION_SENSITIVITY` | Sensibilidade de detecção de movimento inicial | Padrão: `0.80`; faixa: `0` a `1` |
-| `YOLO_BIRD_CLASS_ID` | Classe do COCO usada na inferência | Padrão: `14` (`bird`) |
-| `YOLO_ACCELERATION` | Backend de inferência (Edge AI) | `auto` (padrão: TensorRT > ONNX > PyTorch), `engine`/`tensorrt`, `onnx` ou `pt` |
-| `YOLO_DEVICE` | Dispositivo de inferência | `auto` (padrão: GPU se houver, senão CPU), `cpu` ou `0`/`1`… (GPU) |
-| `YOLO_HALF` | FP16 no PyTorch em GPU CUDA | Padrão: `false`; ignorado em CPU/TRT/ONNX |
-| `YOLO_IMGSZ` | Tamanho de entrada da inferência (px) | Padrão: `640`; `960`/`1280` aumentam o recall de aves pequenas |
-| `YOLO_TTA` | Test-Time Augmentation global (reforço de recall) | Padrão: `false` (mais lento) |
-| `ROI_ADAPTIVE_CONTRAST` | Contraste adaptativo (CLAHE) antes da inferência | Padrão: `true`; revela aves pequenas/camufladas sem afetar a imagem gravada |
-| `PRESENCE_GRACE_SECONDS` | Ausência (s) para encerrar a presença — anti-spam "mesma ave = mesmo evento" | Padrão: `30`; faixa: `0` a `600` (ajuste para `30` ou `60`) |
-| `ALERT_COOLDOWN_SECONDS` | Cooldown mínimo (s) entre alertas na mesma zona (piso) | Padrão: `30`; faixa: `0` a `600` |
-| `PRE_RECORD_SECONDS` | Duração anterior à detecção incluída no clipe | Padrão/mínimo: `3.0` |
-| `POST_RECORD_SECONDS` | Duração posterior à detecção | Padrão: `3.0` (com o pré-roll, o clipe cobre ~6 s) |
-| `CAMERA_RECONNECT_DELAY_SEC` | Intervalo de reconexão da câmera | Padrão: `3.0` |
-| `MEDIA_RETENTION_DAYS` | Retenção de mídia local | Padrão: `30`; mínimo: `1` |
-| `APP_DATA_DIR` | Diretório para banco, mídia e segredos de câmera | Opcional; padrão: `back\app-data` |
-| `LATITUDE` | Latitude do alimentador (usada pela integração meteorológica) | Padrão: `-23.5505` (São Paulo/SP) |
-| `LONGITUDE` | Longitude do alimentador (usada pela integração meteorológica) | Padrão: `-46.6333` (São Paulo/SP) |
-| `WEATHER_CACHE_MINUTES` | Intervalo (min) de atualização do cache local de clima | Padrão: `30`; mínimo: `5` |
-| `TIMELAPSE_ENABLED` | Liga/desliga a geração automática do resumo do dia | Padrão: `true` (`false` desativa o agendador) |
-| `TIMELAPSE_SPEED` | Fator de aceleração dos clipes no time-lapse | Padrão: `8` (8× mais rápido); faixa: `1` a `60` |
-| `TIMELAPSE_HOUR` | Hora local em que o resumo do dia é montado automaticamente | Padrão: `23` (0 a 23) |
-| `TIMELAPSE_MINUTE` | Minuto da hora acima | Padrão: `55` (0 a 59) |
-| `TIMELAPSE_BACKFILL_DAYS` | Quantos dias anteriores sem resumo são reprocessados ao iniciar | Padrão: `7` (0 a 90) |
-| `NIGHT_VISION_MODE` | Modo da visão noturna (infravermelho / baixa luz) | `auto` (padrão), `on` ou `off`; também aceita `true`/`false` |
-| `NIGHT_VISION_THRESHOLD` | Luminância média (0–255) que separa claro de escuro no modo `auto` | Padrão: `60` |
-| `NIGHT_VISION_CLAHE_CLIP` | Intensidade do realce de contraste local (CLAHE) | Padrão: `2.5`; faixa: `1.0` a `8.0` |
-| `NIGHT_VISION_CLAHE_GRID` | Tamanho da grade do CLAHE (blocos por lado) | Padrão: `8`; faixa: `2` a `16` |
-| `NIGHT_VISION_DENOISE` | Redução de ruído leve antes do realce | Padrão: `true` |
-| `NIGHT_FAUNA_ENABLED` | Expande a detecção para fauna noturna além de aves | Padrão: `false` |
-| `NIGHT_FAUNA_CLASS_IDS` | Classes extras do COCO quando a fauna noturna está ligada | Padrão: `15,16` (gato, cachorro) |
-| `OFFLINE_YOLO_CONFIDENCE` | Limiar de confiança dedicado à análise offline (mais sensível) | Padrão: `0.25`; faixa: `0.05` a `1.0` |
-| `OFFLINE_FRAME_STRIDE` | Passo de amostragem de quadros na análise offline | Padrão: `2` (um a cada dois quadros); faixa: `1` a `10` |
-| `OFFLINE_MAX_CLIPS` | Máximo de trechos curtos gerados por vídeo (um por ave) | Padrão: `12`; faixa: `0` a `100` |
-| `OFFLINE_CLIP_SECONDS` | Duração (s) do trecho salvo ao redor da melhor captura | Padrão: `4.0`; faixa: `1.0` a `20.0` |
-| `BEST_FRAME_ENABLED` | Escolhe automaticamente o quadro mais nítido da janela de gravação | Padrão: `true` (`false` volta a usar o instante do gatilho) |
-| `BEST_FRAME_IDEAL_AREA_RATIO` | Proporção ideal da tela (0–1) que a ave deve ocupar no melhor quadro | Padrão: `0.08` |
-| `BEST_FRAME_SHARPNESS_SCALE` | Escala de normalização da nitidez (variância do Laplaciano) | Padrão: `120` |
-| `BEST_FRAME_MIN_SHARPNESS` | Nitidez mínima para aceitar o quadro (abaixo = desfoque, descartado) | Padrão: `20`; `0` desativa o corte |
-| `ENHANCEMENT_ENABLED` | Melhoria automática (CLAHE + redução de ruído) da foto oficial | Padrão: `true` |
-| `ENHANCEMENT_CLAHE_CLIP` | Intensidade do CLAHE na foto tratada | Padrão: `2.0`; faixa: `1.0` a `8.0` |
-| `ENHANCEMENT_CLAHE_GRID` | Grade do CLAHE (blocos por lado) na foto tratada | Padrão: `8`; faixa: `2` a `16` |
-| `ENHANCEMENT_DENOISE` | Redução de ruído leve (não-linear) na foto tratada | Padrão: `true` |
-| `ENHANCEMENT_DENOISE_STRENGTH` | Força da redução de ruído | Padrão: `5.0`; faixa: `0` a `20` |
-| `ENHANCEMENT_MAX_WIDTH` | Largura máxima (px) da foto tratada (limita o custo do denoise) | Padrão: `1280`; faixa: `320` a `4096` |
-| `ENHANCEMENT_MIN_WIDTH` | Largura mínima (px) da foto tratada (garante "alta definição") | Padrão: `720`; faixa: `0` a `4096` |
-| `ENHANCEMENT_JPEG_QUALITY` | Qualidade JPEG da foto tratada | Padrão: `95`; faixa: `50` a `100` |
-| `CLIP_OVERLAY_ENABLED` | Grava a tarja de identificação (Alaris + espécie + confiança) nos clipes salvos | Padrão: `true` (`false` salva o vídeo sem a tarja) |
-| `SMART_CROP_MARGIN` | Margem de contexto ao redor da ave no recorte (fração da caixa) | Padrão: `0.25` |
-| `SMART_CROP_MIN_DIMENSION` | Dimensão mínima (px) do recorte da ave (amplia se menor) | Padrão: `640` |
-| `SMART_CROP_MAX_DIMENSION` | Dimensão máxima (px) do recorte da ave (reduz se maior) | Padrão: `1024` |
-| `ADAPTIVE_CONTEXT_ENABLED` | IA ciente do contexto: ajusta a sensibilidade por clima/horário | Padrão: `true` (só torna mais permissivo) |
-| `BEHAVIOR_REQUIRE_FEEDING` | Só registra a visita se a ave estiver se alimentando (bico no comedouro) | Padrão: `false` |
-| `ANOMALY_LOG_ENABLED` | Log de anomalias: alerta quando uma espécie reaparece após longo intervalo | Padrão: `true` |
-| `ANOMALY_SPECIES_GAP_DAYS` | Intervalo (dias) sem registro a partir do qual o retorno é anomalia | Padrão: `180` (~6 meses) |
-| `ANOMALY_COOLDOWN_DAYS` | Janela (dias) para não repetir a mesma anomalia de espécie | Padrão: `30` |
-| `ALLOW_REMOTE_ACCESS` | Libera acesso à API fora do computador local | Padrão: `false` (somente loopback). Use `true` só com VPN/proxy autenticado |
-| `ALLOWED_HOSTS` | Hosts aceitos no cabeçalho `Host` | Padrão: `127.0.0.1,localhost` |
-
-O painel administra a integração de IA Externa por completo (provedor, chave,
-URL base e modelo), os segredos do Telegram e do Discord, e as preferências de
-alerta. A seção **Alertas e Notificações** permite ligar/desligar os avisos,
-escolher o modo (`all` ou `new_species`), informar token e chat do Telegram e
-disparar um teste de envio real. As demais opções avançadas continuam sendo
-ajustadas no arquivo `.env`; alterações manuais nesse arquivo exigem reiniciar o
-backend.
-
-### Onde obter as credenciais
-
-- **Telegram:** crie um bot com o `@BotFather` e guarde o token recebido. Inicie
-  uma conversa com o bot ou adicione-o ao grupo/canal de alertas; informe o ID
-  correspondente em `TELEGRAM_CHAT_ID`.
-- **Discord:** nas configurações do servidor/canal, crie um webhook em
-  **Integrações → Webhooks** e guarde a URL completa em `DISCORD_WEBHOOK_URL`.
-- **IA externa:** use a chave do provedor de sua preferência. O Bem-Te-Vi aceita
-  dois modos:
-  - **Google Gemini** (`AI_EXTERNAL_PROVIDER=google`): usa o **endpoint oficial**
-    do Google Generative Language
-    (`https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent`),
-    com a chave na *query string*. A `AI_EXTERNAL_BASE_URL` é **ignorada** nesse
-    modo. Modelos: `gemini-2.5-flash`, `gemini-1.5-flash` etc.
-  - **Compatível com a OpenAI** (`AI_EXTERNAL_PROVIDER=openai`): a própria OpenAI,
-    OpenRouter, Groq ou Ollama (local), via `AI_EXTERNAL_BASE_URL`.
-
-  Se `AI_EXTERNAL_PROVIDER` ficar vazio, o provedor é detectado pela URL base.
-  Também é possível preencher tudo pela tela **Configurações → Variáveis de
-  ambiente** (basta escolher o provedor no seletor).
-
-Tokens de bot, URL de webhook e chaves de API funcionam como senhas: qualquer pessoa
-que os obtenha pode usar a integração associada. Revogue e gere uma nova credencial
-se houver suspeita de exposição.
-
-### Passo 3 — Executar o `start.bat`
-
-Dê um duplo clique em `start.bat`, ou no Prompt:
-
-```bat
-cd caminho\para\Bem-Te-Vi
-start.bat
-```
-
-O script irá, nesta ordem:
-
-1. Verificar Python (3.11+) e Node.js (20+) no PATH  
-2. Criar o ambiente virtual em `back\venv` (se ainda não existir)  
-3. Instalar/atualizar as dependências Python (`back\requirements.txt`) — só reinstala quando o arquivo muda  
-4. Instalar/atualizar as dependências Node (`front\package.json` / `package-lock.json`) — idem  
-5. **Iniciar ao mesmo tempo:**
-   - **Backend:** `uvicorn` em `http://127.0.0.1:8000`
-   - **Frontend:** `vite` em `http://127.0.0.1:5173`
-6. Aguardar o health-check da API e exibir os endereços
-
-Duas janelas de console serão abertas:
-
-- `Bem-Te-Vi Backend`
-- `Bem-Te-Vi Frontend`
-
-### Passo 4 — Abrir o painel
-
-O `start.bat` tenta abrir o navegador sozinho. Se não abrir, use:
-
-- **Painel (use este):** http://127.0.0.1:5173  
-- **API / docs:** http://127.0.0.1:8000/docs  
-
-> **Atenção:** a porta **8000** é só a API. O aplicativo visual é a porta **5173**.  
-> Se você abrir `http://127.0.0.1:8000` e achar que “não rodou”, troque para `http://127.0.0.1:5173`.
-
-### Passo 5 — Encerrar
-
-Feche as janelas `Bem-Te-Vi Backend` e `Bem-Te-Vi Frontend`, ou pressione `Ctrl+C` em cada uma.
-
-> Na **primeira execução**, o download do modelo YOLO (`yolov8n.pt`) e dos pacotes Python/Node pode demorar vários minutos.
+> **Para quem quer entender e usar o Bem-Te-Vi no dia a dia.**
 >
-> As dependências são conferidas a cada execução pelo **hash** do `requirements.txt`
-> e do `package-lock.json`: depois de um `git pull`, o `start.bat` reinstala sozinho
-> o que faltar, sem precisar apagar `back\venv` nem `front\node_modules`.
+> (Se você é desenvolvedor e quer detalhes técnicos de instalação e configuração, veja o [`README-DEV.md`](README-DEV.md).)
 
 ---
 
-## Instalação manual (alternativa)
+## Índice
 
-Use estes passos se preferir não usar o `start.bat`.
-
-### Backend (Python)
-
-```bat
-cd Bem-Te-Vi\back
-python -m venv venv
-venv\Scripts\activate
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-
-copy .env.example .env
-
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-```
-
-A API fica em http://127.0.0.1:8000 — docs em http://127.0.0.1:8000/docs
-
-Para rodar os testes automatizados, instale também as dependências de
-desenvolvimento e execute o `pytest`:
-
-```bat
-pip install -r requirements-dev.txt
-python -m pytest tests -q
-```
-
-### Frontend (Node.js)
-
-Em **outro** terminal:
-
-```bat
-cd Bem-Te-Vi\front
-npm install
-npm run dev -- --host 127.0.0.1 --port 5173
-```
-
-A interface fica em http://127.0.0.1:5173
-
-O Vite encaminha automaticamente:
-
-| Caminho no front | Destino |
-|------------------|---------|
-| `/api/*` | `http://127.0.0.1:8000/api/*` |
-| `/captures/*` | `http://127.0.0.1:8000/captures/*` |
-
-Assim o Axios (`baseURL: "/api"`) fala com o FastAPI **sem erros de CORS** no desenvolvimento.
+- [O que é o Bem-Te-Vi?](#o-que-é-o-bem-te-vi)
+- [O que ele faz?](#o-que-ele-faz-um-resumo-rápido)
+- [Como instalar e abrir](#como-instalar-e-abrir-o-jeito-mais-simples)
+- [As telas do Bem-Te-Vi](#as-telas-do-bem-te-vi)
+  - Painel · Câmeras · Galeria · Detecção Sonora · Minhas Aves · Estatísticas e Conquistas · Configurações
+- [Detalhes das funções mais importantes](#detalhes-das-funções-mais-importantes)
+- [Calibração: o "tempero" da IA](#calibração-o-tempero-da-ia)
+- [Perguntas frequentes (FAQ)](#perguntas-frequentes-faq)
+- [Dicas de ouro](#dicas-de-ouro)
+- [Segurança e privacidade](#segurança-e-privacidade)
+- [Preciso de ajuda?](#preciso-de-ajuda)
 
 ---
 
-## Verificação rápida da conexão Front ↔ Back
+## O que é o Bem-Te-Vi?
 
-Com o backend no ar, teste no navegador ou no PowerShell:
+O Bem-Te-Vi é um **vigia de pássaros automático** para o seu computador. Você aponta uma
+câmera (uma webcam ou uma câmera IP) para um comedouro, bebedouro ou cantinho onde os
+passarinhos costumam aparecer, e o sistema **sozinho**:
 
-```powershell
-Invoke-RestMethod http://127.0.0.1:8000/api/health
-Invoke-RestMethod http://127.0.0.1:8000/api/cameras
-Invoke-RestMethod http://127.0.0.1:8000/api/visits
-Invoke-RestMethod http://127.0.0.1:8000/api/stats
-Invoke-RestMethod http://127.0.0.1:8000/api/settings
-```
+- **percebe** quando um pássaro entra na imagem;
+- **tira uma foto** e **grava um vídeo** da visita;
+- **anota a hora** e guarda tudo no seu computador;
+- e, se você quiser, **descobre o nome** do pássaro (pela imagem ou pelo canto).
 
-Pelo front (com Vite rodando), as mesmas rotas passam pelo proxy:
+Tudo acontece **na sua própria máquina**. Nada vai para a internet ou para a nuvem, exceto
+quando você pede especificamente para uma inteligência artificial adivinhar o nome da ave.
 
-- http://127.0.0.1:5173/api/health  
-- http://127.0.0.1:5173/api/stats  
-
-Se o painel mostrar “Não foi possível conectar à API”, confirme se a janela **Bem-Te-Vi Backend** está aberta e sem erros.
+**Resumindo:** é como ter um passarinho-fotógrafo que trabalha 24 horas por dia e nunca dorme. 🐦
 
 ---
 
-## Funcionalidades e como usar
-
-### Cadastrar câmeras
-
-1. Abra o painel → aba **Central de Câmeras** → **Adicionar câmera externa**.
-2. Para uma webcam, escolha **Webcam local (USB)** e informe o índice (ex.: `0`).
-3. Para uma câmera IP, stream externo ou **live do YouTube**, cole a **URL do
-   Stream ao Vivo** (`rtsp://…`, `https://…/stream.m3u8`, `http://…`,
-   `https://www.youtube.com/watch?v=…`). O tipo (RTSP/HLS/HTTP/WebRTC) é
-   **detectado automaticamente** a partir do link.
-4. **Login e senha são opcionais.** Links públicos/abertos conectam direto, sem
-   credenciais. Se a câmera exigir autenticação, abra a seção
-   **"Esta câmera exige login e senha? (Opcional)"** e preencha usuário/senha.
-5. **Localização global (opcional).** Para câmeras fora do seu fuso — lives do
-   YouTube e streams de outros países — abra a seção **"Localização & fuso
-   horário (Opcional)"**: informe a **Localidade / Cidade / País** (ex.:
-   *Costa Rica - Comedouro de Beija-Flores*) e use **Buscar** para resolver a
-   cidade em **coordenadas e fuso IANA** automaticamente (seletor de cidade
-   inteligente), ou preencha latitude/longitude/fuso à mão. A partir daí o
-   painel daquela câmera exibe o **clima e o horário locais do jardim** em tempo
-   real (temperatura, condição e a hora exata de lá — ex.: sol na Costa Rica
-   enquanto é noite no Brasil) e os **gráficos de horário de pico** passam a usar
-   o fuso da câmera, evitando distorções nas estatísticas (ver
-   `back\app\services\camera_weather.py`).
-
-As credenciais (usuário/senha) são armazenadas criptografadas localmente com
-**Fernet**. A chave mestra vem de `ENCRYPTION_KEY` no `.env`; se não definida,
-uma chave é gerada em `back\app-data\secrets\camera_key.fernet`. Se você colar um
-link que **já contenha** usuário/senha (`rtsp://user:senha@host/…`), o backend os
-**extrai** da URL, criptografa e grava a URL **sem** as credenciais. O **Smart
-Stream Resolver** decide, no worker de captura, se injeta as credenciais na URI
-em memória (quando existem) ou usa a URL crua (quando é pública). A URL real e as
-credenciais **nunca** chegam ao navegador: o vídeo é entregue por um **proxy
-seguro** (`GET /api/streams/proxy/{id}`). A URL exibida na interface tem a
-userInfo mascarada (`****:****@host`). O estado aparece no painel como conectado,
-reconectando ou offline.
-
-### Mural multi-câmera (Alaris Core distribuído)
-
-No painel principal, o **Mural de Câmeras** exibe 1, 2 ou 4 câmeras simultâneas
-(lado a lado) ou uma em foco. Cada fluxo roda em seu **próprio worker** (thread de
-captura + IA), com **Alaris Core independente** por câmera: buffer temporal de
-~6 s (3 s antes + 3 s depois), cálculo de nitidez (variância do Laplaciano) e
-gravação dos melhores quadros no bebedouro/comedouro. Cada feed traz selos em
-tempo real do Alaris: status de conexão (Online 🟢 / Reconectando 🟡), FPS e a
-contagem de aves ativas no bebedouro/comedouro. Se um stream externo cair, o
-worker se reconecta sozinho com **backoff exponencial** (sem derrubar o servidor).
-O estado por stream é exposto em `GET /api/streams`.
-
-### Lives do YouTube (tradução de link → stream direto)
-
-Além de câmeras IP, você pode cadastrar o link de uma **live do YouTube**
-(`https://www.youtube.com/watch?v=…`, `https://youtu.be/…` ou o atalho de canal
-`https://www.youtube.com/@canal/live`). O OpenCV/FFmpeg **não** abre a página web
-do YouTube, então o backend usa o **`yt-dlp`** para traduzir o link para o
-**stream HLS direto** (`m3u8`) antes de abrir a captura. O link direto é então
-consumido pelo worker da câmera normalmente — com Alaris Core, selos de status,
-FPS e contagem de aves.
-
-- A tradução fica em `app/services/stream_resolver.py` (`resolver_url_direta`).
-- Links que **não** são do YouTube (RTSP/HTTP/HLS) passam direto, sem alteração.
-- Como o token de acesso de uma live **expira após algumas horas**, a reconexão
-  do worker **re-extrai** automaticamente um link novo quando o stream cai
-  (backoff exponencial). O cache curto (`YOUTUBE_RESOLVER_CACHE_SEC`) evita
-  re-extrair a cada tentativa, mas é ignorado na reconexão.
-- Para desligar a tradução: `YOUTUBE_RESOLVER_ENABLED=false` no `.env`.
-- Alguns vídeos/lives caem no bloqueio **"Sign in to confirm you're not a bot"**.
-  Nesse caso o backend repete a extração com um **cliente alternativo** do
-  YouTube (`android`) automaticamente. Se ainda assim falhar (live restrita),
-  informe um **arquivo de cookies** em `YOUTUBE_COOKIES_FILE` no `.env`.
-
-> Dica: instale um runtime JavaScript (ex.: `deno`) para o `yt-dlp` acessar
-> **todos** os formatos do YouTube. Sem ele, o yt-dlp ainda entrega o vídeo da
-> live (HLS), mas alguns formatos podem ficar de fora.
-
-### Desenhar zonas de leitura (ROI)
-
-1. Na câmera cadastrada, abra **Editar área** / **Áreas de leitura**.
-2. Selecione **Incluir** para desenhar uma região monitorada (verde) ou **Excluir**
-   para marcar uma região ignorada (vermelho).
-3. Clique na imagem ao vivo para adicionar vértices. Uma área precisa de pelo menos
-   três pontos; use **Desfazer ponto** para corrigir e **Concluir área** para fechar
-   o polígono.
-4. Salve as áreas. As coordenadas são normalizadas entre `0` e `1`, vinculadas à
-   câmera e persistidas localmente no SQLite.
-
-Quando não há zonas de inclusão, a imagem inteira é elegível. Havendo inclusões,
-somente regiões dentro de uma delas são elegíveis; zonas de exclusão removem suas
-regiões mesmo quando sobrepostas a uma inclusão. O pipeline mascara a imagem antes
-da inferência e também valida a posição das detecções antes de criar visitas.
-Alterações nas zonas reiniciam o pipeline daquela câmera.
-
-### Selecionar Zonas de Interesse (ROI) retangulares
-
-Além das áreas poligonais, cada câmera conta com um editor visual de **Zonas de
-Interesse (ROI)** retangulares, pensado para recortes rápidos sobre o feed:
-
-1. Na câmera, clique em **Zonas ROI**.
-2. Escolha o modo de desenho:
-   - 🟢 **Zona de Inclusão (Monitorar):** só registra visitas e fotos se o
-     passarinho aparecer dentro do quadrado.
-   - 🔴 **Zona de Exclusão (Ignorar):** descarta qualquer detecção dentro do
-     quadrado (galhos balançando, vento, tráfego, reflexos).
-3. Clique e arraste o mouse sobre o vídeo para desenhar o retângulo, com borda
-   colorida e fundo translúcido. Os botões flutuantes **Desfazer Último**,
-   **Limpar Tudo** e **Salvar Zonas** agilizam a edição, e a lista lateral permite
-   remover zonas individualmente.
-
-As coordenadas são normalizadas (`x1, y1, x2, y2` entre `0` e `1`) e vinculadas à
-câmera. O filtro usa o **centro da caixa delimitadora** da ave: havendo inclusões, a
-ave precisa estar em pelo menos uma delas; qualquer exclusão sobreposta descarta a
-detecção. As ROI retangulares somam-se às áreas poligonais (união de inclusões e
-união de exclusões) e o pipeline recarrega as zonas automaticamente após salvar,
-sem reiniciar o backend.
-
-### Consultar visitas e pedir identificação externa
-
-- **Painel:** acompanhe streams, indicadores e estatísticas.
-- **Galeria:** consulte visitas e thumbnails, reproduza os clipes no player
-  embutido (clique na miniatura ou em **Reproduzir clipe**) e use a exportação CSV.
-- Em uma visita genérica/não identificada, clique em **🤖 Perguntar à IA Externa**.
-  A Galeria mostra **Analisando ave...** durante a solicitação e atualiza o cartão
-  com os nomes comum e científico retornados.
-- A identificação usa a **imagem tratada** da visita — o recorte da ave ou a
-  thumbnail oficial em alta definição geradas pelo pipeline —, enviada por HTTPS
-  ao provedor configurado. No **Google Gemini** (`AI_EXTERNAL_PROVIDER=google`),
-  a chamada usa o endpoint oficial `generateContent` do Google (a chave vai na
-  URL e a `AI_EXTERNAL_BASE_URL` é ignorada). Nos demais provedores
-  (`openai`), usa-se a API de chat compatível com a OpenAI (`AI_EXTERNAL_BASE_URL`,
-  `AI_EXTERNAL_MODEL`) — OpenAI, OpenRouter, Groq ou Ollama. Basta definir
-  `AI_EXTERNAL_API_KEY`.
-- Ao identificar, o Bem-Te-Vi **cadastra automaticamente a espécie no Catálogo
-  Local (Life List)** e associa a visita (a foto tratada vira a imagem de
-  referência da espécie), sem gerar duplicatas. Pela API, o parâmetro
-  `add_to_catalog=false` desativa esse cadastro automático.
-- No cartão da **Galeria**, o **recorte tratado** da ave (close-up) aparece em
-  destaque como miniatura **Recorte** — dá para conferir a plumagem sem abrir o
-  registro. O recorte é servido por `GET /api/visits/{id}/crop` (arquivos em
-  `back\app-data\crops\`).
-- Depois de identificada, use **🔎 Ficha ornitológica (IA)** no cartão da Galeria
-  ou **Perguntar à IA Externa** no detalhe da visita para pedir uma **consulta
-  profunda** da espécie (`POST /api/visits/{id}/ask-ai`): nome científico,
-  família, ordem, status de conservação, dieta, comportamento alimentar, habitat,
-  distribuição, dados biogeográficos, migração, porte, longevidade e
-  curiosidades, exibidos em um modal formatado. A ficha fica em cache nos
-  metadados da visita; use **Atualizar** (ou `refresh=true`) para reconsultar.
-- A mesma consulta também está disponível **no nível da espécie**, a partir de
-  **Minhas Aves** (botão **Ficha IA** no cartão) e do **Álbum de Conquistas** /
-  ficha técnica (botão **🔎 Ficha ornitológica (IA)**) —
-  `POST /api/species/{id}/ask-ai`. Aqui o *prompt* usa o nome popular/científico
-  cadastrado e a **foto de referência tratada**; o resultado fica em cache na
-  própria espécie (`bird_species.ai_consult_json`, migração 7) e é reaproveitado
-  pela ficha técnica da espécie.
-- Sem imagem tratada disponível ou chave configurada, a API informa o erro. Os
-  recortes ficam em `back\app-data\crops\` e seguem a política de retenção de mídia.
-
-### Detecção Sonora (aba dedicada)
-
-Além de ver, o Bem-Te-Vi **escuta**. A aba **Detecção Sonora** reúne os cantos
-identificados pelo **BirdNET** em **blocos de 5 itens**, carregados de forma
-**incremental** pelo botão **"Ver mais…"** (sem paginação numérica), e dá ações de
-curadoria a cada registro:
-
-- **Player integrado por card:** cada detecção tem o **clipe de áudio** gravado
-  (WAV) reproduzível ali mesmo — botão play/pause, barra de progresso arrastável,
-  volume e mudo. Nada toca sozinho: o observador decide quando ouvir.
-- **Associar manualmente:** o seletor **Associar à espécie** vincula o canto a um
-  card já existente da **Life List** (`Minhas Aves`), sem duplicar espécies.
-- **Identificar com IA Externa:** o botão envia o **espectrograma** do áudio
-  (desenhado localmente com `numpy`+`cv2`, sem `matplotlib`) para o provedor de IA
-  configurado e devolve o nome popular/científico — cadastrando a espécie quando
-  for nova. Endpoint: `POST /api/audio-detections/{id}/identify-external`.
-- **Perguntar à IA Externa:** abre a **ficha ornitológica profunda** da espécie
-  detectada (família, conservação, dieta, habitat, biogeografia, curiosidades),
-  com cache reaproveitado. Endpoint: `POST /api/audio-detections/{id}/ask-ai`.
-- **Excluir:** remove a detecção sonora do histórico (com o áudio no disco).
-
-O mesmo painel aparece na **Galeria → aba "Áudios"**, mantendo **imagens/vídeos** e
-**áudios** em galerias separadas. A análise é 100% local; nenhum áudio sai da máquina.
-
-### Montar resumos do dia (time-lapse)
-
-O Bem-Te-Vi junta os clipes de um dia em um único vídeo acelerado — o **Resumo do
-Dia** — para rever os melhores momentos em segundos, sem assistir a cada gravação
-individual.
-
-- **Automático:** por padrão, ao fim do dia (23h55, ajustável em
-  `TIMELAPSE_HOUR`/`TIMELAPSE_MINUTE`), o backend monta
-  `back\app-data\captures\timelapses\timelapse_AAAA-MM-DD.mp4` a partir dos clipes
-  das visitas daquele dia.
-- **Sob demanda:** na aba **Galeria → Resumos do Dia (Time-Lapse)**, use **Gerar
-  resumo de hoje** para montar (ou regerar) o vídeo na hora.
-- **Recuperação:** ao iniciar, o backend reprocessa os últimos
-  `TIMELAPSE_BACKFILL_DAYS` dias que tenham clipes mas ainda não tenham resumo
-  (útil quando o computador ficou desligado).
-
-A montagem usa o `ffmpeg` via `subprocess`: os clipes são concatenados com o
-*demuxer* `concat` e acelerados pelo filtro `setpts` (fator `TIMELAPSE_SPEED`).
-Como as câmeras podem gravar em resoluções diferentes, os quadros são normalizados
-para 1280×720 (`scale`+`pad`) e recodificados em **H.264** (`yuv420p`,
-`+faststart`), garantindo um MP4 que o navegador reproduz. O dia é interpretado no
-**fuso local** do computador e convertido para o intervalo UTC na consulta ao
-banco. O player fica embutido na própria aba e usa o endpoint
-`/api/videos/timelapse/{arquivo}`, com suporte a `Range`. Se o `ffmpeg` não estiver
-instalado no sistema, o Bem-Te-Vi usa automaticamente o binário embutido no pacote
-Python `imageio-ffmpeg` (instalado pelo `requirements.txt`); só quando nem esse
-binário existe a geração fica indisponível (com aviso no log) e o restante do
-sistema segue normal.
-
-### Monitorar 24 horas com visão noturna (infravermelho)
-
-O Bem-Te-Vi continua enxergando no escuro. Quando a luminosidade cai (ou a
-câmera entra em modo infravermelho e passa a entregar imagens em preto e branco),
-o backend realça o contraste e reduz o ruído de cada quadro **antes** da
-inferência do YOLOv8, ajudando a IA a identificar formas mesmo à noite.
-
-- **Automático (recomendado):** o realce entra apenas quando a luminância média
-  do quadro fica abaixo do limiar configurado (`NIGHT_VISION_THRESHOLD`). De dia,
-  nada é alterado.
-- **Sempre ligada:** aplica o realce em todos os quadros — útil para câmeras IR
-  que não escurecem o suficiente.
-- **Desligada:** os quadros seguem originais para a detecção.
-
-O ajuste fica em **Configurações → Calibração e Ajustes → Visão Noturna
-(Infravermelho)**, com o modo, o limiar de luminosidade e a opção de **monitorar
-fauna noturna além de aves** (gatos, cachorros e outros animais do COCO). Corujas
-já são aves e continuam sendo detectadas normalmente. As mudanças são aplicadas em
-tempo de execução, sem reiniciar o backend.
-
-Onde você vê o status noturno:
-
-- **Painel → Transmissão ao vivo:** ícone de lua 🌙 e um filtro suave sobre o vídeo
-  enquanto o realce está ativo.
-- **Câmeras:** um selo **Visão noturna** no cartão da câmera.
-- **Galeria:** um selo **Noturno** nas capturas registradas com o realce ativo.
-
-Tecnicamente, o realce usa **CLAHE** (contraste local adaptativo) no canal de
-luminosidade e um **median blur** leve contra o ruído de sensor. O portão de
-movimento continua medindo o quadro **cru**, para que o realce não gere falsos
-positivos. O modo `auto` só gasta processamento quando a cena está escura.
-
-### Motor de IA avançado (Edge AI + inteligência biológica)
-
-O motor local evoluiu de um simples "detector de presença" para um **assistente
-biológico autônomo**, rápido e sensível, pensado também para uso científico.
-
-**1. Velocidade e sensibilidade (Edge AI).** O YOLOv8 pode rodar acelerado por
-**TensorRT**, **ONNX** ou **FP16** em GPU, com queda automática para CPU quando
-não há aceleração disponível. Gere o artefato otimizado uma vez com:
-
-```bat
-cd back
-venv\Scripts\python.exe -m tools.exportar_modelo --formato onnx
-```
-
-Com `YOLO_ACCELERATION=auto`, o Bem-Te-Vi passa a usar o `.onnx`/`.engine`
-automaticamente. Ajuste `YOLO_DEVICE`, `YOLO_HALF`, `YOLO_IMGSZ` e `YOLO_TTA`
-conforme o hardware. A telemetria do backend informa o backend em uso.
-
-**2. Sensibilidade dinâmica por ROI.** Cada ROI retangular pode ter um **papel**
-(comedouro, bebedouro, poleiro) e um **limiar de confiança próprio**. No
-comedouro, o sistema usa um limiar mais permissivo (ex.: 0,22–0,28) e aplica um
-**filtro de contraste adaptativo (CLAHE)** antes da inferência, revelando aves
-pequenas e camufladas (saíras, cambacicas) sem afetar o resto da cena nem a
-imagem gravada.
-
-**3. Contagem de bandos (multi-espécie).** O rastreador atribui um **ID estável**
-a cada indivíduo. O sistema conta o **pico simultâneo** e o **total de
-indivíduos** da janela, registrando frases como *"3 Cambacicas e 2 Saíras
-presentes simultaneamente"*. A Galeria mostra o selo **👥 N** quando há bando.
-
-**4. Status ecológico regional.** Cada espécie é cruzada com uma base curada da
-**avifauna do Sul do Brasil / Santa Catarina** e recebe um selo: 🟢 Nativa,
-🟡 Migratória, 🔵 Endêmica, ⭐ Rara/Acidental, 🟠 Exótica. Os selos aparecem em
-**Minhas Aves**, no **Álbum** e na **Galeria**, apoiando monitoramento de
-conservação.
-
-**5. IA ciente do contexto.** O motor lê a calibração do usuário, respeita as
-zonas de exclusão e correlaciona o **clima** (Open-Meteo). Em chuva, nevoeiro ou
-céu encoberto, a visibilidade cai: o limiar é relaxado e o contraste adaptativo
-(TTA leve nos casos severos) entra em ação — sempre de forma conservadora, nunca
-acima do que o usuário configurou.
-
-**Extras.** Análise de comportamento (**alimentando-se** × **pousada** × **em
-movimento**) e **log de anomalias**: se uma espécie que não era registrada há
-mais de 6 meses reaparecer, um alerta é criado no painel (`GET /api/anomalies`).
-
-**7. Alaris Core Smart Match.** Toda identificação é comparada com a Life List
-antes de virar cadastro: espécies repetidas apenas **incrementam o contador de
-visitas** e agregam a nova mídia ao card existente (sem duplicatas); espécies
-**novas** ganham automaticamente um card no Álbum de Conquistas, com a melhor
-foto tratada e o status ecológico regional.
-
-**8. Horário local por câmera (fuso global).** Cada visita guarda a **hora e a
-data locais do jardim** (fuso IANA cadastrado na câmera — migração 8). Com isso,
-os histogramas de horário de pico, o "pico do dia" e as medalhas de
-madrugada/noite do Alaris Core são calculados pelo **relógio do jardim**, e não
-pelo UTC: uma visita às 10h na Costa Rica não aparece mais como "madrugada" no
-Brasil. Câmeras sem fuso cadastrado continuam usando o UTC (comportamento
-anterior, sem quebrar o histórico).
-
-**6. IA visível — Alaris Core.** O motor de IA do Bem-Te-Vi assina como
-**Alaris Core v1.0** (a assinatura aparece em `GET /api/ai/status` e nos metadados
-de cada visita). O painel ganha um **Núcleo de IA** (widget futurista em Dark Mode
-com pulsos neon, selo "Potencializado por Alaris AI") que mostra em tempo real o
-estado do modelo, o FPS do stream, a latência da inferência, o número de
-inferências/detecções (hoje e total), o uso de CPU/RAM, o backend em uso
-(TensorRT/ONNX/PyTorch) e o tempo de atividade. Ao lado, um **terminal de logs
-cognitivos** lista os "pensamentos" da Alaris conforme acontecem (detecção,
-nitidez do quadro escolhido, identificação da espécie, auto-calibração por clima,
-bandos e anomalias), cada linha assinada com `[Alaris]`. A **Galeria** passa a
-exibir, em cada card, um **Índice de Certeza da IA** (barra 0–100%) e a
-**anotação ornitológica** gerada automaticamente (ex.: "Espécie identificada:
-Tangara sayaca (Nativa) — alimentando-se em grupo de 3 indivíduos, sob
-temperatura de 24°C e céu limpo."). Os endpoints `GET /api/ai/status` e
-`GET /api/ai/logs` expõem essa telemetria para integração externa. O comportamento
-pode ser desligado com `AI_INSIGHTS_ENABLED=false`.
-
-**7. Alta sensibilidade e anti-spam (Alaris Core).** Para não perder aves
-pequenas ou paradas no comedouro **e** evitar alertas/gravações repetidos da
-mesma visita, o motor já inicia com:
-
-- **Confiança `0.22`** por padrão (mais permissiva), com **CLAHE** ligado antes
-  da inferência para destacar a plumagem contra o fundo do comedouro;
-- **Retenção de rastreio de `10 s`** e **sensibilidade de movimento `0.80`**,
-  mantendo a ave na mesma visita mesmo quando o YOLO a perde por instantes;
-- **Regra de permanência:** enquanto a ave estiver no comedouro, o Alaris mantém
-  o rastreio e o buffer ativos, mas **não cria novos alertas/registros** — o
-  movimento contínuo é tratado como o **mesmo evento em andamento**;
-- **Encerramento por ausência:** um novo alerta só ocorre se a ave **sair
-  completamente** da zona por mais de `PRESENCE_GRACE_SECONDS` (padrão `30 s`) e
-  uma nova ave pousar, respeitando ainda o `ALERT_COOLDOWN_SECONDS` (padrão
-  `30 s`) por zona.
-
-Tudo isso já vem **ativado por padrão** — não é preciso ajustar nada a cada
-inicialização. Os valores podem ser afinados no `back\.env` (`YOLO_CONFIDENCE`,
-`OBJECT_PERSISTENCE_TIME`, `MOTION_SENSITIVITY`, `PRESENCE_GRACE_SECONDS`,
-`ALERT_COOLDOWN_SECONDS`) ou, no caso do cooldown, por zona no painel.
-
-**8. Overlays visuais e identificação nos vídeos (Alaris Core).** O Alaris deixa
-de ser "invisível": ele passa a **desenhar a própria atuação** sobre o vídeo.
-
-- **No stream ao vivo** (câmeras locais e remotas), cada ave detectada recebe uma
-  **caixa delimitadora arredondada** e um **selo flutuante** com a marca
-  `✨ Alaris AI`, o **nome da espécie** e a **confiança** (ex.: `Tangara sayaca
-  96%`). Aves aparecem em esmeralda e a fauna noturna em âmbar. O desenho é feito
-  com poucas operações por caixa (sem cópias extras de quadro), então **não
-  introduz atraso** no stream.
-- **No painel**, o feed da câmera se **ilumina** (borda e brilho esmeralda)
-  enquanto o Alaris está rastreando uma ave, com um **card flutuante**
-  *"Alaris rastreando"* mostrando a contagem e as **espécies ativas naquele
-  instante**. O Mural multi-câmera recebe o mesmo realce e o selo de espécies.
-- **Nos clipes gravados (6 s)**, o vídeo é salvo **já com uma tarja fosca de
-  identificação** no rodapé (marca `Alaris AI`, espécie, confiança, câmera e
-  horário). Assim a espécie é inconfundível mesmo se o arquivo for baixado,
-  compartilhado ou aberto fora do painel. A tarja é pré-renderizada **uma única
-  vez por clipe** e apenas mesclada em cada quadro — a gravação continua barata.
-  Pode ser desligada com `CLIP_OVERLAY_ENABLED=false`.
-- **Na Galeria**, o player de vídeo exibe um **selo elegante sobre o vídeo**
-  (tarja fosca em Dark Mode com ícone de ave, o nome da espécie em destaque e a
-  confiança), além dos selos ecológicos e de bando — resolvendo de imediato a
-  pergunta "qual ave está neste vídeo?".
-
-### Manter o catálogo local de aves
-
-1. Abra **Minhas Aves** e escolha **Cadastrar Nova Ave**.
-2. Preencha o nome popular, o nome científico e, se desejar, observações e uma foto
-   de referência de até 8 MB. A imagem é validada e armazenada localmente como JPEG.
-3. Na **Galeria**, use o menu **Associar ao catálogo** de uma visita para vincular
-   o evento a uma espécie. O cartão mostra os nomes popular e científico; a seleção
-   é salva na visita e atualiza o histórico sem recarregar o painel.
-4. Para remover uma espécie, confirme a exclusão. A foto de referência também é
-   removida. As visitas antigas são preservadas, mas deixam de apontar para a espécie
-   removida.
-5. Clique em qualquer card (**Minhas Aves** ou **Álbum de Conquistas**) para abrir
-   a **ficha técnica** da espécie: histórico de avistagens, horários de pico no
-   comedouro, temperatura média preferida (cruzada com a Open-Meteo), notas
-   científicas e status ecológico regional (`GET /api/species/{id}/profile`).
-   A miniatura do card usa o **recorte tratado** da melhor visita (close-up).
-
-O **Alaris Core Smart Match** compara automaticamente cada identificação com a
-Life List antes de virar cadastro: se a espécie **já existe**, a visita é
-vinculada ao card existente (sem duplicar registros) — o contador de visitas sobe
-e a nova foto/vídeo passam a integrar a galeria daquela espécie; se é **nova**,
-um card estruturado é criado no Álbum de Conquistas, já com a melhor foto tratada
-e o status ecológico. Se o card ainda não tinha foto de referência, ela é
-preenchida com o recorte tratado desta captura.
-
-O catálogo fica na tabela `bird_species` do SQLite, com imagens em
-`back\app-data\reference_birds\`. A associação de visitas usa `species_id`; ela é
-opcional e não altera a detecção automática do YOLO. Use a Galeria para revisar e
-associar manualmente as detecções com as espécies conhecidas.
-
-### Visitantes Silvestres / Convidados do Jardim (Modo Esquilo)
-
-O Alaris Core classifica o animal que aparece no comedouro com uma camada de
-**taxonomia pos-deteccao** (`app/domain/fauna_taxonomy.py`): aves seguem o fluxo
-ornitologico normal; mamiferos (esquilos, gatos, gambas, morcegos...) viram
-**Visitantes Especiais** -- nao entram na Life List ("Minhas Aves") nem nas
-estatisticas de aves, nao disparam alertas de Telegram/Webhook e nao geram
-anomalia ornitologica, mas ganham:
-
-1. **Painel "Visitas de Hoje" -> aba "Visitantes Especiais"**: contador secundario
-   com as aparicoes do dia e as estatisticas divertidas do "Modo Esquilo"
-   (ex.: esquilo 3 visitas hoje, ~36 sementes roubadas hoje).
-2. **Galeria -> aba "Convidados do Jardim"**: capturas dos bichos, agrupadas sob a
-   categoria tematica (ex.: Convidados do Jardim (Esquilos)).
-3. **Album de Conquistas -> badge secreta "O Ladrao de Sementes"**: desbloqueada
-   automaticamente na primeira aparicao de um esquilo. As medalhas secretas
-   aparecem mascaradas ("???") ate serem conquistadas.
-4. **Resumo dedicado**: `GET /api/wildlife/summary` (totais, por grupo, sementes
-   estimadas, badge desbloqueada) e `GET /api/wildlife/visits?today=true`.
-
-A deteccao dos Visitantes Especiais pode vir de duas fontes:
-- **Fauna noturna** (classes extras do COCO, ex.: gato/cachorro) quando
-  `NIGHT_FAUNA_ENABLED=true`;
-- **Identificacao externa** (Gemini Vision): se a IA externa identifica o
-  animal como esquilo/gato/etc., a visita e reclassificada como Visitante
-  Especial e **nao** e cadastrada na Life List (guarda anti-esquilo).
-
-A classificacao e conservadora: na duvida, o animal e tratado como **ave**, para
-nunca descartar um passaro legitimo.
-
-### Analisar vídeos gravados ou cartões de memória
-
-1. Copie a gravação do cartão de memória para o computador.
-2. Abra a aba **Câmeras** e, na área **Análise de Cartão de Memória**, escolha a
-   câmera à qual as visitas devem ser associadas (as zonas dessa câmera filtram
-   as detecções).
-3. **Arraste e solte** um ou vários arquivos `.mp4`, `.avi`, `.mov` ou `.mkv`
-   (até 2 GB cada) na área pontilhada — ou clique para selecionar. É preciso
-   cadastrar uma câmera antes: as zonas dessa câmera são usadas para filtrar as
-   detecções.
-4. Acompanhe o envio e a análise. A **barra de progresso flutuante** mostra, em
-   tempo real, o percentual e o quadro processado (ex.: `65% — Processando
-   frame 450/1200…`) e **continua visível ao trocar de aba**, porque quem
-   processa é o backend, não o navegador.
-5. Ao concluir, aparece um cartão com selo de sucesso e a contagem exata (ex.:
-   **🐦 3 Pássaros Encontrados**), com miniaturas das capturas e o botão
-   **Ver na Galeria** para assistir aos trechos.
-
-A IA da análise offline é **mais sensível** que a captura ao vivo: usa um limiar
-de confiança dedicado (`OFFLINE_YOLO_CONFIDENCE`, padrão `0.25`) e agrupa as
-detecções em *aves distintas* por associação temporal (IoU + proximidade de
-centro). Assim, uma ave contínua conta **uma** vez, mesmo aparecendo em centenas
-de quadros, e aves diferentes no mesmo vídeo contam separadamente. Para cada ave
-distinta o sistema salva a melhor miniatura e o recorte ampliado, cria
-automaticamente uma visita na Galeria e gera um trecho curto
-(`OFFLINE_CLIP_SECONDS`) para o botão de reprodução.
-
-O horário de cada evento é estimado somando a posição temporal do quadro no vídeo
-à data de última modificação do arquivo, enviada pelo navegador. Essa data pode não
-corresponder ao horário original se o arquivo foi copiado sem preservar seus metadados.
-O endpoint aceita upload, não caminhos arbitrários do disco do computador que executa
-o backend. O **estado de cada análise fica no backend** (`GET /api/offline/jobs`), então
-ele não se perde se o painel desconectar, recarregar ou trocar de aba; o histórico é
-mantido enquanto o serviço está em execução. A fila aceita até cinco análises
-aguardando ou em execução.
-
-### Configurar e testar integrações pelo painel
-
-1. Abra **Configurações → Alertas e Notificações** (Telegram) ou
-   **Configurações → Variáveis de ambiente** (Discord e IA externa).
-2. Digite apenas os valores novos. Campo vazio mantém o valor salvo; o painel nunca
-   recebe a credencial completa do backend. Para substituir uma chave, digite a nova.
-   Use **Remover credenciais salvas** somente se quiser apagá-la.
-3. Use **Testar Conexão** para validar os dados. O teste não salva a alteração.
-   No Telegram, **Testar Envio de Mensagem** valida o token (`getMe`) e envia uma
-   mensagem real de teste ao chat configurado, confirmando o caminho ponta a ponta.
-4. Clique em **Salvar Alterações**. O backend atualiza `back\.env` e recarrega as
-   configurações em execução; um toast informa sucesso ou erro.
-
-Por segurança, `GET /api/settings/env` devolve somente máscaras fixas e indicadores
-de configuração (`*_configured`), nunca os segredos nem seus sufixos. Os endpoints
-de leitura, gravação e teste são restritos a conexões locais. Não exponha o backend
-diretamente à rede ou à Internet.
-
-Na seção **Alertas e Notificações** ficam o liga/desliga dos alertas e o **modo de
-notificação**: `all` avisa a cada visita válida; `new_species` avisa apenas quando a
-espécie detectada ainda não consta no catálogo local (a *Life List*). A decisão de
-enviar considera ainda o limiar de confiança e o modo configurado, e nunca bloqueia
-o pipeline de vídeo — o envio é assíncrono (`NotificationService` + `notifier.py`).
-
-Na seção **Calibração e Ajustes** o usuário escolhe entre dois perfis prontos —
-**Passarinhos Parados / Alimentador** (recomendado) e **Alta Movimentação / Voo
-Rápido** — ou ajusta manualmente, com sliders explicativos, a *Sensibilidade da
-IA*, o *Tempo de permanência imóvel* (3–15 s), a *Sensibilidade de movimento
-inicial*, o *Tempo de presença da ave* (`PRESENCE_GRACE_SECONDS`) e o *Intervalo
-mínimo entre alertas* (`ALERT_COOLDOWN_SECONDS`) — os dois últimos aplicados ao
-vivo no validador de zonas, sem reiniciar as câmeras. O perfil recomendado já vem
-**ativo por padrão** (confiança `0.22`, permanência `10 s`, movimento `0.80`),
-entregando alta sensibilidade sem ajustes manuais. A **regra anti-spam** (mesma
-ave = mesmo evento) atua de forma transparente: enquanto a ave permanece no
-comedouro, o Alaris segue rastreando, mas não cria novos alertas/registros; um
-novo evento só nasce após a ave sair por completo da zona e outra pousar. A mesma
-tela traz a **Visão Noturna (Infravermelho)**: modo automático/sempre/desligado, o
-limiar de luminosidade e a opção de monitorar a fauna noturna além de aves. Em
-**Preferências da IA e
-alertas** ficam os limites de notificação, gravação pré/pós-detecção e o
-liga/desliga de notificações. Tudo é aplicado em tempo de execução, sem reiniciar
-o backend.
-
-### Excluir visitas e limpar o histórico
-
-- Na **Galeria**, use **Excluir registro** no cartão desejado e confirme a ação.
-  O registro, snapshot, clipe e recorte associados são removidos do banco e das
-  pastas locais de mídia. A interface remove o cartão imediatamente e atualiza
-  as estatísticas.
-- Em **Configurações → Exclusão e limpeza de dados**, escolha uma idade mínima e
-  use **Limpar histórico antigo** para remover visitas e arquivos associados
-  anteriores ao limite. Revise e confirme no modal.
-- **Esvaziar galeria e histórico** remove todas as visitas e suas mídias locais,
-  inclusive arquivos de mídia órfãos nas pastas de snapshots, clipes e recortes.
-  Para confirmar essa ação irreversível, digite `EXCLUIR TUDO`.
-- Câmeras, zonas, credenciais, configurações e o banco SQLite em si são mantidos;
-  a limpeza geral apaga os registros de visitas, não as tabelas nem o arquivo do
-  banco. Se algum arquivo não puder ser excluído, o painel informa que houve uma
-  falha parcial e os itens afetados permanecem reportados.
+## O que ele faz? (um resumo rápido)
+
+| Função | O que acontece |
+|--------|----------------|
+| 📷 **Detecção de pássaros** | Reconhece um passarinho na câmera e inicia uma "visita" |
+| 🌙 **Visão noturna** | Realça imagens escuras/infravermelho e monitora 24 horas |
+| 🖼️ **Fotos e vídeos** | Guarda uma foto e um clipe curto de cada visita |
+| 🎞️ **Resumo do dia** | Junta os clipes do dia em um vídeo acelerado (time-lapse) |
+| 🔊 **Reconhecimento de canto** | Identifica o pássaro pelo som e organiza os cantos numa aba própria (opcional) |
+| 🤖 **Identificação por IA** | Adivinha o nome da ave na foto (opcional, sob seu comando) |
+| 📊 **Estatísticas** | Mostra horários de pico, ranking e gráficos |
+| 🏆 **Lista de Vida e conquistas** | Você "desbloqueia" espécies como num jogo |
+| 🌦️ **Clima** | Mostra o tempo e como ele influencia as visitas |
+| 🔔 **Alertas** | Avisa no Telegram ou no Discord (opcional) |
+| 📁 **Importar vídeos** | Analisa gravações antigas do cartão de memória |
+| 📖 **Catálogo** | Cadastra as aves que você conhece |
+| 📤 **Exportar dados** | Baixa uma planilha (CSV) com todas as visitas |
 
 ---
 
-## Estrutura do projeto
+## Como instalar e abrir (o jeito mais simples)
 
-```
-Bem-Te-Vi/
-├── back/                 # FastAPI + OpenCV + YOLOv8 + SQLite
-│   ├── app/
-│   │   ├── api/         # Analytics (resumo/distribuição por jardim)
-│   │   ├── controllers/  # Rotas REST (inclui audio_detections)
-│   │   ├── core/         # Configuração e descoberta do ffmpeg/ffprobe
-│   │   ├── domain/       # Modelos e taxonomia da fauna (anti-esquilo)
-│   │   ├── infra/        # AI, câmera, DB, mídia
-│   │   ├── services/     # Notificações, áudio BirdNET (audio_clips/audio_analysis), .env e IA externa
-│   │   └── main.py
-│   ├── app-data/         # Banco, capturas, recortes, clipes e áudios (local)
-│   ├── requirements.txt
-│   └── .env.example
-├── front/                # React 19 + Vite + TypeScript + Tailwind
-│   ├── src/
-│   └── package.json
-├── start.bat             # Sobe uvicorn + vite juntos (Windows)
-└── README.md
-```
+1. Instale o **Python 3.11 ou superior** e o **Node.js 20 ou superior** (links e detalhes no [`README-DEV.md`](README-DEV.md)).
+2. Dê um **duplo clique** no arquivo `start.bat`, dentro da pasta do projeto.
+3. Espere algumas janelas abrirem. Na primeira vez, o `start.bat` **instala as dependências
+   sozinho** (basta ter internet) e baixa o programa de detecção — pode demorar vários minutos.
+   Nas próximas vezes ele abre em segundos e só reinstala algo se o projeto for atualizado.
+4. O navegador deve abrir sozinho. Se não abrir, acesse:
+
+   **http://127.0.0.1:5173**
+
+   (Esse é o endereço do painel. Guarde-o nos favoritos.)
+
+5. Para **fechar**, feche as duas janelas pretas que se abriram (ou aperte `Ctrl+C` em cada uma).
+
+> **Importante:** o painel funciona apenas no seu próprio computador. Não é preciso internet para vigiar os pássaros — só para algumas funções opcionais (clima, IA externa e alertas).
 
 ---
 
-## API local (resumo)
+## As telas do Bem-Te-Vi
 
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| GET | `/api/health` | Saúde da API |
-| GET/POST | `/api/cameras` | Listar / criar câmeras (cada item inclui `night_mode`, se a visão noturna está ativa) |
-| GET/PUT/DELETE | `/api/cameras/{id}` | Detalhe / atualizar / remover. **Excluir arquiva a câmera (soft-delete)**: nada da galeria, dos clipes, das fotos ou dos áudios é apagado — o histórico do jardim é preservado permanentemente |
-| GET/PUT | `/api/cameras/{id}/zones` | Carregar / salvar polígonos de inclusão e exclusão |
-| GET | `/api/cameras/{id}/weather` | Clima e horário **locais** do jardim da câmera (Open-Meteo; requer coordenadas) |
-| GET | `/api/weather/geocode?q=` | Seletor de cidade inteligente: nome → coordenadas + fuso IANA |
-| GET | `/api/settings/roi?camera_id={id}` | Ler as Zonas de Interesse (ROI) retangulares da câmera |
-| POST | `/api/settings/roi` | Salvar as ROI retangulares (`{camera_id, zones:[{type, x1, y1, x2, y2}]}`) e aplicar em runtime |
-| GET | `/api/visits` | Eventos de aves |
-| GET | `/api/visits/today` | Visitas de hoje (mais recentes primeiro) |
-| GET | `/api/visits/{id}` | Detalhe de uma visita |
-| PUT | `/api/visits/{visit_id}/assign-species` | Associar ou desassociar visita a uma espécie (`{"species_id":"..."}`) |
-| POST | `/api/visits/{id}/identify-external` | Identificar sob demanda usando o recorte local da visita |
-| POST | `/api/visits/{id}/ask-ai` | Consulta ornitológica profunda na IA externa (ficha formatada; `refresh=true` reconsulta) |
-| GET | `/api/species` | Listar o catálogo local de aves |
-| POST | `/api/species` | Cadastrar uma espécie (multipart: `common_name`, `scientific_name`, `description`, `reference_image` opcional) |
-| GET | `/api/species/{id}/profile` | Ficha técnica da espécie (histórico, horários de pico, temperatura média, clima, notas e status ecológico) |
-| POST | `/api/species/{id}/ask-ai` | Consulta ornitológica profunda na IA externa **por espécie** (Minhas Aves / Álbum; `refresh=true` reconsulta) |
-| DELETE | `/api/species/{id}` | Excluir espécie e sua foto; preservar visitas sem associação |
-| POST | `/api/offline/upload` | Enviar MP4/AVI/MOV/MKV e iniciar a análise offline em background (multipart: `file`, `camera_id`, `recorded_at`) |
-| GET | `/api/offline/jobs` | Estado de todas as análises offline (em andamento e concluídas) com progresso, contagem de aves e detecções |
-| GET | `/api/offline/jobs/{job_id}` | Estado detalhado de uma análise offline |
-| DELETE | `/api/offline/jobs/{job_id}` | Remover do histórico uma análise já finalizada |
-| POST | `/api/offline/jobs/clear` | Limpar do histórico todas as análises finalizadas |
-| DELETE | `/api/events/{event_id}` | Excluir visita individual e sua mídia local associada |
-| DELETE | `/api/events?older_than_days=N` | Excluir visitas anteriores ao limite de dias informado |
-| DELETE | `/api/events/all` | Apagar todo o histórico e a mídia; exige confirmação `EXCLUIR TUDO` |
-| GET/PUT | `/api/settings` | Configurações persistidas (`notifications_enabled`, `notify_mode`, `min_confidence_notify`, …) |
-| GET | `/api/settings/calibration` | Calibração ativa (confiança, permanência, movimento e visão noturna) |
-| POST | `/api/settings/calibration` | Atualizar a calibração (perfil, valores e visão noturna/fauna) e aplicar em tempo de execução |
-| POST | `/api/settings/test-notification` | Teste Telegram/Discord com as credenciais já salvas |
-| GET | `/api/settings/env` | Ler integrações com credenciais mascaradas |
-| POST | `/api/settings/env` | Salvar variáveis permitidas no `back/.env` e aplicá-las em runtime |
-| POST | `/api/settings/env/test` | Testar credenciais digitadas sem salvá-las (no Telegram envia uma mensagem real) |
-| GET | `/api/stats` | Métricas do painel |
-| GET | `/api/analytics/summary?camera_id=` | Visitas de hoje, últimos 7 dias e total; espécie líder, duração média e horário de pico. Com `camera_id`, restringe a um jardim (visão por jardim × consolidada) |
-| GET | `/api/analytics/hourly-distribution?camera_id=` | Contagem histórica de visitas para cada hora do dia (00h–23h), consolidada ou de um jardim |
-| GET | `/api/analytics/lifelist` | Espécies do catálogo, desbloqueio, primeiro registro, foto, avistagens e status ecológico |
-| GET | `/api/analytics/achievements` | Conquistas desbloqueadas e disponíveis |
-| GET | `/api/anomalies` | Log de anomalias acústico-visuais (ex.: espécie que reaparece após meses); aceita `limit` e `only_pending` |
-| GET | `/api/anomalies/pending-count` | Quantidade de anomalias ainda não reconhecidas (badge do painel) |
-| POST | `/api/anomalies/{id}/acknowledge` | Marca uma anomalia como reconhecida |
-| GET | `/api/ai/status` | **Alaris Core**: estado do motor (`signature: "Alaris Core v1.0"`), FPS, latência da inferência, inferências hoje/total, detecções, recursos (CPU/RAM), modelo/backend/dispositivo e tempo de atividade |
-| GET | `/api/ai/logs?limit=&since_id=` | **Logs cognitivos da Alaris**: "pensamentos" em tempo real assinados com `[Alaris]` (detecção, nitidez do frame, espécie identificada, auto-calibração por clima, anomalias); `since_id` habilita polling incremental |
-| GET | `/api/streams` | **Multi-câmera**: estado em tempo real de cada stream (status de conexão, FPS, backend, aves ativas no comedouro, pico de indivíduos e inferências) |
-| GET | `/api/streams/proxy/{id}` | **Proxy seguro de vídeo (MJPEG)**: anonimiza a URL e as credenciais da câmera externa — o navegador nunca as vê |
-| GET | `/api/analytics/weather-correlation` | Relação entre o clima (chuva/temperatura/vento) e as visitas |
-| GET | `/api/analytics/weather-insights` | Insights automáticos cruzando clima e hábitos: faixas de temperatura, chuva × seco, horário no frio × no calor e horário por espécie |
-| GET | `/api/analytics/timelapses` | Lista os resumos do dia (time-lapses) já gerados |
-| POST | `/api/analytics/timelapses/generate` | Gera sob demanda o resumo de um dia (`day` opcional; `force` regera) |
-| DELETE | `/api/analytics/timelapses/{arquivo}` | Remove um resumo do dia |
-| GET | `/api/audio-detections?limit=30` | Detecções sonoras recentes, confiança e visita visual associada |
-| GET | `/api/audio-detections/page?limit=5&offset=` | Página de detecções sonoras para a aba **Detecção Sonora** (blocos de 5, carregamento incremental pelo botão "Ver mais…") |
-| GET | `/api/audio-detections/status` | Estado da análise BirdNET e câmeras monitoradas |
-| GET | `/api/audio-detections/devices` | Dispositivos de áudio de entrada disponíveis (microfones) |
-| GET | `/api/audio-detections/{id}/audio` | Clipe de áudio (WAV) da detecção, para o player integrado ao card |
-| PUT | `/api/audio-detections/{id}/identify` | Associação **manual** do canto a uma espécie da Life List (`{"species_id":"..."}`) |
-| POST | `/api/audio-detections/{id}/identify-external` | IA externa identifica a espécie pelo **espectrograma** do áudio (`add_to_catalog` opcional) |
-| POST | `/api/audio-detections/{id}/ask-ai` | Ficha ornitológica profunda (IA externa) da espécie detectada por som (`refresh=true` reconsulta) |
-| DELETE | `/api/audio-detections/{id}` | Remove a detecção sonora (e o clipe de áudio no disco) |
-| GET | `/api/video-feed/{id}?boxes=true` | Stream MJPEG com caixas de detecção (use `boxes=false` para ocultá-las) |
-| GET | `/api/video-feed/{id}/snapshot` | Foto atual da câmera |
-| GET | `/api/weather/current` | Clima atual no alimentador (temperatura, chuva e vento) |
-| GET | `/api/videos/{arquivo}` | Streaming do clipe (MP4/H.264) com suporte a requisições `Range` |
-| GET | `/api/videos/timelapse/{arquivo}` | Streaming do resumo do dia (time-lapse) com suporte a `Range` |
-| GET | `/captures/...` | Thumbnails e demais mídias estáticas |
-
-A aba **Estatísticas & Conquistas** do painel mostra os hábitos de visita e a Life
-List. Um seletor no topo alterna entre **cada jardim** e a **Visão Total
-Consolidada**: visitas, horário de pico, distribuição por hora e **espécies
-presentes** acompanham o escopo escolhido. Uma espécie é desbloqueada quando uma
-visita é associada a ela no catálogo.
-
-> **Nomenclatura:** detecções que o YOLO/BirdNET ainda não nomearam aparecem
-> sempre como **"Pássaro Desconhecido"** — nunca "Ave Genérica" nem "Bird" — com
-> a **silhueta padrão** do sistema no lugar da foto. Visitantes que não são aves
-> (esquilos, gatos…) ficam isolados na aba **Visitantes Especiais** e **não**
-> entram na contagem de pássaros.
-
-A seção **Insights Comportamentais & Clima** (`/api/analytics/weather-insights`)
-cruza cada visita com a temperatura, a umidade e a condição do tempo gravadas no
-momento da captura e monta, automaticamente:
-
-- **faixas de temperatura** (visitas, espécies diferentes, visitas/dia e horário
-  médio) — destaca a faixa que atrai mais espécies;
-- **chuva × tempo seco** — compara a média de visitas por dia em cada condição;
-- **horário no frio × no calor** — horário médio de aparecimento em cada regime
-  (o limiar frio/quente é a mediana das temperaturas dos dias observados);
-- **horário por espécie** — quanto cada espécie aparece mais cedo ou mais tarde
-  conforme a temperatura;
-- **cards de resumo inteligente** com frases prontas em pt-BR.
-
-O cálculo usa o **horário local** do computador e exige apenas visitas com dados de
-clima; quanto mais capturas, mais confiáveis ficam os insights.
-
-### Bioacústica com BirdNET
-
-A análise sonora pode ser ativada em **Configurações → Preferências da IA e
-alertas**. Quando habilitada, o backend extrai blocos mono de três segundos do
-áudio das câmeras RTSP/ONVIF habilitadas e os analisa em segundo plano. O
-threshold padrão é 70%; detecções acima do valor configurado são salvas como
-eventos `AUDIO_DETECTION` no SQLite e associadas à visita visual da mesma câmera
-quando houver uma em até 30 segundos.
-
-Para usar esse recurso, instale as dependências Python de `back\requirements.txt`
-e um runtime TensorFlow Lite/TensorFlow compatível com a versão de Python
-selecionada (o `ai-edge-litert` já vem no `requirements.txt`). O **FFmpeg** é
-necessário para capturar o áudio: o sistema procura o executável no `PATH`, nas
-pastas do winget e, por fim, usa o binário embutido no pacote `imageio-ffmpeg`.
-O modelo BirdNET é inicializado sob demanda; a configuração de análise fica
-desativada por padrão.
-O painel mostra o motivo quando algum pré-requisito não está disponível. A análise
-é executada localmente e não envia áudio para serviços externos.
-
-Credenciais de câmera usam Fernet (chave em `back/app-data/secrets/`). Vídeos e imagens
-permanecem locais por padrão; somente a ação explícita de identificação transmite o
-recorte daquela visita à OpenAI. Telegram/Discord só recebem alertas se configurados,
-respeitando o modo de notificação e o limiar de confiança escolhidos no painel.
-Os recortes ficam em `back/app-data/crops/`. O armazenamento é local, mas não substitui
-backup: proteja a pasta `back/app-data/` e o arquivo `back/.env`. O catálogo e as fotos
-de referência também ficam em `back/app-data/`.
-
-O processamento YOLO roda a cada quatro quadros, usando fluxo óptico nos quadros
-intermediários e as zonas poligonais e as ROI retangulares como filtros espaciais.
-Por padrão, a inferência é restrita à classe `bird` do COCO (id `14`); quando a
-**fauna noturna** está habilitada, ela é expandida para as classes extras
-configuradas em `NIGHT_FAUNA_CLASS_IDS` (padrão: gato e cachorro). Antes da
-inferência, o módulo de **visão noturna** aplica CLAHE e redução de ruído nos
-quadros escuros/IR quando necessário (`NIGHT_VISION_MODE`). Quando a ave para de se mover para se alimentar e o
-YOLO perde a detecção, o rastreio mantém a mesma caixa "em espera" pela janela de
-`OBJECT_PERSISTENCE_TIME`, de modo que a visita não é reiniciada por uma perda
-momentânea. Em cenas sem aves rastreadas, a inferência só roda quando há
-movimento suficiente (`MOTION_SENSITIVITY`), com uma verificação periódica de
-segurança. A **pré-gravação** mantém em RAM, em um buffer circular
-(`collections.deque`, com trava de thread), os três segundos anteriores à
-detecção; saídas temporárias da zona de até dez segundos são consideradas a
-mesma presença. Snapshots, recortes e clipes vencidos são limpos diariamente
-conforme `MEDIA_RETENTION_DAYS`, sem remover registros do SQLite.
-
-Os clipes são gravados sempre em `.mp4`: o OpenCV grava os quadros
-(`avc1`/`H264` e, em último caso, `mp4v`) e, logo em seguida, o `ffmpeg` reencoda
-o resultado para **H.264** (`yuv420p`, `+faststart`) — o formato que qualquer
-navegador reproduz. Sem o `ffmpeg` no `PATH`, o arquivo do OpenCV é mantido (com
-aviso no log quando não for H.264). Arquivos inválidos ou corrompidos são
-descartados. A reprodução na Galeria usa o endpoint `/api/videos/{arquivo}`, que
-responde a requisições `Range` (status `206`) para permitir avançar e rebobinar o
-vídeo sem baixá-lo por inteiro.
-
-**Gravação inteligente (pré/pós-evento + melhor quadro).** Ao confirmar uma ave,
-o pipeline despeja os três segundos do buffer no clipe e continua gravando mais
-três (`POST_RECORD_SECONDS`), totalizando uma janela de ~6 s que começa *antes*
-do pouso. Durante a janela, o seletor de melhor quadro
-(`app/infra/ai/best_frame.py`) avalia cada detecção e guarda apenas a vencedora,
-combinando três sinais: **nitidez** (variância do Laplaciano no recorte da ave),
-**confiança** do YOLOv8 e **enquadramento** (proporção ideal da tela). Quadros com
-nitidez abaixo de `BEST_FRAME_MIN_SHARPNESS` são **descartados como desfoque de
-movimento**; se nenhum quadro da janela passar no corte, usa-se o melhor
-disponível (fallback), de modo que a visita nunca fica sem foto. Em seguida, o
-módulo de enhancement (`app/infra/ai/enhancement.py`) aplica **CLAHE** e **redução
-de ruído leve** (`fastNlMeansDenoisingColored`) nesse quadro e o salva como a
-**thumbnail oficial** em alta definição (`ENHANCEMENT_*`). O recorte da ave passa
-por um **crop inteligente** (`SMART_CROP_*`): ganha margem de contexto ao redor da
-caixa e é ajustado para uma faixa de resolução nítida. Essa foto alimenta a Galeria
-e o Álbum de Conquistas (Life List), e é a imagem enviada à IA externa quando o
-usuário pede a identificação da espécie. Todo o pós-processamento (ffmpeg +
-enhancement) roda em um *thread pool* dedicado, fora do laço de captura, para não
-travar a leitura da câmera. A visita expõe no banco as notas do quadro escolhido
-(`best_frame_score`, `best_frame_sharpness`, `best_frame_area_ratio`,
-`best_frame_confidence`, `best_frame_sharpness_ok`) e o selo `enhanced`.
-
-Os resumos do dia (time-lapse) ficam em `back\app-data\captures\timelapses\` e
-**não** são removidos pela política de retenção (`MEDIA_RETENTION_DAYS`); apague-os
-manualmente pela aba **Galeria → Resumos do Dia (Time-Lapse)** se quiser liberar
-espaço.
+O menu lateral tem sete telas. Vamos explicar cada uma como se estivéssemos juntos:
 
 ---
 
-## Solução de problemas
+### 🖥️ 1. Painel (a tela inicial)
 
-| Problema | O que fazer |
-|----------|-------------|
-| `python` não reconhecido | Reinstale o Python marcando “Add to PATH” e abra um terminal novo |
-| `npm` não reconhecido | Reinstale o Node.js LTS e abra um terminal novo |
-| Porta 8000 ou 5173 em uso | No PowerShell: `Get-NetTCPConnection -LocalPort 8000 -State Listen` e encerre o PID (`Stop-Process -Id <PID> -Force`). Depois rode `start.bat` de novo |
-| Front sem dados / 404 nas rotas | Confirme que a API em `:8000` é a do Bem-Te-Vi atual (`/docs` deve listar `/api/visits`, `/api/stats`, `/api/settings`). Outro processo antigo na porta 8000 causa 404 |
-| `ModuleNotFoundError` ao iniciar a API | Alguma dependência nova não foi instalada. Rode o `start.bat` de novo (ele reinstala pelo hash do `requirements.txt`) ou `back\venv\Scripts\python.exe -m pip install -r back\requirements.txt` |
-| Front sem dados | Confirme http://127.0.0.1:8000/api/health e a janela do backend |
-| Identificação externa indisponível | Confira `AI_EXTERNAL_API_KEY`, `AI_EXTERNAL_PROVIDER`, o modelo com suporte a visão e o acesso de rede ao provedor escolhido. No **Google Gemini** o provedor deve ser `google` (a URL base é ignorada); um **HTTP 404** indica que a chamada caiu numa rota padrão da OpenAI em vez do endpoint oficial do Google |
-| Importação de gravação rejeitada | Use MP4, AVI, MOV ou MKV com menos de 2 GB e associe o arquivo a uma câmera cadastrada |
-| Análise offline falhou | Confirme se o vídeo abre em outro player e se o modelo YOLO foi carregado; tente exportar novamente o arquivo do cartão |
-| Clipe não reproduz na Galeria | Os clipes novos usam H.264 (compatível com navegadores). O Bem-Te-Vi usa o `ffmpeg` do sistema ou o embutido no pacote `imageio-ffmpeg`; se nenhum estiver disponível, instale o `ffmpeg` e coloque-o no `PATH`. Clipes antigos em `mp4v` podem não abrir no player: use **Baixar clipe** |
-| Teste de conexão falha | Confirme token/URL e acesso à Internet; os testes não enviam mensagens e usam os valores digitados ou salvos |
-| Tela de variáveis retorna 403 | A configuração de segredos só aceita conexões locais; abra o painel local padrão em `127.0.0.1` |
-| YOLO / ultralytics lento na 1ª vez | Normal — baixa pesos e dependências na primeira instalação |
-| Webcam não abre | Teste outro índice USB (`1`, `2`…) ou feche apps que usam a câmera |
+É o "painel do cockpit". Aqui você vê, de relance:
 
----
+- **Clima agora** — temperatura, chuva e vento, com um **seletor de localidade**:
+  escolha a *localização global* ou o *clima local de cada jardim* (útil quando você
+  acompanha câmeras de outros lugares).
+- **Números do dia** — quantas visitas, quantas espécies, tempo médio e horário de
+  movimento. Um seletor de **Jardim** filtra tudo para a câmera escolhida.
+- **Ao vivo** — a imagem em tempo real das suas câmeras, em cartões translúcidos com
+  botões de **ativar/desativar o monitoramento**, **ouvinte de áudio ao vivo** e
+  **Bioacústica (BirdNET)** liga/desliga direto no cartão.
+- **Top 5 espécies** — as aves mais frequentes do período, cada uma com a **foto**.
+- **Visitas de hoje** — uma linha do tempo do dia; ao abrir um registro, o botão
+  **🤖 Perguntar à IA Externa** dispara a análise **daquele pássaro específico**.
+- **Gráfico de visitas** — a evolução ao longo dos dias.
 
-## Privacidade e segurança
+**Para que serve:** ver "como está o movimento" sem precisar abrir nada.
 
-- Vídeos importados e detecção YOLO são processados localmente; o arquivo importado é apagado após a análise  
-- Somente a identificação externa envia a imagem recortada, após ação explícita  
-- SQLite, configurações de câmera e mídia em `back/app-data/`  
-- Segredos de integração armazenados no `back/.env` do backend; a API nunca os retorna em texto puro  
-- Segredos são **mascarados** nas respostas de configuração (ex.: `AIza...****`) e redigidos em logs/erros  
-- **Acesso somente local por padrão:** a API responde apenas a conexões do próprio computador
-  (loopback). Para expor na rede é preciso definir `ALLOW_REMOTE_ACCESS=true` (idealmente atrás
-  de VPN ou proxy reverso com autenticação)  
-- Rotas de leitura, gravação e teste das variáveis de ambiente limitadas a conexões locais  
-- Cabeçalhos de segurança HTTP (CSP, `X-Frame-Options`, `nosniff` etc.) em todas as respostas  
-- Validação do cabeçalho `Host` (`ALLOWED_HOSTS`) contra Host Header Injection  
-- Consultas SQLite sempre parametrizadas e caminhos de mídia validados contra *path traversal*  
-- Sem telemetria do Bem-Te-Vi  
-
-> A auditoria completa (achados, correções e remediação de histórico do Git) está em
-> [`docs/SEGURANCA.md`](docs/SEGURANCA.md).
+![Tela Painel — clima, números do dia, transmissão ao vivo e ranking de espécies](docs/images/painel.png)
 
 ---
 
-## Etapas do projeto
+### 📷 2. Câmeras
 
-1. Estrutura e bootstrap  
-2. Backend (visão, DB, notificações)  
-3. Frontend (painel React)  
-4. Integração, `start.bat` e documentação — **atual**
+Onde você **cadastra e cuida** das câmeras.
+
+- **Adicionar câmera:** escolha o tipo (webcam `USB`, ou câmera IP `RTSP`/`ONVIF`) e preencha o endereço e, se houver, usuário e senha.
+- **Localização global (opcional):** para câmeras em outros países (lives do YouTube, streams externos), abra **Localização & fuso horário**, informe a **cidade/país** e toque em **Buscar**. O Bem-Te-Vi descobre as coordenadas e o fuso sozinho — e o card da câmera passa a mostrar o **clima e o horário locais do jardim**.
+- **Ligar/desligar** cada câmera com um toque.
+- **Controles no cartão (ao vivo):** ligar/desligar a **IA (Alaris)**, ouvir o **áudio
+  ao vivo** da câmera e ativar/desativar a **Bioacústica (BirdNET)** — em cartões
+  translúcidos, sem sair do Painel.
+- **Desenhar zonas** (veja abaixo).
+- **Análise de Cartão de Memória** para analisar vídeos antigos (veja abaixo).
+
+> **Excluir uma câmera não apaga nada da galeria.** As fotos, os clipes e os áudios já
+> gravados daquele jardim são **preservados para sempre**; a câmera apenas sai da lista
+> de monitoramento (o histórico continua disponível nas Galerias e nas Estatísticas).
+
+**Para que serve:** dizer ao sistema *onde* olhar e *o que ignorar*.
+
+![Tela Câmeras — importar gravação e gerenciar câmeras](docs/images/cameras.png)
+
+#### 🟢 O que são "zonas de leitura"?
+
+Imagine que a câmera aponta para o quintal inteiro, mas você só se importa com o comedouro.
+Você desenha **zonas de inclusão** (áreas verdes) ao redor do comedouro: só ali o sistema
+procura pássaros. Também dá para desenhar **zonas de exclusão** (vermelhas), por exemplo
+uma árvore que balança com o vento e alarmaria à toa.
+
+#### 🟦 E as "Zonas ROI"?
+
+São a mesma ideia, mas em **retângulos** — mais rápidos de desenhar quando você só quer
+"ficar de olho nesse quadradinho".
+
+---
+
+### 🖼️ 3. Galeria
+
+O **álbum de fotos** dos seus pássaros. Aqui você:
+
+- vê a foto e a miniatura de cada visita (as fotos tratadas automaticamente
+  aparecem com o selo **HD**);
+- confere o **recorte focado da ave** (close-up com a plumagem em detalhe),
+  mostrado como miniatura **Recorte · IA** no canto do cartão — e **um clique nele
+  já abre a Ficha Ornitológica (IA)** daquela ave, sem passo extra;
+- **assiste ao clipe** gravado (clique na imagem ou em "Reproduzir clipe");
+- **pergunta o nome** da ave clicando em **🤖 Perguntar à IA Externa** (se estiver configurada);
+- abre a **🔎 Ficha ornitológica (IA)** de uma ave já identificada para uma consulta
+  profunda (família, conservação, dieta, habitat, curiosidades e biogeografia);
+- **associa a visita** a uma espécie do seu catálogo;
+- **exporta tudo** numa planilha (CSV);
+- **apaga** visitas que não quer mais.
+
+**Para que serve:** rever, organizar e "etiquetar" os visitantes.
+
+![Tela Galeria — cartões de visitas com foto, clipe, associação ao catálogo e IA](docs/images/galeria.png)
+
+#### 🎞️ Abas da Galeria
+
+No topo da Galeria há **quatro abas**, separando cada tipo de mídia:
+
+- **Fotos e Vídeos** — as visitas individuais (foto, recorte e clipe);
+- **Áudios** — a **galeria de cantos** do BirdNET (o mesmo painel da aba *Detecção Sonora*),
+  com imagens/vídeos e áudios em **galerias separadas**;
+- **Convidados do Jardim** — os visitantes que não são aves (esquilos, gatos…);
+- **Resumos do Dia (Time-Lapse)** — os vídeos acelerados de cada dia.
+
+#### 🎞️ Resumos do Dia (Time-Lapse)
+
+Na aba **Resumos do Dia (Time-Lapse)**, o Bem-Te-Vi junta os clipes de cada dia em **um
+único vídeo acelerado**, para você rever os melhores momentos em segundos.
+
+- o vídeo do dia já aparece pronto no player, com a data, a quantidade de clipes e a duração;
+- clique em **Gerar resumo de hoje** para montar (ou refazer) o vídeo na hora;
+- use **Baixar** para salvar o arquivo e **Excluir** para apagá-lo;
+- a montagem acontece sozinha ao fim do dia — você não precisa fazer nada.
+
+**Para que serve:** "passar o filme do dia" de forma rápida, sem assistir a cada gravação.
+
+---
+
+### 🔊 4. Detecção Sonora
+
+A aba de **destaque** para quem gosta de "ouvir" o jardim. Aqui ficam os cantos
+identificados pelo **BirdNET**, mostrados em **blocos de 5**, que você carrega aos
+poucos clicando em **"Ver mais…"** (sem pular de página em página).
+
+Cada canto é um cartão com:
+
+- **Player de áudio integrado** — dê o play para ouvir o trecho gravado daquela
+  detecção (barra de progresso, volume e mudo). Nada toca sozinho.
+- **Associar à espécie** — um menu para **ligar o canto a uma ave da sua Life List**
+  (Minhas Aves). Assim o canto entra na sua coleção.
+- **Wand — Identificar com IA Externa** — envia o **sonograma** (a "impressão
+  digital" visual do som) para a IA configurada e tenta descobrir a espécie,
+  cadastrando-a automaticamente quando for nova.
+- **Bot — Perguntar à IA Externa** — abre a **ficha ornitológica completa** da
+  espécie já identificada (família, conservação, dieta, habitat, curiosidades…).
+- **Lixeira** — remove aquela detecção do histórico.
+
+No topo aparece o **estado** do monitoramento acústico (quantas câmeras estão sendo
+ouvidas) e um botão para **atualizar** a lista na hora.
+
+**Para que serve:** revisar, ouvir e identificar os cantos — inclusive aves que
+aparecem pouco e você quase nunca vê.
+
+![Tela Detecção Sonora — cartões de cantos com player, associação e IA](docs/images/deteccao-sonora.png)
+
+#### ⚠️ Sobre os pássaros não identificados
+
+Quando o sistema **não tem certeza** do nome do pássaro, ele **nunca** inventa: o
+registro aparece rotulado como **"Pássaro Desconhecido"**, com uma **silhueta padrão**
+no lugar da foto. É o mesmo rótulo em todo o aplicativo (Painel, Galeria, Álbum e
+Estatísticas).
+
+Os bichos que **não são pássaros** — esquilos, gatos, gambás — ficam **separados** na
+aba **Visitantes Especiais** (no Painel) e em **Convidados do Jardim** (na Galeria), e
+**não** entram na contagem de aves.
+
+---
+
+### 📖 5. Minhas Aves
+
+O seu **catálogo pessoal de espécies**. Cadastre:
+
+- o nome popular (ex.: "Bem-te-vi");
+- o nome científico (ex.: *Pitangus sulphuratus*);
+- observações e uma foto de referência.
+
+Depois, na Galeria, você **associa** cada visita à espécie cadastrada. É isso que alimenta
+sua Lista de Vida e suas estatísticas.
+
+Clique em qualquer card (aqui ou no **Álbum de Conquistas**) para abrir a **ficha técnica**
+da espécie: histórico de avistagens, **horários de pico** no comedouro, **temperatura média**
+preferida (cruzada com o clima), notas científicas e o **status ecológico** (Nativa,
+Migratória, Rara…). A miniatura do card mostra o **recorte tratado** da melhor visita e,
+quando ainda não há foto, aparece a **silhueta padrão** — nunca um ícone de imagem quebrada.
+
+**Para que serve:** montar a "coleção" de aves que você já registrou.
+
+![Tela Minhas Aves — catálogo local de espécies](docs/images/minhas-aves.png)
+
+---
+
+### 📊 6. Estatísticas & Conquistas
+
+O "modo jogador". Um **seletor no topo** alterna o escopo entre **cada jardim** e a
+**Visão Total Consolidada** (todos juntos). Aqui você encontra:
+
+- **gráficos e horários de pico** — quando os pássaros mais aparecem (no jardim escolhido ou no total);
+- **espécies presentes** — quantas espécies já passaram por aquele jardim;
+- **Insights Comportamentais & Clima** — cards inteligentes e gráficos que cruzam o
+  tempo com os hábitos das aves (veja abaixo);
+- **Lista de Vida** — as espécies que você já desbloqueou, com foto e número de avistagens;
+- **Conquistas** — medalhas que você ganha ao atingir marcos (ex.: registrar a 10ª espécie).
+
+**Para que serve:** se divertir e aprender os hábitos dos seus visitantes.
+
+![Tela Estatísticas & Conquistas — hábitos de observação, frequência por horário e clima](docs/images/estatisticas.png)
+
+---
+
+### ⚙️ 7. Configurações
+
+Onde você ajusta o comportamento. Tem cinco blocos:
+
+1. **Alertas e Notificações** — liga/desliga os avisos e escolhe quando notificar (qualquer visita ou só espécies novas), com o token e o ID do chat do Telegram.
+2. **Variáveis do ambiente** — segredos e chaves (Discord, IA externa).
+3. **Calibração e Ajustes** — o "tempero" da IA e a **visão noturna** (veja abaixo).
+4. **Preferências da IA e alertas** — quanto gravar, o limiar de confiança e se o reconhecimento de canto está ligado.
+5. **Exclusão e limpeza de dados** — apagar visitas antigas ou tudo.
+
+![Tela Configurações — calibração, perfis prontos e controles avançados](docs/images/configuracoes.png)
+
+---
+
+## Detalhes das funções mais importantes
+
+### 🔍 Como o sistema "vê" o pássaro?
+
+O Bem-Te-Vi usa uma inteligência artificial chamada **YOLOv8**, treinada para reconhecer
+objetos. Ele é ajustado para procurar apenas a classe **"pássaro"**. Quando detecta um, ele:
+
+1. marca uma caixa ao redor do pássaro;
+2. **inicia uma visita** e grava cerca de **6 segundos** — 3 s antes da chegada +
+   3 s depois — para você ver o pássaro chegando, pousando e saindo;
+3. escolhe sozinho o **melhor quadro** do vídeo (o mais nítido, com o pássaro bem
+   enquadrado) e o **melhora automaticamente** (contraste + redução de ruído) antes
+   de salvar como a **foto oficial em alta definição**;
+4. guarda também um **clipe** curto em vídeo;
+5. **mantém o registro** mesmo se o pássaro ficar parado comendo por alguns segundos.
+
+Dá para ajustar o quanto a IA deve ser "confiante" para contar um pássaro (veja Calibração).
+
+### 📸 A foto automática (melhor quadro em HD)
+
+Você não precisa escolher o melhor momento: o Bem-Te-Vi faz isso por você. Entre os
+cerca de **6 segundos** de gravação de cada visita, ele analisa todos os quadros em
+que o pássaro aparece e fica com o **mais nítido** — evitando fotos borradas de asa
+em movimento — e ainda realça o contraste e reduz o ruído da imagem. Na Galeria,
+essas fotos ganham um selo **HD** e passam a ser a foto de destaque no seu
+**Álbum de Conquistas (Minhas Aves)**.
+
+**Para que serve:** conseguir aquela foto bonita e nítida do pássaro, sem ter de
+procurar o melhor instante manualmente.
+
+### 🧠 A IA que conta bando, entende comportamento e conhece as espécies
+
+O "cérebro" do Bem-Te-Vi ficou bem mais esperto. Agora ele:
+
+- **conta quantos pássaros** estão no comedouro ao mesmo tempo. Se chegarem 3
+  cambacicas e 2 saíras juntas, ele registra isso e mostra um selo **👥 N** na foto;
+- **distingue o que o pássaro está fazendo**: 🍽️ *Alimentando-se* (bico no
+  comedouro), 🐦 *Pousada* (só descansando) ou ✈️ *Em movimento*;
+- **conhece as espécies da nossa região** e coloca um selo em cada uma:
+  🟢 Nativa, 🟡 Migratória, 🔵 Endêmica, ⭐ **Rara** ou 🟠 Exótica. Isso aparece em
+  **Minhas Aves**, no **Álbum** e na **Galeria** — ótimo para quem acompanha aves
+  raras e a conservação;
+- **fica mais atento em dias ruins de luz**: quando chove, fica nublado ou
+  escurece, ele automaticamente fica um pouquinho mais "desconfiado do contrário"
+  — ou seja, aceita detectar o pássaro mesmo com a imagem mais apagada, para não
+  perder o registro;
+- **avisa quando uma ave volta**: se uma espécie que você não via há **mais de 6
+  meses** aparecer de novo, o Bem-Te-Vi cria um **alerta de reaparecimento** (uma
+  "anomalia"), que pode ser visto na lista de anomalias da API/painel.
+
+**Para que serve:** transformar o Bem-Te-Vi num verdadeiro caderno de campo
+automático — não só "tem um pássaro", mas *quantos*, *fazendo o quê* e *que
+espécie* é, com foco em aves raras e migratórias.
+
+> **Dica:** o contraste extra do comedouro e o modo "só registrar quando estiver
+> comendo" são ajustes avançados. Por padrão, o sistema registra todas as visitas
+> (mesmo as de quem só pousa) para você não perder nada.
+
+### 🌙 Visão noturna e monitoramento 24 horas
+
+O Bem-Te-Vi também **enxerga no escuro**. Muitas câmeras têm visão infravermelha
+(ficam em preto e branco à noite); o sistema realça o contraste dessas imagens
+antes de procurar o pássaro, então ele continua detectando mesmo com pouca luz.
+
+Na tela **Configurações → Calibração e Ajustes**, na seção **Visão Noturna
+(Infravermelho)**, você escolhe:
+
+- **Automático (recomendado):** só realça quando está escuro — de dia nada muda;
+- **Sempre ligada:** realça em todos os momentos (bom para câmeras IR mais fracas);
+- **Desligada:** usa a imagem original;
+- **Monitorar fauna noturna:** além de aves, passa a detectar bichos comuns de quintal
+  à noite, como **gatos e cachorros**. Corujas já são aves e continuam sendo detectadas.
+
+Como você percebe que a visão noturna está ligada:
+
+- no **Painel**, sobre o vídeo ao vivo aparece um ícone de lua 🌙 e um leve filtro azulado;
+- na tela **Câmeras**, um selo **Visão noturna** no cartão da câmera;
+- na **Galeria**, um selo **Noturno** nas fotos tiradas à noite.
+
+**Para que serve:** não perder os bichos que só aparecem de madrugada.
+
+### 🔊 Reconhecimento de canto (BirdNET)
+
+Além da visão, o Bem-Te-Vi pode **escutar** o ambiente e identificar o pássaro pelo canto,
+usando um sistema chamado **BirdNET**. É opcional e precisa ser ativado nas Configurações.
+
+- Funciona com o **microfone** da câmera USB ou com um microfone do computador.
+- O sistema ouve pedacinhos de 3 segundos e tenta descobrir qual ave cantou.
+- Acima de um nível de confiança (70% por padrão), a detecção é guardada.
+- Se houver uma visita "visual" da mesma câmera até 30 segundos antes/depois, o sistema
+  **liga o canto à imagem** — ou seja, ele tenta unir "o que você viu" com "o que você ouviu".
+- Cada canto é gravado como um **clipe de áudio** e fica disponível na aba
+  **🔊 Detecção Sonora**, onde você pode **ouvir**, **associar a uma espécie** da sua
+  Life List, **identificar pela IA** ou **abrir a ficha** da espécie.
+
+> **Detalhe técnico:** o áudio nunca sai do seu computador. O reconhecimento é feito localmente.
+
+### 🤖 Identificação por IA externa (perguntar o nome)
+
+Quando você clica em **🤖 Perguntar à IA Externa** numa foto, o Bem-Te-Vi envia **aquela foto**
+para um serviço de inteligência artificial (como a OpenAI, OpenRouter, Groq, Ollama ou Gemini)
+e pergunta: *"Que espécie é essa?"* Ele responde com o nome comum e o científico.
+
+**Pontos importantes:**
+
+- Só acontece **quando você clica**. Nada é enviado sozinho.
+- É preciso **configurar uma chave** de algum provedor (nas Configurações).
+- O Bem-Te-Vi aceita vários provedores. No card "IA Externa" você escolhe o **provedor** numa
+  lista e o **modelo** é sugerido automaticamente — não precisa digitar endereço nenhum.
+- A foto fica guardada no seu computador e é enviada apenas durante essa consulta.
+- O Bem-Te-Vi envia a **foto tratada** (a melhor versão da ave, já realçada e recortada).
+- Ao identificar, a espécie é **cadastrada sozinha no Catálogo (Life List)** e a visita já fica
+  associada a ela — assim a ave aparece no Álbum de Conquistas com a melhor foto disponível.
+- Depois de identificada, use **🔎 Ficha ornitológica (IA)** (na Galeria) ou
+  **Perguntar à IA Externa** (no detalhe da visita) para pedir uma **ficha completa**
+  da espécie: nome científico, família, status de conservação, dieta, comportamento
+  alimentar, habitat, distribuição, dados biogeográficos, porte e curiosidades. O
+  resultado aparece num painel organizado e fica guardado para não repetir consultas
+  (use **Atualizar** para refazer).
+- A mesma ficha também está em **Minhas Aves**: use o botão **Ficha IA** no cartão da
+  ave (ou abra a ficha técnica dela e toque em **🔎 Ficha ornitológica (IA)**). Aqui a
+  consulta parte da espécie cadastrada e da **foto de referência**, e o resultado fica
+  guardado na própria espécie.
+- Se a espécie **já estava** no seu catálogo, o Bem-Te-Vi **não duplica** o card: apenas
+  soma mais uma visita e guarda a nova foto/vídeo naquela espécie.
+
+### 🌦️ Clima e estatísticas
+
+O Bem-Te-Vi consulta o tempo no seu endereço (via Open-Meteo) e cruza com as visitas.
+Assim você descobre, por exemplo, se choveu mais no dia em que os pássaros sumiram.
+
+**Câmeras em outros países:** se você cadastrou a localização de uma câmera
+remota (aba **Câmeras → Localização & fuso horário**), o card dela mostra o
+**clima e o horário do jardim** naquele instante — pode ser sol lá enquanto é
+noite aqui. Os **gráficos de horário de pico** também passam a usar o **fuso
+local da câmera**, então as visitas aparecem na hora certa do jardim.
+
+Na aba **Estatísticas**, a seção **Insights Comportamentais & Clima** mostra tudo isso
+de forma automática, em cards e gráficos fáceis de ler:
+
+- 🌡️ **Faixa de temperatura preferida** — qual temperatura atrai mais espécies
+  diferentes (com um gráfico interativo: alterne entre *Visitas*, *Espécies* e
+  *Visitas/dia*);
+- 🌧️ **Chuva × tempo seco** — se aparecem mais aves em dias de chuva ou de tempo firme;
+- ⏰ **Horário no frio × no calor** — a que horas as aves costumam aparecer em cada caso;
+- 🐦 **Horário por espécie** — quanto cada ave chega mais cedo ou mais tarde conforme
+  a temperatura (ex.: *"os beija-flores aparecem mais cedo quando está mais quente"*).
+
+Quanto mais dias de observação você tiver, mais espertos ficam os insights.
+
+### 🔔 Alertas no Telegram e no Discord
+
+Se você quiser ser avisado, é possível mandar um alerta quando um pássaro aparece.
+Na tela **Configurações** existe a seção **Alertas e Notificações**, com tudo num lugar só:
+
+- **Alertas habilitados:** liga ou desliga o envio de avisos.
+- **Quando notificar:** escolha entre **Qualquer visita** (avisa sempre) ou **Apenas novas
+  espécies** (avisa só quando aparece uma ave que ainda não está no seu catálogo *Minhas Aves* —
+  ideal para quem quer descobrir espécies novas sem ser incomodado pelas já conhecidas).
+- **Token do bot do Telegram:** você cria um bot no Telegram (falando com o `@BotFather`) e cola
+  o "token" que ele entrega.
+- **ID do chat do Telegram:** o número da conversa/grupo que vai receber os avisos.
+- **Testar Envio de Mensagem:** envia um alerta de teste na hora e mostra se deu certo, sem
+  precisar esperar um pássaro aparecer.
+
+O alerta chega com o **nome da espécie**, o **horário** e a **foto** da visita.
+No **Discord**, em vez do bot, você cria um "webhook" no seu servidor e cola o endereço.
+
+Há também um **limiar de confiança** para notificar: você escolhe só receber alertas quando a
+IA estiver bem certa (ou avisa até as duvidosas).
+
+### 📁 Importar vídeos antigos (cartão de memória)
+
+Tem gravações antigas de uma câmera? Dá para analisar:
+
+1. Copie o vídeo (MP4, AVI, MOV ou MKV, até 2 GB) para o computador.
+2. Em **Câmeras → Análise de Cartão de Memória**, escolha a câmera e **arraste o
+   arquivo** para a área pontilhada (ou clique para selecionar). Pode soltar vários
+   de uma vez.
+3. O sistema analisa o vídeo **no seu computador** (não envia nada para a internet) e
+   cria visitas e fotos automaticamente. Uma **barrinha de progresso** mostra o andamento
+   e continua aparecendo mesmo se você trocar para a Galeria e voltar.
+4. Ao terminar, aparece um cartão dizendo quantos pássaros foram encontrados (ex.:
+   **🐦 3 Pássaros Encontrados**), com as melhores fotos. Clique em **Ver na Galeria**
+   para assistir aos trechos.
+5. As zonas que você desenhou naquela câmera são usadas para ignorar áreas indesejadas.
+
+---
+
+## Calibração: o "tempero" da IA
+
+Na tela **Configurações → Calibração e Ajustes**, você escolhe o equilíbrio entre
+"pegar tudo" e "não ter falsos alarmes". Há dois **perfis prontos** (aplicados com um clique):
+
+| Perfil | Indicado para |
+|--------|--------------|
+| **Passarinhos Parados / Alimentador** (recomendado) | Comedouros e bebedouros, onde o pássaro fica parado comendo |
+| **Alta Movimentação / Voo Rápido** | Aves em movimento rápido |
+
+Se quiser ajustar na mão, há cinco controles com explicação ao lado:
+
+- **Sensibilidade da IA** — quanto mais sensível, mais fácil detectar (mas pode dar mais falsos alarmes).
+- **Tempo de permanência imóvel** — quanto tempo a visita continua mesmo com o pássaro parado.
+- **Sensibilidade de movimento** — quanto movimento é preciso para a IA começar a procurar.
+- **Tempo de presença da ave** — quanto tempo a ave precisa **sumir** para o sistema entender que aquela visita terminou (anti-spam: mesma ave = um só registro).
+- **Intervalo mínimo entre alertas** — a pausa mínima entre um alerta e o próximo na mesma zona, para não encher o Telegram/Discord.
+
+A mesma tela traz a **Visão Noturna (Infravermelho)**, com o modo (automático,
+sempre ligada ou desligada), o limiar de luminosidade e a opção de monitorar a
+fauna noturna além de aves (veja 🌙 acima).
+
+**As mudanças são aplicadas na hora, sem reiniciar nada.**
+
+---
+
+## Perguntas frequentes (FAQ)
+
+**Preciso de internet para vigiar os pássaros?**
+Não. A detecção e a gravação funcionam totalmente offline. Só o clima, a identificação por IA e os alertas precisam de internet.
+
+**Meus vídeos e fotos ficam na internet?**
+Não. Tudo fica na pasta do programa no seu computador. Só a foto que você pedir para identificar é enviada ao provedor de IA, e somente nesse momento.
+
+**O sistema sabe o nome dos pássaros sozinho?**
+Não automaticamente. Ele detecta e registra. Para saber o nome, você pode (a) associar manualmente no catálogo, ou (b) clicar em "Perguntar à IA Externa" (se configurada), ou (c) ativar o reconhecimento de canto.
+
+**Posso usar uma câmera IP / câmera de segurança?**
+Sim, via RTSP ou ONVIF. Basta informar o endereço e as credenciais.
+
+**Funciona de noite, com a câmera em preto e branco (infravermelho)?**
+Sim. O Bem-Te-Vi realça o contraste dessas imagens escuras e continua detectando. Na tela
+**Configurações** você ainda pode ligar a **Visão Noturna** e até monitorar a fauna noturna
+(gatos, cachorros) além de aves.
+
+**Apaguei sem querer. Como recuperei?**
+Se o arquivo estiver na Lixeira do computador, você pode restaurá-lo. Se excluiu dentro do Bem-Te-Vi, o registro e os arquivos locais são removidos.
+
+**O que é a "Lista de Vida"?**
+É uma lista de todas as espécies que você já registrou. Cada nova espécie desbloqueada vira uma "conquista".
+
+---
+
+## Dicas de ouro
+
+1. **Aponte bem a câmera** para o comedouro e evite fundos muito movimentados.
+2. **Desenhe zonas de inclusão** só no comedouro para não contar o vento e os galhos.
+3. **Use um perfil pronto** antes de ajustar na mão — funciona bem na maioria dos casos.
+4. **Cadastre seu catálogo** com as aves da sua região: isso deixa a Galeria e as estatísticas muito mais úteis.
+5. **Ative o reconhecimento de canto** se quiser descobrir aves que aparecem pouco ou só de noite.
+
+---
+
+## Segurança e privacidade
+
+- O Bem-Te-Vi foi feito para rodar **só no seu computador**.
+- As chaves (Telegram, Discord, IA) são guardadas num arquivo local e **nunca são mostradas** na tela — a tela exibe apenas um começo mascarado, como `AIza...****`.
+- O painel de configuração só aceita acesso do próprio computador (não funciona pela internet).
+- Por padrão, **toda** a API só responde ao seu computador. Para acessar de outro aparelho seria preciso mudar uma opção avançada (`ALLOW_REMOTE_ACCESS`) — e o recomendado, nesse caso, é usar uma VPN.
+- Não há telemetria: o programa não "espiona" você.
+
+> **Guarde bem** a pasta do programa e o arquivo de segredos. Ele contém suas senhas de integração.
+
+---
+
+## Preciso de ajuda?
+
+Se algo não funcionar, veja a tabela de **Solução de problemas** no [`README-DEV.md`](README-DEV.md) ou
+abra uma conversa sobre o projeto. E lembre-se: **nenhum dado seu sai do computador sem a sua permissão**.
