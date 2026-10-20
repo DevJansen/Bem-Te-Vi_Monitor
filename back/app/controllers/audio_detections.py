@@ -36,6 +36,10 @@ from app.services.external_species_identifier import (
     identify_spectrogram,
 )
 from app.services.species_catalog import EspecieNaoAveError, match_or_create_species
+from app.services.spectrogram import (
+    ensure_detection_spectrogram,
+    remove_detection_spectrogram,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/audio-detections", tags=["audio"])
@@ -49,9 +53,14 @@ def _repo() -> AudioDetectionRepository:
 
 
 def _to_out(row: dict) -> AudioDetectionOut:
-    """Converte a linha do banco no modelo de saída (com a URL do clipe de áudio)."""
+    """Converte a linha do banco no modelo de saída (com URLs de mídia)."""
     audio_url = (
         f"/api/audio-detections/{row['id']}/audio" if row.get("audio_path") else None
+    )
+    spectrogram_url = (
+        f"/api/audio-detections/{row['id']}/spectrogram"
+        if row.get("audio_path")
+        else None
     )
     return AudioDetectionOut(
         id=row["id"],
@@ -63,12 +72,16 @@ def _to_out(row: dict) -> AudioDetectionOut:
         confidence=float(row["confidence"]),
         linked_visit_id=row.get("linked_visit_id"),
         audio_url=audio_url,
+        spectrogram_url=spectrogram_url,
         species_id=row.get("species_id"),
         identification_status=row.get("identification_status"),
         temperature=row.get("temperature"),
         humidity=row.get("humidity"),
         weather_code=row.get("weather_code"),
         wind_speed=row.get("wind_speed"),
+        is_nfc=bool(row.get("is_nfc") or 0),
+        nfc_score=row.get("nfc_score"),
+        night_date=row.get("night_date"),
     )
 
 
@@ -108,6 +121,30 @@ def page_audio_detections(
         raise HTTPException(
             status_code=500,
             detail="Não foi possível carregar as detecções sonoras.",
+        ) from exc
+
+
+@router.get("/nfc", response_model=AudioDetectionPage)
+def page_audio_nfc_detections(
+    limit: int = Query(default=5, ge=1, le=50),
+    offset: int = Query(default=0, ge=0),
+    night_date: str | None = Query(default=None, description="Noite em vigor (AAAA-MM-DD)."),
+) -> AudioDetectionPage:
+    """Aba **Viajantes Noturnos (Migração)**: detecções NFC da janela noturna."""
+    try:
+        repo = _repo()
+        rows, total = repo.list_nfc(limit=limit, offset=offset, night_date=night_date)
+        return AudioDetectionPage(
+            items=[_to_out(row) for row in rows],
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
+    except Exception as exc:
+        logger.exception("page_audio_nfc_detections failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível carregar os viajantes noturnos.",
         ) from exc
 
 
@@ -156,6 +193,40 @@ def get_audio_detection_clip(detection_id: str) -> FileResponse:
             status_code=404, detail="O clipe de áudio desta detecção não está disponível."
         )
     return FileResponse(path, media_type="audio/wav", filename=path.name)
+
+
+@router.get("/{detection_id}/spectrogram")
+def get_audio_detection_spectrogram(detection_id: str) -> FileResponse:
+    """Serve (ou gera sob demanda) o espectrograma visual do canto gravado."""
+    row = _repo().get(detection_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Detecção sonora não encontrada.")
+    if not row.get("audio_path"):
+        raise HTTPException(
+            status_code=404,
+            detail="Esta detecção não tem clipe de áudio para gerar o espectrograma.",
+        )
+
+    title_parts = [
+        str(row.get("species") or "").strip(),
+        str(row.get("scientific_name") or "").strip(),
+    ]
+    title = " · ".join(part for part in title_parts if part) or "Canto identificado"
+    path = ensure_detection_spectrogram(
+        detection_id,
+        row.get("audio_path"),
+        title=f"Espectrograma · {title}",
+    )
+    if path is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Não foi possível gerar o espectrograma desta detecção.",
+        )
+    return FileResponse(
+        path,
+        media_type="image/png",
+        headers={"Cache-Control": "private, max-age=86400"},
+    )
 
 
 @router.put("/{detection_id}/identify", response_model=AudioDetectionOut)
@@ -324,4 +395,7 @@ def delete_audio_detection(detection_id: str) -> Response:
             raise HTTPException(
                 status_code=404, detail="Detecção sonora não encontrada."
             )
+    # Remove também a imagem derivada (o WAV original é preservado para
+    # auditoria/retention e pode ser limpo pela tarefa de mídia).
+    remove_detection_spectrogram(detection_id)
     return Response(status_code=204)

@@ -21,15 +21,15 @@ class Settings(BaseModel):
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
     discord_webhook_url: str = ""
+    # --- Inteligência Artificial Externa: Google Gemini (provedor único) ---
+    # Chave da API do Google Gemini (AI Studio). O único provedor suportado.
     ai_external_api_key: str = ""
-    ai_external_model: str = "gpt-4o-mini"
-    # URL base do provedor de IA compatível com a API da OpenAI. Serve para
-    # OpenRouter, Groq, Ollama etc. O chat é chamado em "{base}/chat/completions".
-    # Para o Google Gemini esta URL é IGNORADA (usa-se o endpoint oficial).
-    ai_external_base_url: str = "https://api.openai.com/v1"
-    # Provedor efetivo da IA externa: "google" (Gemini oficial) ou "openai"
-    # (qualquer endpoint compatível com a OpenAI). Vazio → detecta pela URL base.
-    ai_external_provider: str = ""
+    # Modelo Gemini em uso. Valores aceitos: gemini-3.5-flash (padrão),
+    # gemini-3.7-flash, gemini-3.8-flash e gemini-3.1-pro-preview. O prefixo
+    # "models/" é removido automaticamente (sanitize_model_name) para evitar
+    # HTTP 404, e modelos descontinuados pelo Google são substituídos
+    # automaticamente pela cadeia de fallback do serviço de IA.
+    ai_external_model: str = "gemini-3.5-flash"
     app_data_dir: Path = DEFAULT_APP_DATA_DIR
     # Chave mestra (Fernet) para criptografar as credenciais das câmeras em
     # repouso. Recomendado definir via ENCRYPTION_KEY no .env (base64-url de 32
@@ -191,7 +191,7 @@ class Settings(BaseModel):
     # --- Crop inteligente do recorte da ave ---
     # Margem (fração do tamanho da caixa) adicionada ao redor da ave, para dar
     # contexto sem cortar as pontas (penas, bico, patas).
-    smart_crop_margin: float = Field(default=0.25, ge=0.0, le=2.0)
+    smart_crop_margin: float = Field(default=0.10, ge=0.0, le=2.0)
     # Dimensões (px) do recorte final: amplia abaixo do mínimo (alta definição)
     # e reduz acima do máximo (economia de disco).
     smart_crop_min_dimension: int = Field(default=640, ge=0, le=4096)
@@ -226,6 +226,79 @@ class Settings(BaseModel):
     rare_moments_scan_hours: float = Field(default=6.0, ge=1.0, le=48.0)
     # Janela (dias) padrão da galeria "Momentos Raros".
     rare_moments_days: int = Field(default=7, ge=1, le=90)
+    # --- Aprendizado ativo / fine-tuning incremental do Bem-Ti-Vi Core ---
+    # Quando ligado, correções manuais de espécie e confirmações de detecção
+    # alimentam a fila de treinamento (recortes tratados por espécie).
+    active_learning_enabled: bool = True
+    # Quantidade mínima de amostras por espécie para a espécie entrar no
+    # treinamento incremental (classes com menos amostras são ignoradas).
+    active_learning_min_samples: int = Field(default=8, ge=2, le=500)
+    # Modelo base de classificação do Ultralytics usado no fine-tuning.
+    fine_tune_base_model: str = "yolov8n-cls.pt"
+    # Épocas reduzidas: o objetivo é um ajuste leve, não um treino do zero.
+    fine_tune_epochs: int = Field(default=8, ge=1, le=200)
+    fine_tune_batch: int = Field(default=8, ge=1, le=128)
+    fine_tune_imgsz: int = Field(default=224, ge=64, le=640)
+    # Confiança mínima da classificação fina para substituir o rótulo genérico
+    # "bird" no pipeline ao vivo.
+    fine_tune_min_confidence: float = Field(default=0.35, ge=0.0, le=1.0)
+    # --- Memória comportamental preditiva ---
+    # Mantém perfis por espécie (horário, clima, umidade e sazonalidade) em
+    # segundo plano. A previsão nunca bloqueia o painel: usa o último perfil.
+    behavioral_memory_enabled: bool = True
+    behavioral_refresh_minutes: int = Field(default=60, ge=5, le=1440)
+    behavioral_history_days: int = Field(default=120, ge=7, le=3650)
+    behavioral_prediction_hours: int = Field(default=2, ge=1, le=12)
+    # --- Reidentificação individual (assinaturas visuais) ---
+    # Extrai embeddings de recortes nítidos e compara com a galeria "Minhas
+    # Aves" para reconhecer indivíduos recorrentes (Conhecido do Jardim).
+    visual_embeddings_enabled: bool = True
+    # Similaridade de cosseno mínima para considerar que é o mesmo indivíduo.
+    individual_match_threshold: float = Field(default=0.86, ge=0.0, le=1.0)
+    # Nitidez mínima (variância do Laplaciano) para gerar a assinatura visual.
+    # Fotos desfocadas são ignoradas: gerariam assinaturas instáveis.
+    individual_min_sharpness: float = Field(default=25.0, ge=0.0)
+    # Quantidade máxima de indivíduos (centroides) comparados por espécie.
+    individual_max_candidates: int = Field(default=250, ge=10, le=5000)
+    # --- Resumo Matinal Automatizado (Morning Briefing) ---
+    morning_briefing_enabled: bool = True
+    morning_briefing_hour: int = Field(default=7, ge=0, le=23)
+    morning_briefing_minute: int = Field(default=0, ge=0, le=59)
+    # --- Rede global Bem-Ti-Vi (jardins conectados) ---
+    # O feed local funciona mesmo sem pares: ele reúne os avistamentos raros das
+    # câmeras deste jardim. Para receber avistamentos de outras instâncias, é
+    # obrigatório definir um token compartilhado e liberar a rota de webhook.
+    global_network_enabled: bool = True
+    # Nome exibido como origem dos eventos locais no feed global.
+    global_network_instance_name: str = "Meu Jardim"
+    # Segredo compartilhado enviado no cabeçalho X-Bem-Te-Vi-Token. Vazio
+    # desabilita o recebimento de webhooks (a rota responde 503).
+    global_network_token: str = ""
+    # Instâncias parceiras (URLs base separadas por vírgula). O envio é feito
+    # para "{url}/api/network/webhook" em segundo plano, sem bloquear a captura.
+    global_network_peers: str = ""
+    # Quando verdadeiro, compartilha também avistamentos comuns. O padrão é
+    # compartilhar apenas destaques (raros/incomuns) para evitar ruído.
+    global_network_share_all: bool = False
+    # Janela (dias) e limite do feed exibido no painel.
+    global_network_feed_days: int = Field(default=7, ge=1, le=90)
+    global_network_feed_limit: int = Field(default=20, ge=1, le=100)
+    # Tempo máximo (segundos) de espera ao publicar em um par. Nunca bloqueia
+    # a captura: a publicação roda em thread separada.
+    global_network_timeout_seconds: float = Field(default=5.0, ge=1.0, le=30.0)
+    # --- Escuta Noturna de Migração (NFC: Nocturnal Flight Calls) ---
+    # Liga o modo de escuta noturna: durante o período configurado o limiar de
+    # confiança do BirdNET é reduzido para captar os chamados curtos (*flight
+    # calls*) de aves que cruzam o céu acima do jardim.
+    nfc_monitor_enabled: bool = True
+    # Início/fim da janela noturna em horário local.
+    nfc_night_start_hour: int = Field(default=22, ge=0, le=23)
+    nfc_night_end_hour: int = Field(default=5, ge=0, le=23)
+    # Limiar reduzido aplicado dentro da janela noturna. Menor que o padrão para
+    # captar chamados fracos; alto o bastante para evitar ruído como "ave".
+    nfc_confidence_threshold: float = Field(default=0.45, ge=0.20, le=0.69)
+    # Nota curta exibida no feed da aba de áudio para registros noturnos.
+    nfc_note: str = "Chamado de voo (NFC)"
 
     @property
     def db_path(self) -> Path:
@@ -258,12 +331,60 @@ class Settings(BaseModel):
         return self.captures_dir / "timelapses"
 
     @property
+    def spectrograms_dir(self) -> Path:
+        """Espectrogramas visuais dos cantos identificados pelo BirdNET.
+
+        O PNG é gerado uma única vez por detecção e servido pela rota
+        ``/api/audio-detections/{id}/spectrogram``. Fica fora de ``captures``
+        para não ser confundido com a mídia original da visita.
+        """
+        return self.app_data_dir / "spectrograms"
+
+    @property
+    def reels_dir(self) -> Path:
+        """Reels verticais (9:16) gerados para redes sociais.
+
+        O MP4 é gerado uma única vez por visita e servido pela rota
+        ``/api/media/reel/{visit_id}``.
+        """
+        return self.captures_dir / "reels"
+
+    @property
     def reference_birds_dir(self) -> Path:
         return self.app_data_dir / "reference_birds"
 
     @property
     def secrets_dir(self) -> Path:
         return self.app_data_dir / "secrets"
+
+    @property
+    def training_queue_dir(self) -> Path:
+        """Fila de amostras rotuladas para o fine-tuning incremental.
+
+        Cada subpasta é uma espécie (nome seguro para o sistema de arquivos) e
+        contém os recortes tratados confirmados pelo observador.
+        """
+        return self.app_data_dir / "training_queue"
+
+    @property
+    def fine_tune_dataset_dir(self) -> Path:
+        """Dataset temporário (train/val) montado a partir da fila."""
+        return self.app_data_dir / "fine_tune_dataset"
+
+    @property
+    def ai_models_dir(self) -> Path:
+        """Modelos treinados localmente (ex.: classificação de espécies)."""
+        return self.app_data_dir / "models"
+
+    @property
+    def fine_tuned_model_path(self) -> Path:
+        """``best.pt`` do último fine-tuning concluído com sucesso."""
+        return self.ai_models_dir / "bem_te_vi_core.pt"
+
+    @property
+    def fine_tuned_labels_path(self) -> Path:
+        """Mapa ``classe do modelo`` → nome original da espécie (JSON)."""
+        return self.ai_models_dir / "bem_te_vi_core.labels.json"
 
     @property
     def telegram_enabled(self) -> bool:
@@ -310,8 +431,12 @@ class Settings(BaseModel):
             self.crops_dir,
             self.audio_dir,
             self.timelapses_dir,
+            self.reels_dir,
+            self.spectrograms_dir,
             self.reference_birds_dir,
             self.secrets_dir,
+            self.training_queue_dir,
+            self.ai_models_dir,
         ):
             path.mkdir(parents=True, exist_ok=True)
 
@@ -323,12 +448,14 @@ class Settings(BaseModel):
             telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", ""),
             telegram_chat_id=os.getenv("TELEGRAM_CHAT_ID", ""),
             discord_webhook_url=os.getenv("DISCORD_WEBHOOK_URL", ""),
-            ai_external_api_key=os.getenv("AI_EXTERNAL_API_KEY", ""),
-            ai_external_model=os.getenv("AI_EXTERNAL_MODEL", "gpt-4o-mini"),
-            ai_external_base_url=os.getenv(
-                "AI_EXTERNAL_BASE_URL", "https://api.openai.com/v1"
-            ),
-            ai_external_provider=os.getenv("AI_EXTERNAL_PROVIDER", "").strip().lower(),
+            ai_external_api_key=(
+                os.getenv("GEMINI_API_KEY", "")
+                or os.getenv("AI_EXTERNAL_API_KEY", "")
+            ).strip(),
+            ai_external_model=os.getenv(
+                "AI_EXTERNAL_MODEL", "gemini-3.5-flash"
+            ).strip()
+            or "gemini-3.5-flash",
             app_data_dir=Path(app_data) if app_data else DEFAULT_APP_DATA_DIR,
             encryption_key=os.getenv("ENCRYPTION_KEY", "").strip(),
             allow_remote_access=os.getenv("ALLOW_REMOTE_ACCESS", "false")
@@ -520,7 +647,7 @@ class Settings(BaseModel):
                 100, max(50, int(os.getenv("ENHANCEMENT_JPEG_QUALITY", "95")))
             ),
             smart_crop_margin=min(
-                2.0, max(0.0, float(os.getenv("SMART_CROP_MARGIN", "0.25")))
+                2.0, max(0.0, float(os.getenv("SMART_CROP_MARGIN", "0.10")))
             ),
             smart_crop_min_dimension=min(
                 4096,
@@ -566,6 +693,127 @@ class Settings(BaseModel):
             rare_moments_days=min(
                 90, max(1, int(os.getenv("RARE_MOMENTS_DAYS", "7")))
             ),
+            active_learning_enabled=os.getenv("ACTIVE_LEARNING_ENABLED", "true")
+            .strip()
+            .lower()
+            not in {"0", "false", "no", "off", "não", "nao"},
+            active_learning_min_samples=min(
+                500, max(2, int(os.getenv("ACTIVE_LEARNING_MIN_SAMPLES", "8")))
+            ),
+            fine_tune_base_model=os.getenv(
+                "FINE_TUNE_BASE_MODEL", "yolov8n-cls.pt"
+            ).strip()
+            or "yolov8n-cls.pt",
+            fine_tune_epochs=min(
+                200, max(1, int(os.getenv("FINE_TUNE_EPOCHS", "8")))
+            ),
+            fine_tune_batch=min(
+                128, max(1, int(os.getenv("FINE_TUNE_BATCH", "8")))
+            ),
+            fine_tune_imgsz=min(
+                640, max(64, int(os.getenv("FINE_TUNE_IMGSZ", "224")))
+            ),
+            fine_tune_min_confidence=min(
+                1.0, max(0.0, float(os.getenv("FINE_TUNE_MIN_CONFIDENCE", "0.35")))
+            ),
+            behavioral_memory_enabled=os.getenv(
+                "BEHAVIORAL_MEMORY_ENABLED", "true"
+            )
+            .strip()
+            .lower()
+            not in {"0", "false", "no", "off", "não", "nao"},
+            behavioral_refresh_minutes=min(
+                1440,
+                max(5, int(os.getenv("BEHAVIORAL_REFRESH_MINUTES", "60"))),
+            ),
+            behavioral_history_days=min(
+                3650, max(7, int(os.getenv("BEHAVIORAL_HISTORY_DAYS", "120")))
+            ),
+            behavioral_prediction_hours=min(
+                12, max(1, int(os.getenv("BEHAVIORAL_PREDICTION_HOURS", "2")))
+            ),
+            visual_embeddings_enabled=os.getenv(
+                "VISUAL_EMBEDDINGS_ENABLED", "true"
+            )
+            .strip()
+            .lower()
+            not in {"0", "false", "no", "off", "não", "nao"},
+            individual_match_threshold=min(
+                1.0,
+                max(
+                    0.0,
+                    float(os.getenv("INDIVIDUAL_MATCH_THRESHOLD", "0.86")),
+                ),
+            ),
+            individual_min_sharpness=max(
+                0.0, float(os.getenv("INDIVIDUAL_MIN_SHARPNESS", "25"))
+            ),
+            individual_max_candidates=min(
+                5000,
+                max(10, int(os.getenv("INDIVIDUAL_MAX_CANDIDATES", "250"))),
+            ),
+            morning_briefing_enabled=os.getenv(
+                "MORNING_BRIEFING_ENABLED", "true"
+            )
+            .strip()
+            .lower()
+            not in {"0", "false", "no", "off", "não", "nao"},
+            morning_briefing_hour=min(
+                23, max(0, int(os.getenv("MORNING_BRIEFING_HOUR", "7")))
+            ),
+            morning_briefing_minute=min(
+                59, max(0, int(os.getenv("MORNING_BRIEFING_MINUTE", "0")))
+            ),
+            global_network_enabled=os.getenv(
+                "GLOBAL_NETWORK_ENABLED", "true"
+            )
+            .strip()
+            .lower()
+            not in {"0", "false", "no", "off", "não", "nao"},
+            global_network_instance_name=(
+                os.getenv("GLOBAL_NETWORK_INSTANCE_NAME", "Meu Jardim").strip()
+                or "Meu Jardim"
+            )[:120],
+            global_network_token=(os.getenv("GLOBAL_NETWORK_TOKEN", "") or "").strip(),
+            global_network_peers=(os.getenv("GLOBAL_NETWORK_PEERS", "") or "").strip(),
+            global_network_share_all=os.getenv(
+                "GLOBAL_NETWORK_SHARE_ALL", "false"
+            )
+            .strip()
+            .lower()
+            in {"1", "true", "yes", "on", "sim"},
+            global_network_feed_days=min(
+                90, max(1, int(os.getenv("GLOBAL_NETWORK_FEED_DAYS", "7")))
+            ),
+            global_network_feed_limit=min(
+                100, max(1, int(os.getenv("GLOBAL_NETWORK_FEED_LIMIT", "20")))
+            ),
+            global_network_timeout_seconds=min(
+                30.0,
+                max(
+                    1.0,
+                    float(os.getenv("GLOBAL_NETWORK_TIMEOUT_SECONDS", "5.0")),
+                ),
+            ),
+            # --- Escuta Noturna de Migração (NFC: Nocturnal Flight Calls) ---
+            # Liga o modo de escuta noturna: durante o período configurado o
+            # limiar de confiança do BirdNET é reduzido para captar os chamados
+            # curtos (*flight calls*) de aves que cruzam o céu acima do jardim.
+            nfc_monitor_enabled=os.getenv("NFC_MONITOR_ENABLED", "true")
+            .strip()
+            .lower()
+            in {"1", "true", "yes", "on", "sim"},
+            # Início/fim da janela noturna em horário local. Aceita também a
+            # notação de 24 h (ex.: 22 e 5 para 22:00-05:00).
+            nfc_night_start_hour=min(23, max(0, int(os.getenv("NFC_NIGHT_START_HOUR", "22")))),
+            nfc_night_end_hour=min(23, max(0, int(os.getenv("NFC_NIGHT_END_HOUR", "5")))),
+            # Limiar reduzido aplicado dentro da janela noturna. Deve ser menor
+            # que o limiar padrão para captar chamados fracos.
+            nfc_confidence_threshold=min(
+                0.69, max(0.20, float(os.getenv("NFC_CONFIDENCE_THRESHOLD", "0.45")))
+            ),
+            # Nota exibida no feed da aba de áudio para registros noturnos.
+            nfc_note=os.getenv("NFC_NOTE", "Chamado de voo (NFC)").strip()[:160],
         )
 
 

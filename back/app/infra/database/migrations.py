@@ -304,6 +304,148 @@ MIGRATIONS: list[tuple[int, str]] = [
             ON visits(sharpness);
         """,
     ),
+    (
+        15,
+        """
+        -- Aprendizado ativo: recortes confirmados/corrigidos manualmente viram
+        -- amostras de treino por espécie. O fine-tuning incremental consome essa
+        -- fila e grava o modelo resultante em app-data/models/.
+        CREATE TABLE IF NOT EXISTS training_samples (
+            id TEXT PRIMARY KEY,
+            visit_id TEXT,
+            species_name TEXT NOT NULL,
+            species_id TEXT,
+            source TEXT NOT NULL DEFAULT 'manual_assignment',
+            image_path TEXT NOT NULL,
+            confidence REAL,
+            used_in_run_id TEXT,
+            created_at TEXT NOT NULL,
+            UNIQUE (visit_id),
+            FOREIGN KEY (visit_id) REFERENCES visits(id) ON DELETE SET NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_training_samples_species
+            ON training_samples(species_name);
+        CREATE INDEX IF NOT EXISTS idx_training_samples_created
+            ON training_samples(created_at DESC);
+
+        -- Histórico de execuções do fine-tuning (status, métricas e artefato).
+        CREATE TABLE IF NOT EXISTS fine_tune_runs (
+            id TEXT PRIMARY KEY,
+            status TEXT NOT NULL DEFAULT 'queued'
+                CHECK (status IN ('queued','running','completed','failed')),
+            base_model TEXT,
+            model_path TEXT,
+            samples INTEGER NOT NULL DEFAULT 0,
+            classes INTEGER NOT NULL DEFAULT 0,
+            epochs INTEGER NOT NULL DEFAULT 0,
+            batch INTEGER NOT NULL DEFAULT 0,
+            imgsz INTEGER NOT NULL DEFAULT 0,
+            started_at TEXT,
+            finished_at TEXT,
+            message TEXT NOT NULL DEFAULT '',
+            metrics_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_fine_tune_runs_created
+            ON fine_tune_runs(created_at DESC);
+
+        -- Reidentificação individual: cada indivíduo recorrente do jardim tem
+        -- um centroide de assinatura visual (float32 BLOB) por espécie.
+        CREATE TABLE IF NOT EXISTS bird_individuals (
+            id TEXT PRIMARY KEY,
+            species_id TEXT,
+            common_name TEXT NOT NULL,
+            scientific_name TEXT,
+            nickname TEXT,
+            centroid BLOB,
+            dimension INTEGER NOT NULL DEFAULT 0,
+            samples_count INTEGER NOT NULL DEFAULT 0,
+            first_seen_at TEXT,
+            last_seen_at TEXT,
+            representative_visit_id TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (species_id) REFERENCES bird_species(id) ON DELETE SET NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_bird_individuals_species
+            ON bird_individuals(species_id);
+        CREATE INDEX IF NOT EXISTS idx_bird_individuals_last_seen
+            ON bird_individuals(last_seen_at DESC);
+
+        -- Uma assinatura visual por visita (recorte nítido). Guarda também o
+        -- indivíduo atribuído e a similaridade de cosseno no momento do match.
+        CREATE TABLE IF NOT EXISTS bird_embedding_samples (
+            id TEXT PRIMARY KEY,
+            visit_id TEXT NOT NULL UNIQUE,
+            individual_id TEXT,
+            species_id TEXT,
+            common_name TEXT,
+            embedding BLOB NOT NULL,
+            dimension INTEGER NOT NULL,
+            similarity REAL,
+            model TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (visit_id) REFERENCES visits(id) ON DELETE CASCADE,
+            FOREIGN KEY (individual_id) REFERENCES bird_individuals(id)
+                ON DELETE SET NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_bird_embeddings_individual
+            ON bird_embedding_samples(individual_id);
+        CREATE INDEX IF NOT EXISTS idx_bird_embeddings_species
+            ON bird_embedding_samples(species_id);
+        """,
+    ),
+    (
+        16,
+        """
+        -- Feed da Rede Global Bem-Ti-Vi. Cada destaque (avistamento raro ou
+        -- incomum) de uma instância local ou de um jardim parceiro vira uma
+        -- linha. O external_id evita duplicatas quando o mesmo evento chega
+        -- mais de uma vez por webhook.
+        CREATE TABLE IF NOT EXISTS network_feed_events (
+            id TEXT PRIMARY KEY,
+            external_id TEXT NOT NULL UNIQUE,
+            source_kind TEXT NOT NULL DEFAULT 'peer'
+                CHECK (source_kind IN ('local','peer')),
+            source_instance TEXT NOT NULL,
+            garden_name TEXT,
+            camera_name TEXT,
+            species TEXT NOT NULL,
+            scientific_name TEXT,
+            rarity TEXT NOT NULL DEFAULT 'Incomum',
+            confidence REAL,
+            occurred_at TEXT NOT NULL,
+            received_at TEXT NOT NULL,
+            payload_json TEXT NOT NULL DEFAULT '{}'
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_network_feed_occurred
+            ON network_feed_events(occurred_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_network_feed_source
+            ON network_feed_events(source_kind, occurred_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_network_feed_rarity
+            ON network_feed_events(rarity, occurred_at DESC);
+        """,
+    ),
+    (
+        17,
+        """
+        -- Escuta Noturna de Migração (NFC): marca as detecções sonoras feitas
+        -- dentro da janela noturna (padrão 22:00–05:00) com o limiar reduzido.
+        -- ``night_date`` é a data local da noite que começou no dia anterior
+        -- quando a detecção ocorre depois da meia-noite.
+        ALTER TABLE audio_detections ADD COLUMN is_nfc INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE audio_detections ADD COLUMN nfc_score REAL;
+        ALTER TABLE audio_detections ADD COLUMN night_date TEXT;
+
+        CREATE INDEX IF NOT EXISTS idx_audio_nfc
+            ON audio_detections(is_nfc, detected_at DESC);
+        """,
+    ),
 ]
 
 

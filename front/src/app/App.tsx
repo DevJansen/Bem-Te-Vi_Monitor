@@ -9,6 +9,10 @@ import { AiStreamLog } from "@/components/dashboard/AiStreamLog";
 import { LiveStreamView } from "@/components/dashboard/LiveStreamView";
 import { WeatherWidget } from "@/components/dashboard/WeatherWidget";
 import { FeedingWeatherPanel } from "@/components/dashboard/FeedingWeatherPanel";
+import { PredictiveHabitsCard } from "@/components/dashboard/PredictiveHabitsCard";
+import { KnownVisitorsPanel } from "@/components/dashboard/KnownVisitorsPanel";
+import { GlobalNetworkFeed } from "@/components/dashboard/GlobalNetworkFeed";
+import { FieldJournalPanel } from "@/components/journal/FieldJournalPanel";
 import { VisitsChart } from "@/components/dashboard/VisitsChart";
 import { SpeciesRanking } from "@/components/dashboard/SpeciesRanking";
 import { TodayVisitsPanel } from "@/components/dashboard/TodayVisitsPanel";
@@ -20,8 +24,7 @@ import { OfflineAnalysisScreen } from "@/components/offline/OfflineAnalysisScree
 import { OfflineProgressDock } from "@/components/offline/OfflineProgressDock";
 import { useOfflineAnalysis } from "@/context/OfflineAnalysisContext";
 import { GalleryPanel } from "@/components/gallery/GalleryPanel";
-import { EnvSettings } from "@/components/settings/EnvSettings";
-import { CalibrationPanel } from "@/components/settings/CalibrationPanel";
+import { SettingsTabs } from "@/components/settings/SettingsTabs";
 import { SpeciesCatalog } from "@/components/species/SpeciesCatalog";
 import { AudioDetectionPanel } from "@/components/audio/AudioDetectionPanel";
 import { usePolling } from "@/hooks/usePolling";
@@ -69,6 +72,10 @@ const TAB_META: Record<AppTab, { title: string; subtitle: string }> = {
   species: {
     title: "Minhas Aves",
     subtitle: "Seu catálogo local de espécies da região",
+  },
+  journal: {
+    title: "Diário de Campo",
+    subtitle: "Relatório geolocalizado do dia · exportação eBird e CSV",
   },
   analytics: {
     title: "Estatísticas & Conquistas",
@@ -252,7 +259,9 @@ export function App() {
                 onCameraUpdated={handleCameraUpdated}
               />
               <WeatherWidget cameras={camerasQuery.data ?? []} />
+              <PredictiveHabitsCard />
               <FeedingWeatherPanel />
+              <GlobalNetworkFeed />
               <AnomalyAlertsPanel />
               <div className="mb-3 flex items-center gap-2">
                 <label className="text-xs text-[var(--color-text-muted)]">Jardim:</label>
@@ -299,6 +308,7 @@ export function App() {
                 species={speciesQuery.data ?? []}
                 onOpenInGallery={handleOpenVisitInGallery}
               />
+              <KnownVisitorsPanel />
               <VisitsChart metrics={metricsQuery.data} />
             </div>
           ) : null}
@@ -350,6 +360,10 @@ export function App() {
             />
           ) : null}
 
+          {tab === "journal" ? (
+            <FieldJournalPanel cameras={camerasQuery.data ?? []} />
+          ) : null}
+
           {tab === "analytics" ? (
             <Suspense
               fallback={
@@ -363,10 +377,7 @@ export function App() {
           ) : null}
 
           {tab === "settings" ? (
-            <div className="space-y-6">
-              <CalibrationPanel />
-              <EnvSettings onHistoryCleared={handleHistoryCleared} />
-            </div>
+            <SettingsTabs onHistoryCleared={handleHistoryCleared} />
           ) : null}
         </main>
       </div>

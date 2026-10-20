@@ -12,7 +12,7 @@
 - [O que ele faz?](#o-que-ele-faz-um-resumo-rápido)
 - [Como instalar e abrir](#como-instalar-e-abrir-o-jeito-mais-simples)
 - [As telas do Bem-Te-Vi](#as-telas-do-bem-te-vi)
-  - Painel · Câmeras · Galeria · Detecção Sonora · Minhas Aves · Estatísticas e Conquistas · Configurações
+  - Painel · Câmeras · Galeria · Diário de Campo · Detecção Sonora · Minhas Aves · Estatísticas e Conquistas · Configurações
 - [Detalhes das funções mais importantes](#detalhes-das-funções-mais-importantes)
 - [Calibração: o "tempero" da IA](#calibração-o-tempero-da-ia)
 - [Perguntas frequentes (FAQ)](#perguntas-frequentes-faq)
@@ -49,6 +49,10 @@ quando você pede especificamente para uma inteligência artificial adivinhar o 
 | 🖼️ **Fotos e vídeos** | Guarda uma foto e um clipe curto de cada visita |
 | 🎞️ **Resumo do dia** | Junta os clipes do dia em um vídeo acelerado (time-lapse) |
 | 🔊 **Reconhecimento de canto** | Identifica o pássaro pelo som e organiza os cantos numa aba própria (opcional) |
+| 🎼 **Espectrograma do canto** | Mostra o gráfico de frequência do canto ao lado do player e permite comparar as ondas sonoras |
+| 🌙 **Viajantes Noturnos (NFC)** | Escuta noturna de migração (22:00–05:00): reduz o limiar do BirdNET para captar chamados de voo curtos de aves migrantes; aba dedicada com selo NFC |
+| 📔 **Diário de Campo** | Monta o relatório do dia com clima, coordenadas, fotos e clipes — e exporta para o eBird ou CSV |
+| 🌐 **Feed Global Bem-Ti-Vi** | Mostra em tempo real os avistamentos raros das outras câmeras e jardins conectados |
 | 🤖 **Identificação por IA** | Adivinha o nome da ave na foto (opcional, sob seu comando) |
 | 📊 **Estatísticas** | Mostra horários de pico, ranking e gráficos |
 | 🏆 **Lista de Vida e conquistas** | Você "desbloqueia" espécies como num jogo |
@@ -56,6 +60,7 @@ quando você pede especificamente para uma inteligência artificial adivinhar o 
 | 🔮 **Previsão de alimentação** | Antecipa a chuva no seu jardim e estima se a atividade das aves vai aumentar ou diminuir |
 | 🌍 **Radar Global de Jardins** | Mapa-múndi com todos os jardins; um clique abre o clima, o vídeo ao vivo e as espécies daquele lugar |
 | 🏅 **Momentos Raros** | Curadoria automática das fotos mais nítidas e das espécies raras, com download em "foto de postal" |
+| 🎬 **Gerador de Reels** | Cria vídeos verticais (9:16, 1080×1920) com marca d'água Bem-Ti-Vi, espécie e temperatura — prontos para Instagram Reels, TikTok e YouTube Shorts |
 | 🔔 **Alertas** | Avisa no Telegram ou no Discord (opcional) |
 | 📁 **Importar vídeos** | Analisa gravações antigas do cartão de memória |
 | 📖 **Catálogo** | Cadastra as aves que você conhece |
@@ -224,6 +229,9 @@ Cada canto é um cartão com:
 
 - **Player de áudio integrado** — dê o play para ouvir o trecho gravado daquela
   detecção (barra de progresso, volume e mudo). Nada toca sozinho.
+- **Espectrograma ao lado do player** — o gráfico de **frequência × tempo** do
+  canto é gerado e salvo automaticamente; clique na imagem para ampliar e
+  comparar visualmente as ondas sonoras de cada ave.
 - **Associar à espécie** — um menu para **ligar o canto a uma ave da sua Life List**
   (Minhas Aves). Assim o canto entra na sua coleção.
 - **Wand — Identificar com IA Externa** — envia o **sonograma** (a "impressão
@@ -251,6 +259,43 @@ Estatísticas).
 Os bichos que **não são pássaros** — esquilos, gatos, gambás — ficam **separados** na
 aba **Visitantes Especiais** (no Painel) e em **Convidados do Jardim** (na Galeria), e
 **não** entram na contagem de aves.
+
+---
+
+### 📔 Diário de Campo
+
+A aba **Diário de Campo** escreve o "caderninho de campo" do dia para você:
+
+- escolha a **data** e, se quiser, um **jardim** específico;
+- veja o **clima** (Open-Meteo), as **coordenadas** da câmera, os horários de
+  primeira e última observação e as **fotos/clipes** de cada espécie;
+- clique em **Ler o diário completo em texto** para copiar ou imprimir;
+- use **Exportar checklist eBird** para baixar o arquivo no **eBird Record
+  Format** (Cornell Lab of Ornithology), sem cabeçalho e com data mês/dia/ano —
+  pronto para enviar à ciência cidadã;
+- use **Baixar CSV limpo** para uma planilha simples em português.
+
+**Para que serve:** transformar o histórico do jardim em um relatório bonito e
+em dados que biólogos e observadores podem compartilhar com o mundo.
+
+---
+
+### 🌐 Feed Global Bem-Ti-Vi
+
+O card **Feed Global Bem-Ti-Vi**, no Painel, mostra os **avistamentos raros e
+incomuns** das suas câmeras e dos **jardins conectados** — por exemplo:
+*“🦜 Rara Tangará avistada no Jardim de Paris há 5 minutos”*.
+
+- Funciona sozinho com os destaques do seu jardim — espécies raras, incomuns e
+  os primeiros registros de cada ave.
+- Para conversar com outros jardins, todas as instâncias precisam usar o **mesmo
+  token** em `GLOBAL_NETWORK_TOKEN` e listar os parceiros em
+  `GLOBAL_NETWORK_PEERS`.
+- O envio é opcional, seguro e acontece em segundo plano: a captura das aves
+  nunca fica esperando a internet.
+
+**Para que serve:** sentir que o seu jardim faz parte de uma rede mundial de
+observadores — e não perder a chance de ver o que apareceu no jardim do vizinho.
 
 ---
 
@@ -409,8 +454,7 @@ usando um sistema chamado **BirdNET**. É opcional e precisa ser ativado nas Con
 ### 🤖 Identificação por IA externa (perguntar o nome)
 
 Quando você clica em **🤖 Perguntar à IA Externa** numa foto, o Bem-Te-Vi envia **aquela foto**
-para um serviço de inteligência artificial (como a OpenAI, OpenRouter, Groq, Ollama ou Gemini)
-e pergunta: *"Que espécie é essa?"* Ele responde com o nome comum e o científico.
+para o **Google Gemini** e pergunta: *"Que espécie é essa?"* Ele responde com o nome comum e o científico.
 
 **Pontos importantes:**
 
@@ -482,6 +526,47 @@ global) como *Jardim Principal*, então funciona já na instalação padrão.
 
 Sem internet, o card apenas informa que está sem previsão e continua monitorando —
 a captura **nunca** depende do clima.
+
+### 🧠 Memória Comportamental e previsão de picos
+
+Logo abaixo do clima, o card **Previsão de picos do jardim** aprende os hábitos de
+cada espécie: em que horas ela costuma aparecer, com que temperatura e umidade, em
+que condições de céu e em que época do ano. A partir disso, ele responde em uma
+frase simples, por exemplo:
+
+> *"Probabilidade de pico de Beija-Flores nas próximas 2 horas: 85% — condizente
+> com a umidade e histórico de temperatura."*
+
+As barrinhas mostram **o que pesou** na conta (horário, temperatura, umidade,
+clima e sazonalidade). Espécies com pouco histórico aparecem como *estimativa* —
+o sistema prefere admitir incerteza a inventar certeza. O card se atualiza sozinho
+e pode ser recalculado na hora pelo botão **Atualizar**.
+
+### 🐦 Conhecidos do Jardim (re-identificação individual)
+
+O Bem-Te-Vi não reconhece apenas a **espécie**: ele aprende a reconhecer o
+**indivíduo**. A cada foto nítida, o sistema extrai uma *assinatura visual* do
+recorte e a compara com as aves já vistas naquele jardim. Quando a similaridade é
+alta, a visita é ligada ao mesmo bicho — que ganha um apelido como
+**"Conhecido do Jardim • Sanhaço #02"**.
+
+No **Painel**, o painel **Conhecidos do Jardim** mostra esses visitantes
+recorrentes. Clique em um card para ver o **histórico individual completo**:
+fotos, datas, similaridade e em qual jardim cada apavistamento aconteceu. Tudo é
+calculado e guardado **localmente**; as imagens não saem do computador.
+
+### 🎓 Ensinar o Bem-Ti-Vi Core (aprendizado ativo)
+
+Sempre que você **associa uma espécie** na Galeria ou clica em **Confirmar
+detecção**, o recorte daquela ave entra numa fila de treino organizada por
+espécie. Quando houver amostras suficientes, abra **Configurações →
+Bem-Ti-Vi Core adaptativo** e clique em:
+
+> **Otimizar Bem-Ti-Vi Core com Novas Amostras**
+
+O fine-tuning roda em segundo plano (a captura continua normalmente) e, ao
+terminar, o modelo passa a ser usado automaticamente — sem reiniciar o programa.
+Assim, o sistema fica cada vez mais preciso para as aves **do seu jardim**.
 
 ### 🌍 Radar Global de Jardins
 
@@ -608,6 +693,11 @@ Se o arquivo estiver na Lixeira do computador, você pode restaurá-lo. Se exclu
 - O painel de configuração só aceita acesso do próprio computador (não funciona pela internet).
 - Por padrão, **toda** a API só responde ao seu computador. Para acessar de outro aparelho seria preciso mudar uma opção avançada (`ALLOW_REMOTE_ACCESS`) — e o recomendado, nesse caso, é usar uma VPN.
 - Não há telemetria: o programa não "espiona" você.
+- A **Rede Global Bem-Ti-Vi** é opcional: só compartilha nome da espécie, jardim,
+  raridade e horário — **nunca fotos, áudios ou credenciais**. Sem
+  `GLOBAL_NETWORK_TOKEN` e parceiros configurados, nada sai do computador.
+- O **Diário de Campo** e os espectrogramas são gerados localmente; o eBird/CSV
+  só é enviado quando você baixa e envia o arquivo por conta própria.
 
 > **Guarde bem** a pasta do programa e o arquivo de segredos. Ele contém suas senhas de integração.
 

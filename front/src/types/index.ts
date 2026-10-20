@@ -19,6 +19,7 @@ export type AppTab =
   | "gallery"
   | "audio"
   | "species"
+  | "journal"
   | "analytics"
   | "settings";
 
@@ -471,7 +472,7 @@ export type SpeciesProfile = {
   ai_consult?: SpeciesAiConsult | null;
 };
 
-/** Ficha ornitológica profunda retornada pela IA externa (Gemini/OpenAI). */
+/** Ficha ornitológica profunda retornada pela IA externa (Google Gemini). */
 export type SpeciesAiConsult = {
   scientific_name: string;
   common_name: string;
@@ -619,6 +620,9 @@ export type AppSettings = {
   notifications_enabled: boolean;
   notify_mode: string;
   min_confidence_notify: number;
+  morning_briefing_enabled: boolean;
+  morning_briefing_hour: number;
+  morning_briefing_minute: number;
   extra: Record<string, unknown>;
 };
 
@@ -626,6 +630,9 @@ export type AppSettingsUpdate = {
   notifications_enabled?: boolean;
   notify_mode?: string;
   min_confidence_notify?: number;
+  morning_briefing_enabled?: boolean;
+  morning_briefing_hour?: number;
+  morning_briefing_minute?: number;
   yolo_confidence?: number;
   pre_record_seconds?: number;
   post_record_seconds?: number;
@@ -682,6 +689,8 @@ export type AudioDetection = {
   linked_visit_id: string | null;
   /** Clipe de áudio gravado da detecção (player integrado ao card). */
   audio_url: string | null;
+  /** Espectrograma visual (PNG) gerado a partir do clipe. */
+  spectrogram_url: string | null;
   /** Vínculo com a espécie da Life List ("Minhas Aves"), quando identificada. */
   species_id: string | null;
   /** Rótulo do estado da identificação (manual ou por IA externa). */
@@ -691,6 +700,12 @@ export type AudioDetection = {
   humidity: number | null;
   weather_code: string | null;
   wind_speed: number | null;
+  /** Escuta Noturna de Migração: detecção feita na janela noturna. */
+  is_nfc: boolean;
+  /** Pontuação 0..1 de probabilidade de chamado de voo migratório. */
+  nfc_score: number | null;
+  /** Data local da noite em vigor (AAAA-MM-DD). */
+  night_date: string | null;
 };
 
 /** Página de detecções sonoras para a paginação fluida da aba dedicada. */
@@ -721,6 +736,15 @@ export type AudioInputDevices = {
   selected: string;
 };
 
+/** Reel vertical (9:16) gerado para redes sociais a partir do clipe da visita. */
+export type ReelInfo = {
+  visit_id: string;
+  /** URL pública para streaming/baixa do MP4 vertical. */
+  url: string;
+  size_bytes: number;
+  generated_at: string;
+};
+
 export type HealthResponse = {
   status: string;
   service: string;
@@ -736,11 +760,10 @@ export type EnvironmentSettings = {
   telegram_bot_token: string | null;
   telegram_chat_id: string | null;
   discord_webhook_url: string | null;
+  /** Chave do Google Gemini (mascarada na leitura). */
   ai_external_api_key: string | null;
-  ai_external_base_url: string;
+  /** Modelo Gemini em uso (sanitizado, sem o prefixo "models/"). */
   ai_external_model: string;
-  /** Provedor efetivo: "google" (Gemini oficial) ou "openai" (compatível). */
-  ai_external_provider: string;
   telegram_bot_token_configured: boolean;
   telegram_chat_id_configured: boolean;
   discord_webhook_url_configured: boolean;
@@ -755,12 +778,16 @@ export type EnvironmentSettingsUpdate = {
   telegram_chat_id?: string;
   discord_webhook_url?: string;
   ai_external_api_key?: string;
-  ai_external_base_url?: string;
   ai_external_model?: string;
-  ai_external_provider?: string;
   clear_telegram?: boolean;
   clear_discord?: boolean;
   clear_ai_external?: boolean;
+};
+
+/** Resultado do teste de conexão dedicado ao Google Gemini. */
+export type GeminiConnectionTestResult = {
+  status: "success" | "warning" | "error";
+  message: string;
 };
 
 /** Clima atual do local do alimentador (integração Open-Meteo). */
@@ -1090,4 +1117,284 @@ export type AiLogsResponse = {
   entries: AiLogEntry[];
   last_id: number;
   generated_at: string;
+};
+
+/* ——— Inteligência adaptativa ———
+ * Aprendizado ativo, memória comportamental e re-identificação individual. */
+
+export type BehavioralWeather = {
+  available: boolean;
+  temperature: number | null;
+  humidity: number | null;
+  condition: string | null;
+  icon: string | null;
+};
+
+export type BehavioralFactor = {
+  key: string;
+  label: string;
+  /** 0..100 — quanto o fator favorece a espécie agora. */
+  score: number;
+  detail: string;
+};
+
+export type BehavioralPrediction = {
+  species: string;
+  scientific_name: string | null;
+  /** Probabilidade (%) de pico na janela prevista. */
+  probability: number;
+  horizon_hours: number;
+  window_label: string;
+  expected_peak_hour: string | null;
+  headline: string;
+  detail: string;
+  tone: "positive" | "info" | "neutral" | string;
+  icon: string;
+  confidence: "alta" | "média" | "estimativa" | string;
+  visits_analyzed: number;
+  factors: BehavioralFactor[];
+};
+
+export type BehavioralPredictionList = {
+  generated_at: string;
+  horizon_hours: number;
+  history_days: number;
+  current_weather: BehavioralWeather;
+  predictions: BehavioralPrediction[];
+  highlight: BehavioralPrediction | null;
+  notes: string;
+};
+
+export type BehavioralMemoryStatus = {
+  generated_at: string | null;
+  history_days: number;
+  species: number;
+  visits: number;
+};
+
+export type ActiveLearningClass = {
+  species_name: string;
+  samples: number;
+  eligible: boolean;
+  missing_files: number;
+  last_sample_at: string | null;
+};
+
+export type FineTuneRun = {
+  id: string;
+  status: "queued" | "running" | "completed" | "failed" | string;
+  base_model: string | null;
+  model_path: string | null;
+  samples: number;
+  classes: number;
+  epochs: number;
+  batch: number;
+  imgsz: number;
+  started_at: string | null;
+  finished_at: string | null;
+  message: string;
+  metrics: Record<string, unknown>;
+  created_at: string;
+};
+
+export type ActiveLearningStatus = {
+  enabled: boolean;
+  running: boolean;
+  total_samples: number;
+  eligible_classes: number;
+  min_samples: number;
+  queue: ActiveLearningClass[];
+  last_run: FineTuneRun | null;
+  model_available: boolean;
+  model_path: string | null;
+  model_size_bytes: number;
+  model_trained_at: string | null;
+  notes: string[];
+};
+
+export type IndividualSighting = {
+  visit_id: string;
+  detected_at: string | null;
+  confidence: number;
+  similarity: number | null;
+  crop_url: string | null;
+  location_label: string | null;
+  temperature?: number | null;
+  humidity?: number | null;
+  weather_code?: string | null;
+};
+
+export type KnownIndividual = {
+  id: string;
+  species_id: string | null;
+  common_name: string;
+  scientific_name: string | null;
+  nickname: string;
+  sightings: number;
+  is_recurring: boolean;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
+  representative_visit_id: string | null;
+  latest_visit_id: string | null;
+  avg_similarity: number | null;
+  crop_url: string | null;
+  recent_visits: IndividualSighting[];
+};
+
+export type KnownIndividualList = {
+  individuals: KnownIndividual[];
+  total: number;
+  generated_at: string;
+};
+
+export type KnownIndividualDetail = KnownIndividual & {
+  visits: IndividualSighting[];
+};
+
+export type VisualEmbeddingsStatus = {
+  enabled: boolean;
+  samples: number;
+  individuals: number;
+  recurring: number;
+  model: string;
+  threshold: number;
+};
+
+export type VisitConfirmation = {
+  visit_id: string;
+  confirmed: boolean;
+  species_name: string | null;
+  species_id: string | null;
+  training_queued: boolean;
+  training_reason: string | null;
+  individual_id: string | null;
+  individual_nickname: string | null;
+  individual_known: boolean;
+};
+
+/* ——— Diário de Campo / exportação eBird ——— */
+
+export type FieldJournalWeather = {
+  available: boolean;
+  temperature: number | null;
+  humidity: number | null;
+  condition: string | null;
+  icon: string | null;
+  wind_speed: number | null;
+  source: string;
+  summary: string;
+};
+
+export type FieldJournalMedia = {
+  kind: "photo" | "clip";
+  url: string;
+  label: string | null;
+  visit_id: string | null;
+};
+
+export type FieldJournalSighting = {
+  visit_id: string;
+  camera_id: string;
+  detected_at: string;
+  time_label: string;
+  confidence: number;
+  garden_name: string;
+  camera_name: string;
+  temperature: number | null;
+  humidity: number | null;
+  weather_code: string | null;
+  wind_speed: number | null;
+  behavior: string | null;
+  individuals_peak: number;
+  crop_url: string | null;
+  thumbnail_url: string | null;
+  clip_url: string | null;
+};
+
+export type FieldJournalSpecies = {
+  species: string;
+  scientific_name: string | null;
+  ecological_status: string | null;
+  ecological_label: string | null;
+  count: number;
+  visits: number;
+  max_confidence: number;
+  first_seen_at: string;
+  last_seen_at: string;
+  first_time_label: string;
+  last_time_label: string;
+  behavior_summary: string | null;
+  media: FieldJournalMedia[];
+  sightings: FieldJournalSighting[];
+};
+
+export type FieldJournalGarden = {
+  camera_id: string;
+  name: string;
+  location_label: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  timezone: string | null;
+  country: string | null;
+  coordinates_label: string | null;
+  weather: FieldJournalWeather;
+};
+
+export type FieldJournalSummary = {
+  total_visits: number;
+  total_species: number;
+  total_gardens: number;
+  first_observation_at: string | null;
+  last_observation_at: string | null;
+  first_time_label: string;
+  last_time_label: string;
+  latitude: number | null;
+  longitude: number | null;
+};
+
+export type FieldJournal = {
+  date: string;
+  generated_at: string;
+  title: string;
+  subtitle: string;
+  journal_text: string;
+  weather: FieldJournalWeather;
+  summary: FieldJournalSummary;
+  gardens: FieldJournalGarden[];
+  species: FieldJournalSpecies[];
+};
+
+/* ——— Rede Global Bem-Ti-Vi ——— */
+
+export type NetworkFeedEvent = {
+  id: string;
+  source_kind: "local" | "peer";
+  source_instance: string;
+  garden_name: string | null;
+  camera_name: string | null;
+  species: string;
+  scientific_name: string | null;
+  rarity: string;
+  confidence: number | null;
+  occurred_at: string;
+  received_at: string;
+};
+
+export type NetworkFeed = {
+  generated_at: string;
+  enabled: boolean;
+  instance_name: string;
+  days: number;
+  total: number;
+  events: NetworkFeedEvent[];
+};
+
+export type NetworkStatus = {
+  enabled: boolean;
+  instance_name: string;
+  webhook_ready: boolean;
+  peers_configured: number;
+  local_events: number;
+  peer_events: number;
+  feed_days: number;
 };

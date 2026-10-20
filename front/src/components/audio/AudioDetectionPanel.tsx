@@ -17,6 +17,7 @@ import {
   deleteAudioDetection,
   fetchAudioAnalysisStatus,
   fetchAudioDetectionPage,
+  fetchAudioNfcPage,
   getErrorMessage,
   identifyAudioDetection,
   identifyAudioExternal,
@@ -43,6 +44,41 @@ const statusLabels: Record<AudioAnalysisStatus["status"], string> = {
   error: "Indisponível",
 };
 
+/** Espectrograma do canto com fallback elegante se o PNG ainda não existir. */
+function SpectrogramPreview({ src, species }: { src: string; species: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <div className="flex min-h-20 items-center justify-center rounded-xl border border-dashed border-dark-700 px-3 py-2 text-center text-xs text-[var(--color-text-muted)]">
+        O espectrograma está sendo gerado a partir do clipe gravado.
+      </div>
+    );
+  }
+  return (
+    <a
+      href={src}
+      target="_blank"
+      rel="noreferrer"
+      title="Abrir o espectrograma em tamanho real"
+      className="group relative overflow-hidden rounded-xl border border-violet-500/20 bg-dark-950/60"
+    >
+      <img
+        src={src}
+        alt={`Espectrograma do canto de ${species}`}
+        loading="lazy"
+        onError={() => setFailed(true)}
+        className="h-full max-h-40 w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+      />
+      <span className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-gradient-to-t from-dark-950/90 to-transparent px-2.5 pb-1.5 pt-6 text-[10px] font-medium text-violet-100">
+        <span>Espectrograma · frequência × tempo</span>
+        <span className="text-[var(--color-text-muted)]">
+          clique para ampliar
+        </span>
+      </span>
+    </a>
+  );
+}
+
 /**
  * Aba **Detecção Sonora** (Bioacústica / BirdNET).
  *
@@ -61,6 +97,8 @@ export function AudioDetectionPanel({ species }: Props) {
   const [notice, setNotice] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [aiTarget, setAiTarget] = useState<AudioDetection | null>(null);
+  /** "all" = todos os cantos · "nfc" = Viajantes Noturnos (Migração). */
+  const [view, setView] = useState<"all" | "nfc">("all");
 
   const statusQuery = usePolling(fetchAudioAnalysisStatus, 8_000);
 
@@ -69,7 +107,10 @@ export function AudioDetectionPanel({ species }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchAudioDetectionPage(PAGE_SIZE, 0);
+      const data =
+        view === "nfc"
+          ? await fetchAudioNfcPage(PAGE_SIZE, 0)
+          : await fetchAudioDetectionPage(PAGE_SIZE, 0);
       setItems(data.items);
       setTotal(data.total);
     } catch (cause) {
@@ -79,7 +120,7 @@ export function AudioDetectionPanel({ species }: Props) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [view]);
 
   useEffect(() => {
     void reload();
@@ -90,7 +131,10 @@ export function AudioDetectionPanel({ species }: Props) {
     setLoadingMore(true);
     setError(null);
     try {
-      const data = await fetchAudioDetectionPage(PAGE_SIZE, items.length);
+      const data =
+        view === "nfc"
+          ? await fetchAudioNfcPage(PAGE_SIZE, items.length)
+          : await fetchAudioDetectionPage(PAGE_SIZE, items.length);
       setItems((current) => [...current, ...data.items]);
       setTotal(data.total);
     } catch (cause) {
@@ -100,7 +144,7 @@ export function AudioDetectionPanel({ species }: Props) {
     } finally {
       setLoadingMore(false);
     }
-  }, [items.length]);
+  }, [items.length, view]);
 
   const refresh = useCallback(() => {
     void reload();
@@ -206,14 +250,51 @@ export function AudioDetectionPanel({ species }: Props) {
           </span>
           <div>
             <h2 className="font-display text-base font-semibold text-[var(--color-text-primary)]">
-              Detecção Sonora
+              {view === "nfc" ? "Viajantes Noturnos (Migração)" : "Detecção Sonora"}
             </h2>
             <p className="text-xs text-[var(--color-text-muted)]">
-              Cantos identificados pelo BirdNET · ouça, identifique e consulte a IA
+              {view === "nfc"
+                ? "Chamados de voo (NFC) capturados na janela noturna · 22:00–05:00"
+                : "Cantos identificados pelo BirdNET · ouça, identifique e consulte a IA"}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Alternador: Todos os cantos ↔ Viajantes Noturnos (NFC) */}
+          <div
+            role="tablist"
+            aria-label="Filtrar detecções"
+            className="flex rounded-lg border border-dark-700 bg-dark-900 p-0.5"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === "all"}
+              onClick={() => setView("all")}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-[11px] font-semibold transition",
+                view === "all"
+                  ? "bg-violet-500/20 text-violet-200"
+                  : "text-[var(--color-text-muted)] hover:text-violet-300",
+              )}
+            >
+              Todos os cantos
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === "nfc"}
+              onClick={() => setView("nfc")}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-[11px] font-semibold transition",
+                view === "nfc"
+                  ? "bg-indigo-500/20 text-indigo-200"
+                  : "text-[var(--color-text-muted)] hover:text-indigo-300",
+              )}
+            >
+              🌙 Viajantes Noturnos
+            </button>
+          </div>
           {status ? (
             <span
               className={cn(
@@ -268,13 +349,17 @@ export function AudioDetectionPanel({ species }: Props) {
       {loading && items.length === 0 ? (
         <p className="flex items-center gap-2 rounded-xl border border-dark-700 bg-dark-800 p-6 text-sm text-[var(--color-text-muted)]">
           <LoaderCircle className="h-4 w-4 animate-spin" />
-          Carregando detecções sonoras…
+          {view === "nfc"
+            ? "Carregando viajantes noturnos…"
+            : "Carregando detecções sonoras…"}
         </p>
       ) : items.length === 0 ? (
         <p className="rounded-xl border border-dashed border-dark-700 bg-dark-800/60 p-8 text-center text-sm text-[var(--color-text-muted)]">
-          {status?.status === "disabled"
-            ? "A análise sonora está desativada. Habilite a Bioacústica em uma câmera para começar."
-            : "Nenhum canto identificado ainda. As detecções do BirdNET aparecerão aqui."}
+          {view === "nfc"
+            ? "Nenhum chamado de voo noturno registrado ainda. A escuta noturna (NFC) captura os chamados curtos das aves que cruzam o céu entre 22:00 e 05:00."
+            : status?.status === "disabled"
+              ? "A análise sonora está desativada. Habilite a Bioacústica em uma câmera para começar."
+              : "Nenhum canto identificado ainda. As detecções do BirdNET aparecerão aqui."}
         </p>
       ) : (
         <ul className="space-y-3">
@@ -309,6 +394,14 @@ export function AudioDetectionPanel({ species }: Props) {
                             Na Life List
                           </span>
                         ) : null}
+                        {detection.is_nfc ? (
+                          <span
+                            title={`Chamado de voo migratório · noite ${detection.night_date ?? ""} · NFC ${Math.round((detection.nfc_score ?? 0) * 100)}%`}
+                            className="rounded-full border border-indigo-400/30 bg-indigo-500/15 px-2 py-0.5 text-[10px] font-medium text-indigo-200"
+                          >
+                            🌙 NFC
+                          </span>
+                        ) : null}
                       </p>
                       <p className="text-xs italic text-[var(--color-text-muted)]">
                         {detection.scientific_name || "—"}
@@ -341,13 +434,24 @@ export function AudioDetectionPanel({ species }: Props) {
                   </div>
                 </div>
 
-                {/* Player de áudio integrado ao card */}
+                {/* Player de áudio + espectrograma visual lado a lado */}
                 {detection.audio_url ? (
-                  <AudioClipPlayer
-                    src={detection.audio_url}
-                    label={formatSpeciesLabel(detection.species)}
-                    className="mt-3"
-                  />
+                  <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                    <AudioClipPlayer
+                      src={detection.audio_url}
+                      label={formatSpeciesLabel(detection.species)}
+                    />
+                    {detection.spectrogram_url ? (
+                      <SpectrogramPreview
+                        src={detection.spectrogram_url}
+                        species={formatSpeciesLabel(detection.species)}
+                      />
+                    ) : (
+                      <div className="flex min-h-20 items-center justify-center rounded-xl border border-dashed border-dark-700 px-3 py-2 text-center text-xs text-[var(--color-text-muted)]">
+                        O espectrograma será gerado a partir do clipe gravado.
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <p className="mt-3 rounded-lg border border-dashed border-dark-700 px-3 py-2 text-xs text-[var(--color-text-muted)]">
                     Sem clipe de áudio gravado para esta detecção.

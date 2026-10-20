@@ -50,6 +50,7 @@ async def lifespan(app: FastAPI):
     from app.services.notification_service import get_notification_service
     from app.services.offline_analysis import get_offline_analysis_service
     from app.services.timelapse_service import TimelapseScheduler
+    from app.services.morning_briefing import get_morning_briefing_scheduler
 
     settings = get_settings()
     settings.ensure_directories()
@@ -59,6 +60,26 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("Database initialization failed")
         raise
+
+    # --- Log de validação do Google Gemini (IA Externa) -------------------
+    # Informa claramente no terminal se a chave está configurada e qual modelo
+    # está em uso — evita o "erro 503" silencioso no botão Testar Conexão.
+    from app.services.ai_service import sanitize_model_name
+
+    _gemini_key = (settings.ai_external_api_key or "").strip()
+    _gemini_model = sanitize_model_name(settings.ai_external_model)
+    if _gemini_key:
+        logger.info(
+            "Google Gemini ATIVO · modelo=%s · chave configurada (%d caracteres).",
+            _gemini_model,
+            len(_gemini_key),
+        )
+    else:
+        logger.warning(
+            "Google Gemini INATIVO · nenhuma GEMINI_API_KEY configurada. "
+            "A identificação externa por imagem ficará desabilitada até o "
+            "observador informar a chave em Configurações."
+        )
 
     notifier = get_notification_service()
     notifier.start()
@@ -106,6 +127,12 @@ async def lifespan(app: FastAPI):
     # Gera o resumo do dia (time-lapse) no fim do dia e recupera dias pendentes.
     timelapse_scheduler = TimelapseScheduler()
     timelapse_scheduler.start()
+    # Resumo Matinal Automatizado: compila clima, predições e foto de destaque
+    # e envia via Telegram/Discord no horário configurado (padrão 07:00).
+    morning_briefing_scheduler = None
+    if settings.morning_briefing_enabled:
+        morning_briefing_scheduler = get_morning_briefing_scheduler()
+        morning_briefing_scheduler.start()
     # Curadoria de "Momentos Raros": mede a nitidez das capturas novas em
     # segundo plano (primeira passada após alguns segundos, depois a cada N h).
     rare_moments_worker = None
@@ -114,11 +141,28 @@ async def lifespan(app: FastAPI):
 
         rare_moments_worker = RareMomentsWorker()
         rare_moments_worker.start()
+    # Memória comportamental: reconstrói os perfis (horário + clima + estação)
+    # em segundo plano e os mantém frescos para o card preditivo do painel.
+    behavioral_worker = None
+    if settings.behavioral_memory_enabled:
+        try:
+            from app.ai.behavioral_memory import BehavioralMemoryWorker
+
+            behavioral_worker = BehavioralMemoryWorker()
+            behavioral_worker.start()
+        except Exception:
+            logger.exception("Behavioral memory worker startup error")
+            behavioral_worker = None
     app.state.settings = settings
     yield
 
     logger.info("Shutting down Bem-Te-Vi…")
     retention_worker.stop()
+    try:
+        if behavioral_worker is not None:
+            behavioral_worker.stop()
+    except Exception:
+        logger.exception("Behavioral memory worker shutdown error")
     try:
         if rare_moments_worker is not None:
             rare_moments_worker.stop()
@@ -128,6 +172,11 @@ async def lifespan(app: FastAPI):
         timelapse_scheduler.stop()
     except Exception:
         logger.exception("Timelapse scheduler shutdown error")
+    try:
+        if morning_briefing_scheduler is not None:
+            morning_briefing_scheduler.stop()
+    except Exception:
+        logger.exception("Morning briefing scheduler shutdown error")
     try:
         audio_analysis.stop()
         audio_analysis.join(timeout=10)

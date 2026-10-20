@@ -7,7 +7,11 @@ ultralytics>=8.3.0
 pydantic>=2.9.0
 python-dotenv>=1.0.0
 python-multipart>=0.0.20
+# Base IANA de fusos horários (necessária no Windows para converter o horário
+# das câmeras no Diário de Campo e nas exportações eBird).
+tzdata>=2024.1
 requests>=2.32.0
+google-genai>=1.0.0
 # Laudo Ornitológico em PDF (módulo importado como `fpdf`).
 fpdf2>=2.7.9
 # Composição das "Fotos de Postal" (moldura + legenda + marca d'água) e
@@ -26,6 +30,10 @@ birdnetlib>=0.18.1
 librosa>=0.10.2
 audioread>=3.0.1
 audioop-lts>=0.2.2; python_version >= "3.13"
+# Espectrogramas visuais dos cantos (Librosa + Matplotlib, backend "Agg") e
+# gráficos embutidos no Laudo Ornitológico em PDF. O código cai no renderizador
+# OpenCV (já dependente de numpy/cv2) quando o Matplotlib não está instalado.
+matplotlib>=3.8.0
 # Base de dados de fusos horários (IANA) para o `zoneinfo` da stdlib. No Windows
 # o sistema não traz tzdata, então este pacote é necessário para calcular o
 # horário local das câmeras globais (ver app/services/camera_weather.py).
@@ -37,3 +45,7 @@ tzdata>=2024.1
 # tensorflow não existem (ex.: Windows + Python 3.14). O birdnetlib o utiliza
 # por meio de um shim de compatibilidade — ver app/services/birdnet_runtime.py.
 ai-edge-litert>=2.1.0
+# Opcional: extrator MobileNetV3-Small para as assinaturas visuais da
+# reidentificação individual (app/ai/visual_embeddings.py). O ultralytics já
+# instala torch; sem torchvision, o módulo usa o descritor OpenCV offline (180-D).
+# torchvision>=0.18.0

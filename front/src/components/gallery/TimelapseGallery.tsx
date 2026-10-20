@@ -7,15 +7,18 @@ import {
   LoaderCircle,
   Play,
   RefreshCw,
+  Smartphone,
   Sparkles,
   Trash2,
 } from "lucide-react";
-import type { Timelapse } from "@/types";
+import type { BirdVisit, ReelInfo, Timelapse } from "@/types";
 import {
   deleteTimelapse,
   fetchTimelapses,
+  generateReel,
   generateTimelapse,
   getErrorMessage,
+  listVisitsByDay,
   resolveMediaUrl,
 } from "@/services/api";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
@@ -59,6 +62,10 @@ export function TimelapseGallery() {
   const [message, setMessage] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Timelapse | null>(null);
   const [deleting, setDeleting] = useState(false);
+  /** Reel vertical gerado a partir da melhor visita do dia selecionado. */
+  const [reelInfo, setReelInfo] = useState<ReelInfo | null>(null);
+  const [reelBusy, setReelBusy] = useState(false);
+  const [reelError, setReelError] = useState<string | null>(null);
 
   /** Carrega a lista de resumos e mantém uma seleção válida. */
   const load = useCallback(async () => {
@@ -122,6 +129,43 @@ export function TimelapseGallery() {
       );
     } finally {
       setDeleting(false);
+    }
+  };
+
+  /**
+   * Gera um Reel vertical (9:16) a partir da melhor visita (com clipe) do dia
+   * selecionado — o mesmo clipe que encabeça o resumo do dia.
+   */
+  const handleGenerateReel = async () => {
+    if (!selected) return;
+    setReelBusy(true);
+    setReelError(null);
+    setReelInfo(null);
+    try {
+      const visits: BirdVisit[] = await listVisitsByDay(selected.day);
+      // Prioriza aves identificadas e com clipe gravado.
+      const candidates = visits
+        .filter((visit) => visit.clip_path || visit.clip_url)
+        .sort((a, b) => {
+          const aScore = (a.confidence ?? 0) * (a.species_id ? 1.2 : 1);
+          const bScore = (b.confidence ?? 0) * (b.species_id ? 1.2 : 1);
+          return bScore - aScore;
+        });
+      const best = candidates[0] ?? null;
+      if (!best) {
+        setReelError(
+          "Nenhum clipe de vídeo encontrado neste dia para gerar o Reel.",
+        );
+        return;
+      }
+      const info = await generateReel(best.id);
+      setReelInfo(info);
+    } catch (err) {
+      setReelError(
+        getErrorMessage(err, "Não foi possível gerar o Reel deste dia."),
+      );
+    } finally {
+      setReelBusy(false);
     }
   };
 
@@ -235,7 +279,7 @@ export function TimelapseGallery() {
                 <span>{selected.speed}× mais rápido</span>
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <a
                 href={playerSrc ?? "#"}
                 download={selected.filename}
@@ -246,6 +290,19 @@ export function TimelapseGallery() {
               </a>
               <button
                 type="button"
+                onClick={() => void handleGenerateReel()}
+                disabled={reelBusy}
+                className="inline-flex items-center gap-2 rounded-lg border border-violet-400/40 bg-violet-500/15 px-3 py-2 text-sm font-semibold text-violet-200 transition hover:bg-violet-500/25 disabled:cursor-wait disabled:opacity-60"
+              >
+                {reelBusy ? (
+                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Smartphone className="h-4 w-4" />
+                )}
+                {reelBusy ? "Gerando Reel…" : "🎬 Gerar Reel p/ Redes"}
+              </button>
+              <button
+                type="button"
                 onClick={() => setPendingDelete(selected)}
                 className="inline-flex items-center gap-2 rounded-lg border border-red-500/30 px-3 py-2 text-sm text-red-300 transition hover:bg-red-500/10"
               >
@@ -253,6 +310,14 @@ export function TimelapseGallery() {
                 Excluir
               </button>
             </div>
+            {reelError ? (
+              <p
+                role="alert"
+                className="mt-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300"
+              >
+                {reelError}
+              </p>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -313,6 +378,56 @@ export function TimelapseGallery() {
         onCancel={() => setPendingDelete(null)}
         onConfirm={() => void confirmDelete()}
       />
+      {/* Preview do Reel vertical (9:16) gerado para redes sociais */}
+      {reelInfo ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Reel vertical gerado"
+          onClick={() => setReelInfo(null)}
+        >
+          <div
+            className="flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-dark-600 bg-dark-800 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-dark-700 px-4 py-3">
+              <h3 className="font-display text-sm font-semibold text-[var(--color-text-primary)]">
+                🎬 Reel vertical (9:16)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setReelInfo(null)}
+                aria-label="Fechar preview do Reel"
+                className="rounded-md p-1 text-[var(--color-text-muted)] transition hover:text-[var(--color-text-primary)]"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex flex-1 flex-col items-center gap-3 overflow-y-auto p-4">
+              <video
+                src={reelInfo.url}
+                controls
+                autoPlay
+                muted
+                playsInline
+                className="max-h-[55vh] w-auto rounded-xl border border-dark-600 bg-black"
+              />
+              <a
+                href={reelInfo.url}
+                download
+                className="inline-flex items-center gap-2 rounded-lg border border-violet-400/40 bg-violet-500/15 px-4 py-2 text-xs font-semibold text-violet-200 transition hover:bg-violet-500/25"
+              >
+                <Download className="h-4 w-4" />
+                Baixar Reel (MP4 1080×1920)
+              </a>
+              <p className="text-center text-[11px] text-[var(--color-text-muted)]">
+                Pronto para Instagram Reels, TikTok e YouTube Shorts.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

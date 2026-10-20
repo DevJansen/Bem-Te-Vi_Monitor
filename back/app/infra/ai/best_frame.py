@@ -29,11 +29,14 @@ import numpy as np
 from app.infra.ai.detector import Detection
 
 # Pesos do escore combinado (somam 1.0). A nitidez domina, como pede o
-# requisito de escolher o quadro mais nítido; confiança e enquadramento
-# desempatam quadros com nitidez parecida.
-PESO_NITIDEZ = 0.55
-PESO_CONFIANCA = 0.30
+# requisito de escolher o quadro mais nítido; confiança, enquadramento e
+# equilíbrio de aspecto desempatam quadros com nitidez parecida.
+# O equilíbrio de aspecto premia bounding boxes com proporção largura/altura
+# próxima de 1 (pássaro de frente/perfil claro), conforme solicitado.
+PESO_NITIDEZ = 0.45
+PESO_CONFIANCA = 0.25
 PESO_ENQUADRAMENTO = 0.15
+PESO_ASPECTO = 0.15
 
 # Escala de normalização da variância do Laplaciano. A nitidez é mapeada para
 # (0, 1) por `v / (v + escala)`: monotônica (preserva a ordenação) e estável,
@@ -63,6 +66,7 @@ class MetricasQuadro:
     confianca: float
     proporcao_area: float
     escore_area: float
+    escore_aspecto: float  # equilíbrio da proporção largura/altura da bbox
 
 
 @dataclass
@@ -123,6 +127,22 @@ def _escore_area(proporcao: float, ideal: float, sigma: float) -> float:
     return float(math.exp(-((proporcao - ideal) ** 2) / (2.0 * sigma * sigma)))
 
 
+def _escore_aspecto(bbox: tuple[float, float, float, float]) -> float:
+    """Pontuação do equilíbrio de aspecto da bounding box.
+
+    Premia caixas com proporção largura/altura próxima de 1 (pássaro de
+    frente/perfil claro). Usa uma gaussiana centrada em 1.0 com sigma=0.35,
+    de modo que caixas muito alongadas (ave em voo, de lado) perdem pontos.
+    """
+    x1, y1, x2, y2 = bbox
+    w = max(1.0, x2 - x1)
+    h = max(1.0, y2 - y1)
+    ratio = w / h
+    # Gaussiana centrada em 1.0 (aspecto equilibrado).
+    sigma = 0.35
+    return float(math.exp(-((ratio - 1.0) ** 2) / (2.0 * sigma * sigma)))
+
+
 def avaliar_deteccao(
     frame: np.ndarray,
     detection: Detection,
@@ -155,10 +175,12 @@ def avaliar_deteccao(
     escore_area = _escore_area(proporcao, float(proporcao_ideal), float(sigma_area))
 
     confianca = max(0.0, min(1.0, float(detection.confidence)))
+    escore_aspecto = _escore_aspecto(detection.bbox)
     escore = (
         PESO_NITIDEZ * nitidez_normalizada
         + PESO_CONFIANCA * confianca
         + PESO_ENQUADRAMENTO * escore_area
+        + PESO_ASPECTO * escore_aspecto
     )
     return MetricasQuadro(
         escore=escore,
@@ -167,6 +189,7 @@ def avaliar_deteccao(
         confianca=confianca,
         proporcao_area=proporcao,
         escore_area=escore_area,
+        escore_aspecto=escore_aspecto,
     )
 
 

@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import {
   CheckCircle2,
   Eye,
@@ -29,6 +29,8 @@ import {
   getErrorMessage,
   saveEnvironmentSettings,
   testEnvironmentConnection,
+  testGeminiConnection,
+  fetchGeminiModels,
   updateSettings,
 } from "@/services/api";
 
@@ -36,134 +38,78 @@ type EnvironmentDraft = {
   telegramBotToken: string;
   telegramChatId: string;
   discordWebhookUrl: string;
+  /** Chave do Google Gemini (GEMINI_API_KEY). */
   aiExternalApiKey: string;
-  aiExternalBaseUrl: string;
+  /** Modelo Gemini em uso (dropdown fixo, sem texto livre). */
   aiExternalModel: string;
-  /** Provedor efetivo da IA externa: "google" (Gemini) ou "openai". */
-  aiExternalProvider: string;
   clearTelegram: boolean;
   clearDiscord: boolean;
   clearAiExternal: boolean;
 };
+
+/**
+ * Modelos do Google Gemini — nomes oficiais da API.
+ *
+ * O provedor é único e fixo: **Google Gemini**. O modelo é escolhido em um
+ * dropdown simples — sem campos de texto livre, para evitar nomes inválidos
+ * (que causariam HTTP 404 na API oficial).
+ *
+ * **Descoberta dinâmica:** como o Google descontinua modelos com frequência,
+ * a lista real disponível para a chave é buscada em `/api/settings/ai/models`.
+ * Os presets abaixo são a semente (e o fallback quando a API não responde).
+ */
+const GEMINI_DEFAULT_MODEL = "gemini-1.5-flash";
+
+const GEMINI_MODEL_PRESETS: Array<{ value: string; label: string }> = [
+  {
+    value: "gemini-1.5-flash",
+    label: "gemini-1.5-flash (Padrão — Rápido, leve e estável)",
+  },
+  {
+    value: "gemini-2.5-flash",
+    label: "gemini-2.5-flash (Nova geração Flash)",
+  },
+  {
+    value: "gemini-1.5-pro",
+    label: "gemini-1.5-pro (Modo Pro — Análise densa)",
+  },
+];
+
+/** Rótulos amigáveis para os modelos descobertos pela API. */
+function geminiModelLabel(model: string): string {
+  const nome = model.toLowerCase();
+  if (nome === GEMINI_DEFAULT_MODEL) {
+    return "gemini-1.5-flash (Padrão — Rápido, leve e estável)";
+  }
+  if (nome.includes("flash-lite")) {
+    return `${model} (Flash Lite — o mais leve)`;
+  }
+  if (nome.includes("flash")) {
+    return `${model} (Nova geração Flash)`;
+  }
+  if (nome.includes("pro")) {
+    return `${model} (Modo Pro — Análise densa)`;
+  }
+  return model;
+}
+
+/** Texto de ajuda exibido abaixo do seletor de modelo. */
+const GEMINI_MODEL_HELP =
+  "gemini-1.5-flash: recomendado — rápido, leve e estável. " +
+  "gemini-2.5-flash: nova geração Flash. " +
+  "gemini-1.5-pro: análise densa (mais lento). " +
+  "A lista é atualizada com os modelos disponíveis para a sua chave.";
 
 const EMPTY_DRAFT: EnvironmentDraft = {
   telegramBotToken: "",
   telegramChatId: "",
   discordWebhookUrl: "",
   aiExternalApiKey: "",
-  aiExternalBaseUrl: "",
-  aiExternalModel: "",
-  aiExternalProvider: "openai",
+  aiExternalModel: GEMINI_DEFAULT_MODEL,
   clearTelegram: false,
   clearDiscord: false,
   clearAiExternal: false,
 };
-
-/**
- * Provedores de IA pré-configurados. Os provedores compatíveis com a OpenAI
- * (OpenAI, OpenRouter, Groq, Ollama) usam a API de chat padrão; o **Google
- * Gemini** usa o endpoint oficial `generateContent` do Google — por isso a URL
- * base dele é fixa e o campo é preenchido/ignorado automaticamente.
- */
-type AiProviderPreset = {
-  id: string;
-  label: string;
-  /** Provedor efetivo enviado ao backend: "google" ou "openai". */
-  provider: string;
-  baseUrl: string;
-  defaultModel: string;
-  models: string[];
-  keyPlaceholder: string;
-};
-
-const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
-  {
-    id: "openai",
-    label: "OpenAI",
-    provider: "openai",
-    baseUrl: "https://api.openai.com/v1",
-    defaultModel: "gpt-4o-mini",
-    models: ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1"],
-    keyPlaceholder: "sk-...",
-  },
-  {
-    id: "openrouter",
-    label: "OpenRouter",
-    provider: "openai",
-    baseUrl: "https://openrouter.ai/api/v1",
-    defaultModel: "openai/gpt-4o-mini",
-    models: [
-      "openai/gpt-4o-mini",
-      "google/gemini-2.0-flash-001",
-      "anthropic/claude-3.5-sonnet",
-      "meta-llama/llama-3.2-90b-vision-instruct",
-    ],
-    keyPlaceholder: "sk-or-v1-...",
-  },
-  {
-    id: "groq",
-    label: "Groq",
-    provider: "openai",
-    baseUrl: "https://api.groq.com/openai/v1",
-    defaultModel: "meta-llama/llama-4-scout-17b-16e-instruct",
-    models: [
-      "meta-llama/llama-4-scout-17b-16e-instruct",
-      "meta-llama/llama-4-maverick-17b-128e-instruct",
-    ],
-    keyPlaceholder: "gsk_...",
-  },
-  {
-    id: "google",
-    label: "Google Gemini",
-    provider: "google",
-    // Endpoint oficial do Google Generative Language (o backend acrescenta
-    // "/models/{modelo}:generateContent"). A URL é fixa e não editável.
-    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
-    defaultModel: "gemini-2.5-flash",
-    models: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash"],
-    keyPlaceholder: "AIza...",
-  },
-  {
-    id: "ollama",
-    label: "Ollama (local)",
-    provider: "openai",
-    baseUrl: "http://localhost:11434/v1",
-    defaultModel: "llava",
-    models: ["llava", "llama3.2-vision", "minicpm-v", "qwen2.5vl"],
-    keyPlaceholder: "ollama",
-  },
-];
-
-const CUSTOM_AI_PROVIDER = "custom";
-const GOOGLE_PROVIDER = "google";
-
-/**
- * Descobre qual provedor corresponde ao par (provedor explícito, URL base).
- *
- * O provedor explícito vence — assim o Google Gemini nunca cai na rota padrão
- * da OpenAI. A URL base serve de pista para os demais provedores e para
- * configurações antigas que só guardavam a URL (inclusive o endpoint
- * OpenAI-compatível do Gemini).
- */
-function matchAiProvider(
-  baseUrl: string,
-  provider?: string,
-): AiProviderPreset | null {
-  const normalized = baseUrl.trim().replace(/\/+$/, "").toLowerCase();
-  if (
-    provider === GOOGLE_PROVIDER ||
-    normalized.includes("generativelanguage.googleapis.com")
-  ) {
-    return AI_PROVIDER_PRESETS.find((preset) => preset.provider === GOOGLE_PROVIDER) ?? null;
-  }
-  return (
-    AI_PROVIDER_PRESETS.find(
-      (preset) =>
-        preset.provider !== GOOGLE_PROVIDER &&
-        preset.baseUrl.replace(/\/+$/, "").toLowerCase() === normalized,
-    ) ?? null
-  );
-}
 
 type Props = {
   onSettingsChange?: (settings: AppSettings) => void;
@@ -193,6 +139,27 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
     { mode: "old"; days: number } | { mode: "all" } | null
   >(null);
   const [cleaningHistory, setCleaningHistory] = useState(false);
+  /**
+   * Modelos Gemini realmente disponíveis para a chave configurada.
+   * Vazio = ainda não consultou (ou a API falhou) → usa os presets oficiais.
+   */
+  const [apiModels, setApiModels] = useState<string[]>([]);
+
+  // Descoberta dinâmica: o Google descontinua modelos, então buscamos os
+  // que realmente respondem para a chave do observador.
+  useEffect(() => {
+    let ativo = true;
+    void fetchGeminiModels()
+      .then((modelos) => {
+        if (ativo && modelos.length > 0) setApiModels(modelos);
+      })
+      .catch(() => {
+        /* mantém os presets oficiais como fallback */
+      });
+    return () => {
+      ativo = false;
+    };
+  }, []);
 
   const load = async () => {
     setLoading(true);
@@ -204,12 +171,10 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
       ]);
       setSettings(data);
       setEnvironment(env);
-      // Pré-preenche o provedor de IA (URL base e modelo não são segredos).
+      // Pré-preenche o modelo do Gemini (não é segredo).
       setDraft((current) => ({
         ...current,
-        aiExternalBaseUrl: env.ai_external_base_url,
-        aiExternalModel: env.ai_external_model,
-        aiExternalProvider: env.ai_external_provider,
+        aiExternalModel: env.ai_external_model || GEMINI_DEFAULT_MODEL,
       }));
       onSettingsChange?.(data);
     } catch (err) {
@@ -285,14 +250,8 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
     ...(draft.aiExternalApiKey.trim()
       ? { ai_external_api_key: draft.aiExternalApiKey.trim() }
       : {}),
-    ...(draft.aiExternalBaseUrl.trim()
-      ? { ai_external_base_url: draft.aiExternalBaseUrl.trim() }
-      : {}),
     ...(draft.aiExternalModel.trim()
       ? { ai_external_model: draft.aiExternalModel.trim() }
-      : {}),
-    ...(draft.aiExternalProvider.trim()
-      ? { ai_external_provider: draft.aiExternalProvider.trim() }
       : {}),
     ...(draft.clearTelegram ? { clear_telegram: true } : {}),
     ...(draft.clearDiscord ? { clear_discord: true } : {}),
@@ -360,18 +319,32 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
     } else if (integration === "discord" && draft.discordWebhookUrl.trim()) {
       credentials.discord_webhook_url = draft.discordWebhookUrl.trim();
     } else if (integration === "ai_external") {
-      if (draft.aiExternalApiKey.trim()) {
-        credentials.ai_external_api_key = draft.aiExternalApiKey.trim();
+      // Rota blindada dedicada ao Gemini: sempre HTTP 200, com `status`
+      // (success/warning/error) no corpo — nunca mais o 503 crônico.
+      setTesting(integration);
+      try {
+        const result = await testGeminiConnection(
+          draft.aiExternalApiKey.trim() || null,
+          draft.aiExternalModel.trim() || GEMINI_DEFAULT_MODEL,
+        );
+        setTestResult({
+          integration,
+          message: result.message,
+          ok: result.status === "success",
+        });
+      } catch (err) {
+        setTestResult({
+          integration,
+          message: getErrorMessage(
+            err,
+            "Não foi possível testar a conexão com o Google Gemini.",
+          ),
+          ok: false,
+        });
+      } finally {
+        setTesting(null);
       }
-      if (draft.aiExternalBaseUrl.trim()) {
-        credentials.ai_external_base_url = draft.aiExternalBaseUrl.trim();
-      }
-      if (draft.aiExternalModel.trim()) {
-        credentials.ai_external_model = draft.aiExternalModel.trim();
-      }
-      if (draft.aiExternalProvider.trim()) {
-        credentials.ai_external_provider = draft.aiExternalProvider.trim();
-      }
+      return;
     }
     try {
       const result = await testEnvironmentConnection(integration, credentials);
@@ -386,6 +359,24 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
       setTesting(null);
     }
   };
+
+  /**
+   * Opções do dropdown de modelo: os presets oficiais + os modelos que a API
+   * realmente oferece para a chave configurada (descoberta dinâmica).
+   * Se a descoberta falhar, fica só com os presets — nunca quebrado.
+   */
+  const geminiModelOptions = useMemo(() => {
+    const mapa = new Map<string, { value: string; label: string }>();
+    // Presets oficiais primeiro (o pedido do observador).
+    for (const preset of GEMINI_MODEL_PRESETS) mapa.set(preset.value, preset);
+    // Modelos descobertos na API completam a lista.
+    for (const modelo of apiModels) {
+      if (!mapa.has(modelo)) {
+        mapa.set(modelo, { value: modelo, label: geminiModelLabel(modelo) });
+      }
+    }
+    return Array.from(mapa.values());
+  }, [apiModels]);
 
   const cleanHistory = async () => {
     if (!historyCleanup) return;
@@ -418,43 +409,6 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
     } finally {
       setCleaningHistory(false);
     }
-  };
-
-  // Provedor de IA derivado do par (provedor explícito, URL base) — alimenta o
-  // seletor, as sugestões de modelo e o modo somente-leitura da URL no Google.
-  const aiProvider = matchAiProvider(
-    draft.aiExternalBaseUrl,
-    draft.aiExternalProvider,
-  );
-  const aiProviderId = aiProvider?.id ?? CUSTOM_AI_PROVIDER;
-  const aiModelSuggestions = aiProvider?.models ?? [];
-  // O Google Gemini usa o endpoint oficial: a URL base é fixa e não editável.
-  const isGoogleProvider = draft.aiExternalProvider === GOOGLE_PROVIDER;
-
-  const selectAiProvider = (providerId: string) => {
-    setDraft((current) => {
-      if (providerId === CUSTOM_AI_PROVIDER) {
-        // "Personalizado": libera a URL para digitação manual (compatível com a
-        // API da OpenAI) e volta ao provedor padrão.
-        return {
-          ...current,
-          aiExternalProvider: "openai",
-          aiExternalBaseUrl: "",
-        };
-      }
-      const preset = AI_PROVIDER_PRESETS.find((item) => item.id === providerId);
-      if (!preset) {
-        return current;
-      }
-      // Mantém o modelo atual quando ele ainda é válido para o novo provedor.
-      const keepModel = preset.models.includes(current.aiExternalModel.trim());
-      return {
-        ...current,
-        aiExternalProvider: preset.provider,
-        aiExternalBaseUrl: preset.baseUrl,
-        aiExternalModel: keepModel ? current.aiExternalModel : preset.defaultModel,
-      };
-    });
   };
 
   if (loading && !settings) {
@@ -657,63 +611,59 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
               ]}
             />
             <IntegrationCard
-              title="IA Externa"
+              title="Inteligência Artificial Externa (Google Gemini)"
               icon={<Sparkles className="h-4 w-4" />}
               configured={environment.ai_external_configured}
               testing={testing === "ai_external"}
               hasInput={Boolean(draft.aiExternalApiKey.trim())}
               result={testResult?.integration === "ai_external" ? testResult : null}
               onTest={() => void runConnectionTest("ai_external")}
+              testLabel="Testar Conexão com Gemini"
               clearRequested={draft.clearAiExternal}
               onClearChange={(clearAiExternal) =>
                 setDraft({ ...draft, clearAiExternal })
               }
-              hint="Escolha o provedor: a URL base e o modelo são preenchidos automaticamente. O Google Gemini usa o endpoint oficial do Google; os demais usam a API de chat compatível com a OpenAI."
+              hint="O Google Gemini é o único provedor de IA do Bem-Ti-Vi. Ele identifica as aves nas fotos, interpreta os espectrogramas dos cantos e monta a ficha ornitológica — tudo local, sem enviar imagens para nenhum outro serviço."
               fields={[
                 {
-                  label: "Provedor",
-                  value: aiProviderId,
-                  placeholder: "",
-                  secret: false,
-                  options: [
-                    ...AI_PROVIDER_PRESETS.map((preset) => ({
-                      value: preset.id,
-                      label: preset.label,
-                    })),
-                    { value: CUSTOM_AI_PROVIDER, label: "Personalizado…" },
-                  ],
-                  onChange: selectAiProvider,
-                },
-                {
-                  label: "URL base da API",
-                  value: draft.aiExternalBaseUrl,
-                  placeholder: aiProvider?.baseUrl ?? "https://api.openai.com/v1",
-                  secret: false,
-                  disabled: isGoogleProvider,
-                  note: isGoogleProvider
-                    ? "Definida automaticamente pelo Google (endpoint oficial)."
-                    : undefined,
-                  onChange: (aiExternalBaseUrl) =>
-                    setDraft({ ...draft, aiExternalBaseUrl }),
-                },
-                {
-                  label: "Modelo",
-                  value: draft.aiExternalModel,
-                  placeholder: aiProvider?.defaultModel ?? "nome do modelo",
-                  secret: false,
-                  suggestions: aiModelSuggestions,
-                  onChange: (aiExternalModel) =>
-                    setDraft({ ...draft, aiExternalModel }),
-                },
-                {
-                  label: "Chave da API",
+                  label: "Chave da API (GEMINI_API_KEY)",
                   value: draft.aiExternalApiKey,
                   placeholder: environment.ai_external_api_key_configured
                     ? "Chave salva (••••••••)"
-                    : aiProvider?.keyPlaceholder ?? "chave da API",
+                    : "AIzaSy...",
                   secret: true,
+                  note: (
+                    <>
+                      Obtenha sua chave gratuita em{" "}
+                      <a
+                        href="https://aistudio.google.com"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-medium text-emerald-300 underline underline-offset-2 hover:text-emerald-200"
+                      >
+                        aistudio.google.com
+                      </a>
+                    </>
+                  ),
                   onChange: (aiExternalApiKey) =>
                     setDraft({ ...draft, aiExternalApiKey, clearAiExternal: false }),
+                },
+                {
+                  label: "Modelo",
+                  value: geminiModelOptions.some(
+                    (option) => option.value === draft.aiExternalModel,
+                  )
+                    ? draft.aiExternalModel
+                    : (geminiModelOptions[0]?.value ?? GEMINI_DEFAULT_MODEL),
+                  placeholder: GEMINI_DEFAULT_MODEL,
+                  secret: false,
+                  options: geminiModelOptions.map((option) => ({
+                    value: option.value,
+                    label: option.label,
+                  })),
+                  note: GEMINI_MODEL_HELP,
+                  onChange: (aiExternalModel) =>
+                    setDraft({ ...draft, aiExternalModel }),
                 },
               ]}
             />
@@ -981,7 +931,7 @@ type EnvironmentFieldProps = {
   /** Campo somente-leitura (ex.: URL fixa do Google Gemini). */
   disabled?: boolean;
   /** Texto auxiliar exibido abaixo do campo. */
-  note?: string;
+  note?: ReactNode;
 };
 
 function EnvironmentField({
@@ -1074,6 +1024,7 @@ function IntegrationCard({
   onClearChange,
   fields,
   hint,
+  testLabel,
 }: {
   title: string;
   icon: ReactNode;
@@ -1086,6 +1037,8 @@ function IntegrationCard({
   onClearChange: (clear: boolean) => void;
   fields: EnvironmentFieldProps[];
   hint?: string;
+  /** Rótulo do botão de teste (padrão: "Testar Conexão"). */
+  testLabel?: string;
 }) {
   return (
     <div className="space-y-3 rounded-xl border border-dark-700 bg-dark-900/60 p-3">
@@ -1130,7 +1083,7 @@ function IntegrationCard({
         className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/40 px-3 py-1.5 text-xs font-medium text-emerald-300 transition hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-40"
       >
         {testing ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
-        {testing ? "Testando conexão…" : "Testar Conexão"}
+        {testing ? "Testando conexão…" : (testLabel ?? "Testar Conexão")}
       </button>
       {result ? (
         <p

@@ -11,6 +11,9 @@ from app.controllers import (
     cameras,
     events,
     gallery,
+    journal,
+    media,
+    network,
     offline,
     settings,
     species,
@@ -32,6 +35,8 @@ api_router.include_router(events.router)
 api_router.include_router(cameras.router)
 api_router.include_router(gallery.router)
 api_router.include_router(visits.router)
+api_router.include_router(journal.router)
+api_router.include_router(network.router)
 api_router.include_router(species.router)
 api_router.include_router(offline.router)
 api_router.include_router(settings.router)
@@ -42,5 +47,6 @@ api_router.include_router(videos.router)
 api_router.include_router(weather.router)
 api_router.include_router(wildlife.router)
 api_router.include_router(bioacoustics.router)
+api_router.include_router(media.router)
 
 __all__ = ["api_router"]

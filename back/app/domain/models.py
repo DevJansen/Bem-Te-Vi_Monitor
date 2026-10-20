@@ -277,6 +277,9 @@ class AppSettingsOut(BaseModel):
     # Modo de alerta: "all" (qualquer visita) ou "new_species" (só espécies novas).
     notify_mode: str = "all"
     min_confidence_notify: float = 0.35
+    morning_briefing_enabled: bool = True
+    morning_briefing_hour: int = 7
+    morning_briefing_minute: int = 0
     extra: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -284,6 +287,9 @@ class AppSettingsUpdate(BaseModel):
     notifications_enabled: bool | None = None
     notify_mode: str | None = Field(default=None, pattern="^(all|new_species)$")
     min_confidence_notify: float | None = Field(default=None, ge=0.0, le=1.0)
+    morning_briefing_enabled: bool | None = None
+    morning_briefing_hour: int | None = Field(default=None, ge=0, le=23)
+    morning_briefing_minute: int | None = Field(default=None, ge=0, le=59)
     # Mantido por compatibilidade: encaminhado para a calibração.
     yolo_confidence: float | None = Field(default=None, ge=0.05, le=1.0)
     pre_record_seconds: float | None = Field(default=None, ge=3.0, le=30.0)
@@ -403,6 +409,8 @@ class AudioDetectionOut(BaseModel):
     linked_visit_id: str | None = None
     # Clipe de áudio gravado (player da aba Detecção Sonora), quando existe.
     audio_url: str | None = None
+    # Espectrograma visual (PNG) gerado a partir do clipe, quando existe.
+    spectrogram_url: str | None = None
     # Vínculo com a espécie da Life List ("Minhas Aves"), quando identificada.
     species_id: str | None = None
     # Rótulo do estado da identificação (ex.: "Identificado por IA Externa").
@@ -412,6 +420,10 @@ class AudioDetectionOut(BaseModel):
     humidity: float | None = None
     weather_code: str | None = None
     wind_speed: float | None = None
+    # Escuta Noturna de Migração (NFC): detecção feita na janela noturna.
+    is_nfc: bool = False
+    nfc_score: float | None = None
+    night_date: str | None = None
 
 
 class AudioDetectionIdentify(BaseModel):
@@ -796,12 +808,10 @@ class EnvironmentSettingsOut(BaseModel):
     telegram_bot_token: str | None = None
     telegram_chat_id: str | None = None
     discord_webhook_url: str | None = None
+    # Chave do Google Gemini (mascarada na leitura).
     ai_external_api_key: str | None = None
-    # Provedor de IA compatível com a OpenAI (não são segredos).
-    ai_external_base_url: str = "https://api.openai.com/v1"
-    ai_external_model: str = "gpt-4o-mini"
-    # Provedor efetivo da IA externa: "google" (Gemini oficial) ou "openai".
-    ai_external_provider: str = "openai"
+    # Modelo Gemini em uso (sanitizado, sem o prefixo "models/").
+    ai_external_model: str = "gemini-1.5-flash"
     telegram_bot_token_configured: bool
     telegram_chat_id_configured: bool
     discord_webhook_url_configured: bool
@@ -816,9 +826,7 @@ class EnvironmentSettingsUpdate(BaseModel):
     telegram_chat_id: str | None = Field(default=None, max_length=128)
     discord_webhook_url: str | None = Field(default=None, max_length=2048)
     ai_external_api_key: str | None = Field(default=None, max_length=512)
-    ai_external_base_url: str | None = Field(default=None, max_length=2048)
     ai_external_model: str | None = Field(default=None, max_length=128)
-    ai_external_provider: str | None = Field(default=None, max_length=32)
     clear_telegram: bool = False
     clear_discord: bool = False
     clear_ai_external: bool = False
@@ -830,9 +838,21 @@ class EnvironmentConnectionTest(BaseModel):
     telegram_chat_id: str | None = Field(default=None, max_length=128)
     discord_webhook_url: str | None = Field(default=None, max_length=2048)
     ai_external_api_key: str | None = Field(default=None, max_length=512)
-    ai_external_base_url: str | None = Field(default=None, max_length=2048)
     ai_external_model: str | None = Field(default=None, max_length=128)
-    ai_external_provider: str | None = Field(default=None, max_length=32)
+
+
+class GeminiConnectionTestRequest(BaseModel):
+    """Payload do teste de conexão dedicado ao Google Gemini."""
+
+    api_key: str | None = Field(default=None, max_length=512)
+    model_name: str = Field(default="gemini-1.5-flash", max_length=128)
+
+
+class GeminiConnectionTestResponse(BaseModel):
+    """Resultado do teste de conexão com o Google Gemini."""
+
+    status: Literal["success", "warning", "error"]
+    message: str
 
 
 class CameraWeatherOut(BaseModel):
@@ -1291,3 +1311,378 @@ class StreamStatsOut(BaseModel):
     individuals_peak: int = 0
     inferences: int = 0
     last_error: str | None = None
+
+
+# --------------------------------------------------------------------------- #
+# Inteligência adaptativa
+# (aprendizado ativo, memória comportamental e assinaturas visuais)
+# --------------------------------------------------------------------------- #
+
+
+def _now_iso() -> str:
+    """Timestamp UTC no formato usado pelas respostas do painel."""
+    return datetime.utcnow().isoformat() + "Z"
+
+
+class BehavioralWeatherOut(BaseModel):
+    """Retrato do clima atual usado pela previsão comportamental."""
+
+    available: bool = False
+    temperature: float | None = None
+    humidity: float | None = None
+    condition: str | None = None
+    icon: str | None = None
+
+
+class BehavioralFactorOut(BaseModel):
+    """Um fator que pesou na previsão de pico (horário, clima, sazão...)."""
+
+    key: str
+    label: str
+    # 0..100 — quanto o fator favorece a espécie no momento atual.
+    score: int = 0
+    detail: str = ""
+
+
+class BehavioralPredictionOut(BaseModel):
+    """Previsão de pico de atividade de uma espécie para as próximas horas."""
+
+    species: str
+    scientific_name: str | None = None
+    probability: int = 0
+    horizon_hours: int = 2
+    window_label: str = ""
+    expected_peak_hour: str | None = None
+    headline: str = ""
+    detail: str = ""
+    # positive | info | neutral
+    tone: str = "info"
+    icon: str = "🐦"
+    # alta | média | estimativa
+    confidence: str = "estimativa"
+    visits_analyzed: int = 0
+    factors: list[BehavioralFactorOut] = Field(default_factory=list)
+
+
+class BehavioralPredictionListOut(BaseModel):
+    """Ranking de previsões + o destaque (highlight) para o card do painel."""
+
+    generated_at: str = Field(default_factory=_now_iso)
+    horizon_hours: int = 2
+    history_days: int = 0
+    current_weather: BehavioralWeatherOut = Field(
+        default_factory=BehavioralWeatherOut
+    )
+    predictions: list[BehavioralPredictionOut] = Field(default_factory=list)
+    highlight: BehavioralPredictionOut | None = None
+    notes: str = ""
+
+
+class BehavioralMemoryStatusOut(BaseModel):
+    """Resumo da memória comportamental persistida."""
+
+    generated_at: str | None = None
+    history_days: int = 0
+    species: int = 0
+    visits: int = 0
+
+
+class ActiveLearningClassOut(BaseModel):
+    """Uma espécie na fila de amostras do aprendizado ativo."""
+
+    species_name: str
+    samples: int = 0
+    eligible: bool = False
+    missing_files: int = 0
+    last_sample_at: str | None = None
+
+
+class FineTuneRunOut(BaseModel):
+    """Um ciclo de fine-tuning do Bem-Ti-Vi Core (passado ou em andamento)."""
+
+    id: str
+    # queued | running | completed | failed
+    status: str = "queued"
+    base_model: str | None = None
+    model_path: str | None = None
+    samples: int = 0
+    classes: int = 0
+    epochs: int = 0
+    batch: int = 0
+    imgsz: int = 0
+    started_at: str | None = None
+    finished_at: str | None = None
+    message: str = ""
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    created_at: str = ""
+
+
+class ActiveLearningStatusOut(BaseModel):
+    """Estado completo do aprendizado ativo para o painel de Configurações."""
+
+    enabled: bool = False
+    running: bool = False
+    total_samples: int = 0
+    eligible_classes: int = 0
+    min_samples: int = 0
+    queue: list[ActiveLearningClassOut] = Field(default_factory=list)
+    last_run: FineTuneRunOut | None = None
+    model_available: bool = False
+    model_path: str | None = None
+    model_size_bytes: int = 0
+    model_trained_at: str | None = None
+    notes: list[str] = Field(default_factory=list)
+
+
+class IndividualSightingOut(BaseModel):
+    """Um avistamento de um indivíduo conhecido (visita + similaridade)."""
+
+    visit_id: str
+    detected_at: str | None = None
+    confidence: float = 0.0
+    similarity: float | None = None
+    crop_url: str | None = None
+    location_label: str | None = None
+    temperature: float | None = None
+    humidity: float | None = None
+    weather_code: str | None = None
+
+
+class KnownIndividualOut(BaseModel):
+    """Um "Conhecido do Jardim": indivíduo recorrente reconhecido visualmente."""
+
+    id: str
+    species_id: str | None = None
+    common_name: str
+    scientific_name: str | None = None
+    nickname: str
+    sightings: int = 0
+    is_recurring: bool = False
+    first_seen_at: str | None = None
+    last_seen_at: str | None = None
+    representative_visit_id: str | None = None
+    latest_visit_id: str | None = None
+    avg_similarity: float | None = None
+    crop_url: str | None = None
+    recent_visits: list[IndividualSightingOut] = Field(default_factory=list)
+
+
+class KnownIndividualListOut(BaseModel):
+    """Lista de indivíduos reconhecidos (painel "Conhecidos do Jardim")."""
+
+    individuals: list[KnownIndividualOut] = Field(default_factory=list)
+    total: int = 0
+    generated_at: str = Field(default_factory=_now_iso)
+
+
+class KnownIndividualDetailOut(KnownIndividualOut):
+    """Histórico completo de um indivíduo conhecido."""
+
+    visits: list[IndividualSightingOut] = Field(default_factory=list)
+
+
+class VisitConfirmationRequest(BaseModel):
+    """Confirmação manual de uma detecção (alimenta o aprendizado ativo)."""
+
+    species_name: str | None = None
+    species_id: str | None = None
+
+
+class VisitConfirmationOut(BaseModel):
+    """Resultado da confirmação de uma visita."""
+
+    visit_id: str
+    confirmed: bool = False
+    species_name: str | None = None
+    species_id: str | None = None
+    training_queued: bool = False
+    training_reason: str | None = None
+    individual_id: str | None = None
+    individual_nickname: str | None = None
+    individual_known: bool = False
+
+
+class VisualEmbeddingsStatusOut(BaseModel):
+    """Contadores das assinaturas visuais (re-identificação individual)."""
+
+    enabled: bool = False
+    samples: int = 0
+    individuals: int = 0
+    recurring: int = 0
+    model: str = "auto (mobilenet_v3_small)"
+    threshold: float = 0.0
+
+
+# ---------------------------------------------------------------------------
+# Diário de Campo / exportação eBird
+# ---------------------------------------------------------------------------
+
+
+class FieldJournalWeatherOut(BaseModel):
+    """Resumo meteorológico de um dia ou de um jardim."""
+
+    available: bool = False
+    temperature: float | None = None
+    humidity: float | None = None
+    condition: str | None = None
+    icon: str | None = None
+    wind_speed: float | None = None
+    source: str = ""
+    summary: str = ""
+
+
+class FieldJournalMediaOut(BaseModel):
+    """Foto ou clipe associado a uma espécie no diário."""
+
+    kind: Literal["photo", "clip"] = "photo"
+    url: str
+    label: str | None = None
+    visit_id: str | None = None
+
+
+class FieldJournalSightingOut(BaseModel):
+    """Um registro individual (visita) que compõe o diário do dia."""
+
+    visit_id: str
+    camera_id: str
+    detected_at: str
+    time_label: str
+    confidence: float = 0.0
+    garden_name: str
+    camera_name: str
+    temperature: float | None = None
+    humidity: float | None = None
+    weather_code: str | None = None
+    wind_speed: float | None = None
+    behavior: str | None = None
+    individuals_peak: int = 1
+    crop_url: str | None = None
+    thumbnail_url: str | None = None
+    clip_url: str | None = None
+
+
+class FieldJournalSpeciesOut(BaseModel):
+    """Espécie observada no dia, com contagem, horários e mídia."""
+
+    species: str
+    scientific_name: str | None = None
+    ecological_status: str | None = None
+    ecological_label: str | None = None
+    count: int = 1
+    visits: int = 0
+    max_confidence: float = 0.0
+    first_seen_at: str = ""
+    last_seen_at: str = ""
+    first_time_label: str = "--:--"
+    last_time_label: str = "--:--"
+    behavior_summary: str | None = None
+    media: list[FieldJournalMediaOut] = Field(default_factory=list)
+    sightings: list[FieldJournalSightingOut] = Field(default_factory=list)
+
+
+class FieldJournalGardenOut(BaseModel):
+    """Jardim/câmera coberto pelo diário e suas coordenadas."""
+
+    camera_id: str
+    name: str
+    location_label: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    timezone: str | None = None
+    country: str | None = None
+    coordinates_label: str | None = None
+    weather: FieldJournalWeatherOut = Field(default_factory=FieldJournalWeatherOut)
+
+
+class FieldJournalSummaryOut(BaseModel):
+    """Números-chave do dia para o cabeçalho do diário."""
+
+    total_visits: int = 0
+    total_species: int = 0
+    total_gardens: int = 0
+    first_observation_at: str | None = None
+    last_observation_at: str | None = None
+    first_time_label: str = "--:--"
+    last_time_label: str = "--:--"
+    latitude: float | None = None
+    longitude: float | None = None
+
+
+class FieldJournalOut(BaseModel):
+    """Diário de Campo completo de um dia (consumido pela aba dedicada)."""
+
+    date: str
+    generated_at: str
+    title: str
+    subtitle: str = ""
+    journal_text: str = ""
+    weather: FieldJournalWeatherOut = Field(default_factory=FieldJournalWeatherOut)
+    summary: FieldJournalSummaryOut = Field(default_factory=FieldJournalSummaryOut)
+    gardens: list[FieldJournalGardenOut] = Field(default_factory=list)
+    species: list[FieldJournalSpeciesOut] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Rede Global Bem-Ti-Vi (jardins conectados)
+# ---------------------------------------------------------------------------
+
+
+class NetworkFeedEventOut(BaseModel):
+    """Um destaque de avistamento exibido no Feed Global."""
+
+    id: str
+    source_kind: Literal["local", "peer"] = "peer"
+    source_instance: str
+    garden_name: str | None = None
+    camera_name: str | None = None
+    species: str
+    scientific_name: str | None = None
+    rarity: str = "Incomum"
+    confidence: float | None = None
+    occurred_at: str
+    received_at: str
+
+
+class NetworkFeedOut(BaseModel):
+    """Feed agregado de destaques locais e de instâncias parceiras."""
+
+    generated_at: str = Field(default_factory=_now_iso)
+    enabled: bool = True
+    instance_name: str = "Meu Jardim"
+    days: int = 7
+    total: int = 0
+    events: list[NetworkFeedEventOut] = Field(default_factory=list)
+
+
+class NetworkStatusOut(BaseModel):
+    """Estado da integração global (sem expor tokens ou URLs privadas)."""
+
+    enabled: bool = True
+    instance_name: str = "Meu Jardim"
+    webhook_ready: bool = False
+    peers_configured: int = 0
+    local_events: int = 0
+    peer_events: int = 0
+    feed_days: int = 7
+
+
+class NetworkWebhookPayload(BaseModel):
+    """Corpo aceito no webhook de uma instância parceira do Bem-Ti-Vi."""
+
+    instance: str = Field(min_length=1, max_length=120)
+    event_id: str | None = Field(default=None, max_length=160)
+    species: str = Field(min_length=1, max_length=120)
+    scientific_name: str | None = Field(default=None, max_length=160)
+    rarity: Literal["Rara", "Incomum", "Comum"] = "Incomum"
+    garden: str | None = Field(default=None, max_length=160)
+    camera: str | None = Field(default=None, max_length=120)
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    occurred_at: str | None = Field(default=None, max_length=60)
+
+
+class NetworkWebhookResultOut(BaseModel):
+    """Confirmação de recebimento de um evento global."""
+
+    accepted: bool = False
+    duplicate: bool = False
+    event_id: str | None = None

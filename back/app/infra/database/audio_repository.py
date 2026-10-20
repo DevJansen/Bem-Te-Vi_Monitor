@@ -67,6 +67,9 @@ class AudioDetectionRepository:
         scientific_name: str,
         confidence: float,
         audio_path: str | None = None,
+        is_nfc: bool = False,
+        nfc_score: float | None = None,
+        night_date: str | None = None,
     ) -> dict[str, Any]:
         detection_id = str(uuid.uuid4())
         created_at = datetime.now(timezone.utc).isoformat()
@@ -97,8 +100,9 @@ class AudioDetectionRepository:
                     id, event_type, camera_id, detected_at, species,
                     scientific_name, confidence, linked_visit_id, created_at,
                     temperature, humidity, weather_code, wind_speed,
-                    audio_path, species_id
-                ) VALUES (?, 'AUDIO_DETECTION', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    audio_path, species_id,
+                    is_nfc, nfc_score, night_date
+                ) VALUES (?, 'AUDIO_DETECTION', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     detection_id,
@@ -115,6 +119,9 @@ class AudioDetectionRepository:
                     weather.get("wind_speed"),
                     audio_path,
                     species_id,
+                    1 if is_nfc else 0,
+                    nfc_score,
+                    night_date,
                 ),
             )
             row = conn.execute(
@@ -192,6 +199,42 @@ class AudioDetectionRepository:
                 (limit, max(0, offset)),
             ).fetchall()
             return [dict(row) for row in rows]
+
+    def list_nfc(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        night_date: str | None = None,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Detecções noturnas (NFC) para a aba "Viajantes Noturnos (Migração)".
+
+        Retorna ``(items, total)`` para a paginação fluida. Quando ``night_date``
+        é informado (``YYYY-MM-DD``), filtra apenas a noite escolhida — a madrugada
+        pertence à noite iniciada no dia anterior.
+        """
+        clauses = ["ad.is_nfc = 1"]
+        params: list[Any] = []
+        if night_date:
+            clauses.append("ad.night_date = ?")
+            params.append(night_date)
+        where = " AND ".join(clauses)
+        with db_session(self.db_path) as conn:
+            total_row = conn.execute(
+                f"SELECT COUNT(*) AS total FROM audio_detections ad WHERE {where}",
+                tuple(params),
+            ).fetchone()
+            total = int(total_row["total"]) if total_row else 0
+            rows = conn.execute(
+                f"""
+                {_SELECT}
+                WHERE {where}
+                ORDER BY ad.detected_at DESC, ad.created_at DESC
+                LIMIT ? OFFSET ?
+                """,
+                (*params, limit, max(0, offset)),
+            ).fetchall()
+        return [dict(row) for row in rows], total
 
     def linked_species_ids(self) -> list[str]:
         """Ids de espécies (Life List) que possuem ao menos uma detecção sonora."""

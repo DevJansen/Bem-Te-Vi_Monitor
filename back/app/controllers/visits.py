@@ -4,18 +4,32 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import Path as FastAPIPath
 
 from app.core.rate_limiter import limiter
 from fastapi.responses import FileResponse
 
+from app.ai.active_learning import (
+    ActiveLearningError,
+    get_active_learning_service,
+)
+from app.ai.visual_embeddings import get_visual_embeddings_service
 from app.core.config import get_settings
 from app.domain.avifauna_sul import info_especie
 from app.domain.fauna_taxonomy import descrever_visitante
-from app.domain.models import SpeciesConsultOut, VisitOut, VisitSpeciesAssignment
+from app.domain.models import (
+    SpeciesConsultOut,
+    VisitConfirmationOut,
+    VisitConfirmationRequest,
+    VisitOut,
+    VisitSpeciesAssignment,
+)
 from app.infra.database.repository import VisitRepository
 from app.services.anomaly_log import registrar_retorno_especie
 from app.services.external_species_identifier import (
@@ -56,6 +70,68 @@ def _repo() -> VisitRepository:
     return VisitRepository(get_settings().db_path)
 
 
+def _alimentar_inteligencia_adaptativa(
+    visit_id: str,
+    *,
+    species_name: str | None,
+    species_id: str | None,
+    source: str,
+    wait_for_embedding: bool = True,
+) -> dict[str, Any]:
+    """Alimenta os módulos adaptativos após uma identificação/confirmação.
+
+    Enfileira a amostra de treino (aprendizado ativo) e recalcula a assinatura
+    visual (re-identificação individual). Falhas são absorvidas: a curadoria do
+    usuário nunca quebra por causa de um módulo opcional.
+
+    Com ``wait_for_embedding=False`` a extração (que pode carregar a MobileNet na
+    primeira vez) roda em segundo plano, mantendo a resposta da API rápida.
+    """
+    resultado: dict[str, Any] = {
+        "queued": False,
+        "reason": None,
+        "individual": None,
+    }
+    if species_name:
+        try:
+            amostra = get_active_learning_service().enqueue_visit(
+                visit_id,
+                species_name=species_name,
+                species_id=species_id,
+                source=source,
+            )
+            resultado["queued"] = amostra is not None
+        except ActiveLearningError as exc:
+            resultado["reason"] = str(exc)
+        except Exception:
+            logger.debug(
+                "Falha ao enfileirar amostra de treino %s", visit_id, exc_info=True
+            )
+
+    def _registrar() -> dict[str, Any] | None:
+        try:
+            return get_visual_embeddings_service().register_visit(
+                visit_id, common_name=species_name, force=True
+            )
+        except Exception:
+            logger.debug(
+                "Falha ao registrar a assinatura visual de %s",
+                visit_id,
+                exc_info=True,
+            )
+            return None
+
+    if wait_for_embedding:
+        resultado["individual"] = _registrar()
+    else:
+        threading.Thread(
+            target=_registrar,
+            name=f"visual-embedding-{visit_id[:8]}",
+            daemon=True,
+        ).start()
+    return resultado
+
+
 @router.put("/{visit_id}/assign-species", response_model=VisitOut)
 def assign_visit_species(
     visit_id: str, payload: VisitSpeciesAssignment
@@ -76,7 +152,69 @@ def assign_visit_species(
                 visit_id=visit_id,
                 exclude_visit_id=visit_id,
             )
+            # A confirmação manual do usuário é o sinal mais valioso de
+            # aprendizado: vira amostra de treino e assinatura visual.
+            _alimentar_inteligencia_adaptativa(
+                visit_id,
+                species_name=str(nome),
+                species_id=payload.species_id,
+                source="manual_assignment",
+                wait_for_embedding=False,
+            )
     return VisitRepository.to_out(row)
+
+
+@router.post("/{visit_id}/confirm", response_model=VisitConfirmationOut)
+def confirm_visit(
+    visit_id: str, payload: VisitConfirmationRequest
+) -> VisitConfirmationOut:
+    """Confirma a espécie de uma detecção e alimenta o aprendizado ativo.
+
+    Diferente do `assign-species` (que reescreve o rótulo), este endpoint
+    registra a **confirmação** do usuário: a detecção atual passa a ser uma
+    amostra rotulada de alta qualidade para o fine-tuning do Bem-Ti-Vi Core e
+    também recebe a assinatura visual para a re-identificação individual.
+    """
+    repository = _repo()
+    row = repository.get(visit_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Visita não encontrada.")
+
+    species_id = payload.species_id
+    species_name = payload.species_name
+
+    # Resolve o nome a partir do catálogo quando só o id foi informado.
+    if species_id and not species_name:
+        try:
+            from app.infra.database.repository import BirdSpeciesRepository
+
+            especie = BirdSpeciesRepository(get_settings().db_path).get(species_id)
+        except Exception:
+            especie = None
+        if especie is not None:
+            species_name = especie.get("common_name") or especie.get("name")
+    if not species_name:
+        species_name = row.get("assigned_species_common_name") or row.get("species")
+
+    resultado = _alimentar_inteligencia_adaptativa(
+        visit_id,
+        species_name=str(species_name) if species_name else None,
+        species_id=species_id,
+        source="user_confirmation",
+    )
+
+    individual = resultado.get("individual") or {}
+    return VisitConfirmationOut(
+        visit_id=visit_id,
+        confirmed=bool(species_name),
+        species_name=str(species_name) if species_name else None,
+        species_id=species_id,
+        training_queued=bool(resultado.get("queued")),
+        training_reason=resultado.get("reason"),
+        individual_id=individual.get("individual_id"),
+        individual_nickname=individual.get("nickname"),
+        individual_known=bool(individual.get("known")),
+    )
 
 
 @router.get("", response_model=list[VisitOut])
@@ -105,6 +243,24 @@ async def list_visits(
     except Exception as exc:
         logger.exception("list_visits failed")
         raise HTTPException(status_code=500, detail="Failed to list visits") from exc
+
+
+@router.get("/day/{day}", response_model=list[VisitOut])
+async def list_visits_by_day(
+    day: str = FastAPIPath(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    limit: int = Query(default=50, ge=1, le=200),
+    visitor_kind: str | None = None,
+) -> list[VisitOut]:
+    """Visitas de um dia específico (``YYYY-MM-DD``) para o Reel do Resumo do Dia."""
+    try:
+        rows = _repo().list_by_day(day, limit=limit, visitor_kind=visitor_kind)
+        return [VisitRepository.to_out(r) for r in rows]
+    except Exception as exc:
+        logger.exception("list_visits_by_day failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível listar as visitas do dia.",
+        ) from exc
 
 
 @router.get("/today", response_model=list[VisitOut])
@@ -303,6 +459,15 @@ def identify_visit_external(
             scientific_name=identification.scientific_name,
             visit_id=visit_id,
             exclude_visit_id=visit_id,
+        )
+        # A identificação externa de alta confiança também realimenta o Core:
+        # vira amostra de treino e assinatura visual para o indivíduo.
+        _alimentar_inteligencia_adaptativa(
+            visit_id,
+            species_name=identification.common_name,
+            species_id=catalog_species_id,
+            source="external_identification",
+            wait_for_embedding=False,
         )
     return VisitRepository.to_out(updated)
 

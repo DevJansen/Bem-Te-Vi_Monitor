@@ -4,6 +4,7 @@ import {
   Bird,
   Bot,
   Camera,
+  CheckCircle2,
   Clock3,
   Crosshair,
   Droplets,
@@ -11,6 +12,7 @@ import {
   Film,
   Image as ImageIcon,
   Leaf,
+  LoaderCircle,
   Moon,
   Play,
   Sparkles,
@@ -21,7 +23,7 @@ import {
   X,
 } from "lucide-react";
 import type { BirdSpecies, BirdVisit } from "@/types";
-import { resolveMediaUrl, visitCropUrl } from "@/services/api";
+import { confirmVisit, resolveMediaUrl, visitCropUrl } from "@/services/api";
 import { cn } from "@/utils/cn";
 import { formatDateTime, formatTime } from "@/utils/format";
 import { formatHumidity, formatTemperature, formatWind, weatherEmoji } from "@/utils/weather";
@@ -66,6 +68,10 @@ export function VisitDeepDiveModal({
   const [cropFailed, setCropFailed] = useState(false);
   // Ficha ornitológica da IA externa (consulta profunda) aberta sobre o modal.
   const [consultOpen, setConsultOpen] = useState(false);
+  // Confirmação da detecção (aprendizado ativo + assinatura visual).
+  const [confirming, setConfirming] = useState(false);
+  const [confirmMessage, setConfirmMessage] = useState<string | null>(null);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
 
   // Abre já no **recorte da ave** (close-up, mais legível) quando ele existir;
   // caso contrário, no quadro HD. Fecha com a tecla Esc.
@@ -74,6 +80,8 @@ export function VisitDeepDiveModal({
       setImageView(visit.metadata?.crop_path ? "crop" : "frame");
       setCropFailed(false);
       setConsultOpen(false);
+      setConfirmMessage(null);
+      setConfirmError(null);
     }
   }, [visit]);
 
@@ -120,6 +128,38 @@ export function VisitDeepDiveModal({
   }, [visit, catalogSpecies]);
 
   if (!visit || !data) return null;
+
+  /**
+   * Confirma a detecção no Bem-Ti-Vi Core.
+   *
+   * Gera uma amostra de treino rotulada e a assinatura visual do indivíduo,
+   * sem alterar o rótulo atual da visita.
+   */
+  const handleConfirm = async () => {
+    setConfirming(true);
+    setConfirmError(null);
+    setConfirmMessage(null);
+    try {
+      const result = await confirmVisit(visit.id, {
+        species_id: visit.species_id,
+        species_name: visit.assigned_species_common_name ?? visit.species,
+      });
+      setConfirmMessage(
+        result.training_queued
+          ? "Detecção confirmada — amostra enviada ao Bem-Ti-Vi Core."
+          : result.training_reason ||
+              "Detecção confirmada para a memória do jardim.",
+      );
+    } catch (error) {
+      setConfirmError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível confirmar a detecção.",
+      );
+    } finally {
+      setConfirming(false);
+    }
+  };
 
   // Se o recorte falhar ao carregar, voltamos ao quadro HD e escondemos o seletor.
   const view: ImageView = cropFailed ? "frame" : imageView;
@@ -415,6 +455,32 @@ export function VisitDeepDiveModal({
 
             {/* Ações */}
             <div className="flex flex-col gap-2 pt-1">
+              {visit.species_id ? (
+                <button
+                  type="button"
+                  onClick={() => void handleConfirm()}
+                  disabled={confirming}
+                  title="Confirmar que esta detecção está correta e ensinar o Bem-Ti-Vi Core"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-4 py-2.5 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/25 disabled:cursor-wait disabled:opacity-60"
+                >
+                  {confirming ? (
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4" />
+                  )}
+                  {confirming ? "Confirmando…" : "Confirmar detecção"}
+                </button>
+              ) : null}
+              {confirmMessage ? (
+                <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300">
+                  {confirmMessage}
+                </p>
+              ) : null}
+              {confirmError ? (
+                <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                  {confirmError}
+                </p>
+              ) : null}
               <button
                 type="button"
                 disabled={!data.clip}

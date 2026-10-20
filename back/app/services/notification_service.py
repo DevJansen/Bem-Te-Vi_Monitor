@@ -126,6 +126,21 @@ class NotificationService:
             return False
         if self._notify_mode() == "new_species" and not self._is_new_species(visit):
             return False
+        # Regras personalizadas de alerta (Smart Alerts): avaliam condições
+        # configuradas pelo observador antes de disparar a notificação.
+        try:
+            from app.services.smart_alerts import evaluate_rules
+            # Monta um dict de evento com dados extras para as regras.
+            event = {
+                "is_new_species": self._is_new_species(visit),
+                "ecological_status": getattr(visit, "ecological_status", None),
+                "individual_id": getattr(visit, "individual_id", None),
+            }
+            if not evaluate_rules(visit, event):
+                logger.debug("Smart Alerts suprimiu notificação para visita %s", visit.id)
+                return False
+        except Exception:
+            logger.debug("Falha ao avaliar Smart Alerts; notificação segue normal", exc_info=True)
         return True
 
     def _settings_repo(self):

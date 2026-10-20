@@ -1042,6 +1042,7 @@ class CameraPipeline(threading.Thread):
             _cam = self.camera_repo.get(self.camera_id)
             _garden = (_cam or {}).get("location_label")
         except Exception:
+            _cam = None
             _garden = None
 
         try:
@@ -1069,6 +1070,7 @@ class CameraPipeline(threading.Thread):
 
         # Log de anomalias: espécie que não aparecia há meses reapareceu.
         # (Apenas aves: um esquilo recorrente não é uma anomalia ornitológica.)
+        anomalia = None
         if tem_especie and visitante.eh_ave:
             anomalia = registrar_retorno_especie(
                 species=especie_evento,
@@ -1098,6 +1100,70 @@ class CameraPipeline(threading.Thread):
                 crop_path=crop_path,
                 thumbnail_rel=thumb_rel,
             )
+
+            # --- Assinatura visual (re-identificação individual) -------------
+            # Compara o recorte tratado com a galeria "Minhas Aves" e conecta o
+            # indivíduo recorrente ("Conhecido do Jardim") quando a similaridade
+            # supera o limiar. Roda fora da transação de gravação e nunca
+            # interrompe a captura.
+            try:
+                from app.ai.visual_embeddings import (
+                    get_visual_embeddings_service,
+                )
+
+                resultado_individuo = (
+                    get_visual_embeddings_service().register_visit(
+                        visit_id,
+                        common_name=especie_evento,
+                        scientific_name=nome_cientifico,
+                    )
+                )
+                if resultado_individuo and resultado_individuo.get("known"):
+                    self._pensar(
+                        f"Olha quem voltou! {resultado_individuo.get('nickname')} "
+                        "está no jardim de novo.",
+                        nivel=NIVEL_SUCESSO,
+                        species=especie_evento,
+                        individual_id=resultado_individuo.get("individual_id"),
+                        similarity=resultado_individuo.get("similarity"),
+                    )
+            except Exception:
+                logger.debug(
+                    "Falha ao registrar a assinatura visual da visita %s",
+                    visit_id,
+                    exc_info=True,
+                )
+
+            # --- Feed Global Bem-Ti-Vi -------------------------------------
+            # Compartilha apenas destaques (raros/incomuns) com os jardins
+            # parceiros. A publicação é assíncrona e nunca bloqueia a captura.
+            try:
+                from app.services.global_network import (
+                    get_global_network_service,
+                )
+
+                get_global_network_service().record_local_sighting(
+                    visit_id=visit_id,
+                    species=especie_evento,
+                    scientific_name=nome_cientifico,
+                    camera_id=self.camera_id,
+                    camera_name=(_cam or {}).get("name"),
+                    garden_name=_garden,
+                    ecological_status=(
+                        (metadata.get("ecological") or {}).get("status")
+                        if isinstance(metadata.get("ecological"), dict)
+                        else None
+                    ),
+                    confidence=float(event["confidence"]),
+                    occurred_at=detected_at,
+                    anomaly=bool(anomalia),
+                )
+            except Exception:
+                logger.debug(
+                    "Falha ao publicar o destaque da visita %s na rede global",
+                    visit_id,
+                    exc_info=True,
+                )
 
         visit_out = self.visit_repo.to_out(visit)
 

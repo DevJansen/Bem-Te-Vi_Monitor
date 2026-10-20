@@ -25,6 +25,7 @@ import type {
   EnvironmentIntegration,
   EnvironmentSettings,
   EnvironmentSettingsUpdate,
+  GeminiConnectionTestResult,
   GeoLocation,
   HealthResponse,
   HistoryDeletionResult,
@@ -51,6 +52,17 @@ import type {
   RareMomentList,
   RareMomentRefresh,
   Zone,
+  ActiveLearningStatus,
+  BehavioralMemoryStatus,
+  BehavioralPredictionList,
+  KnownIndividualDetail,
+  KnownIndividualList,
+  VisualEmbeddingsStatus,
+  VisitConfirmation,
+  FieldJournal,
+  NetworkFeed,
+  NetworkStatus,
+  ReelInfo,
 } from "@/types";
 
 /** Cliente Axios apontando para a API FastAPI local (proxy Vite → :8000). */
@@ -267,6 +279,14 @@ export async function listVisits(params?: {
   species?: string;
 }): Promise<BirdVisit[]> {
   const { data } = await api.get<BirdVisit[]>("/visits", { params });
+  return data;
+}
+
+/** Visitas de um dia específico (para o Reel do Resumo do Dia). */
+export async function listVisitsByDay(day: string): Promise<BirdVisit[]> {
+  const { data } = await api.get<BirdVisit[]>(
+    `/visits/day/${encodeURIComponent(day)}`,
+  );
   return data;
 }
 
@@ -740,6 +760,38 @@ export async function testEnvironmentConnection(
   return data;
 }
 
+/**
+ * Testa a chave/modelo do **Google Gemini** pela rota blindada.
+ *
+ * Sempre responde HTTP 200: o `status` (`success` / `warning` / `error`) é que
+ * orienta o painel — sem o HTTP 503 crônico do botão de teste.
+ */
+export async function testGeminiConnection(
+  apiKey: string | null,
+  modelName = "gemini-1.5-flash",
+): Promise<GeminiConnectionTestResult> {
+  const { data } = await api.post<GeminiConnectionTestResult>(
+    "/settings/test-ai",
+    { api_key: apiKey, model_name: modelName },
+    { timeout: 180_000 },
+  );
+  return data;
+}
+
+/**
+ * Lista os modelos Gemini realmente disponíveis para a chave configurada.
+ *
+ * O Google descontinua modelos com frequência — por isso o dropdown é
+ * alimentado pela API. Em caso de falha, a interface usa os presets oficiais.
+ */
+export async function fetchGeminiModels(): Promise<string[]> {
+  const { data } = await api.get<{ models: string[]; source: string }>(
+    "/settings/ai/models",
+    { timeout: 30_000 },
+  );
+  return data.models ?? [];
+}
+
 /* ——— Mídia / stream ——— */
 
 export function videoFeedUrl(cameraId: string, boxes = true): string {
@@ -822,4 +874,191 @@ export async function refreshRareMoments(
 /** URL de download da foto de postal (moldura + marca d'água). */
 export function rareMomentPostcardUrl(visitId: string): string {
   return `/api/gallery/rare-moments/${encodeURIComponent(visitId)}/postcard`;
+}
+
+/* ——— Inteligência adaptativa ———
+ * Aprendizado ativo (fine-tuning), memória comportamental e re-identificação. */
+
+/**
+ * Confirma manualmente a espécie de uma detecção.
+ *
+ * O backend registra a amostra rotulada (aprendizado ativo) e a assinatura
+ * visual (re-identificação individual), devolvendo o resultado do registro.
+ */
+export async function confirmVisit(
+  visitId: string,
+  payload: { species_name?: string | null; species_id?: string | null },
+): Promise<VisitConfirmation> {
+  const { data } = await api.post<VisitConfirmation>(
+    `/visits/${encodeURIComponent(visitId)}/confirm`,
+    payload,
+    { timeout: 30_000 },
+  );
+  return data;
+}
+
+/** Estado da fila de amostras e do histórico de fine-tuning do Core. */
+export async function fetchActiveLearningStatus(): Promise<ActiveLearningStatus> {
+  const { data } = await api.get<ActiveLearningStatus>("/ai/learning/status");
+  return data;
+}
+
+/** Dispara o fine-tuning incremental ("Otimizar Bem-Ti-Vi Core"). */
+export async function optimizeCore(): Promise<ActiveLearningStatus> {
+  const { data } = await api.post<ActiveLearningStatus>(
+    "/ai/learning/optimize",
+    null,
+    { timeout: 30_000 },
+  );
+  return data;
+}
+
+/** Ranking preditivo de picos de atividade (histórico × clima × estação). */
+export async function fetchBehavioralPrediction(params?: {
+  species?: string;
+  horizonHours?: number;
+  limit?: number;
+}): Promise<BehavioralPredictionList> {
+  const { data } = await api.get<BehavioralPredictionList>(
+    "/ai/behavioral-prediction",
+    {
+      params: {
+        species: params?.species,
+        horizon_hours: params?.horizonHours,
+        limit: params?.limit,
+      },
+      timeout: 30_000,
+    },
+  );
+  return data;
+}
+
+/** Resumo da memória comportamental persistida. */
+export async function fetchBehavioralMemory(): Promise<BehavioralMemoryStatus> {
+  const { data } = await api.get<BehavioralMemoryStatus>("/ai/behavioral-memory");
+  return data;
+}
+
+/** Reconstrói os perfis comportamentais agora. */
+export async function refreshBehavioralMemory(): Promise<BehavioralMemoryStatus> {
+  const { data } = await api.post<BehavioralMemoryStatus>(
+    "/ai/behavioral-memory/refresh",
+    null,
+    { timeout: 60_000 },
+  );
+  return data;
+}
+
+/** Lista os "Conhecidos do Jardim" (indivíduos reconhecidos visualmente). */
+export async function fetchKnownIndividuals(params?: {
+  speciesId?: string;
+  limit?: number;
+}): Promise<KnownIndividualList> {
+  const { data } = await api.get<KnownIndividualList>("/ai/individuals", {
+    params: {
+      species_id: params?.speciesId,
+      limit: params?.limit,
+    },
+  });
+  return data;
+}
+
+/** Histórico completo de um indivíduo conhecido. */
+export async function fetchKnownIndividual(
+  individualId: string,
+): Promise<KnownIndividualDetail> {
+  const { data } = await api.get<KnownIndividualDetail>(
+    `/ai/individuals/${encodeURIComponent(individualId)}`,
+  );
+  return data;
+}
+
+/** Status das assinaturas visuais (re-identificação individual). */
+export async function fetchVisualEmbeddingsStatus(): Promise<VisualEmbeddingsStatus> {
+  const { data } = await api.get<VisualEmbeddingsStatus>("/ai/visual/status");
+  return data;
+}
+
+/* ——— Diário de Campo / exportação eBird ——— */
+
+/** Compila o Diário de Campo de um dia (clima, coordenadas, fotos e clipes). */
+export async function fetchFieldJournal(
+  date: string,
+  cameraId?: string,
+): Promise<FieldJournal> {
+  const { data } = await api.get<FieldJournal>("/journal", {
+    params: { date, camera_id: cameraId || undefined },
+    timeout: 30_000,
+  });
+  return data;
+}
+
+function journalExportUrl(
+  format: "ebird" | "csv",
+  date: string,
+  cameraId?: string,
+): string {
+  const params = new URLSearchParams({ date });
+  if (cameraId) params.set("camera_id", cameraId);
+  return `/api/journal/export/${format}?${params.toString()}`;
+}
+
+/** URL de download do checklist no formato de importação do eBird. */
+export function fieldJournalEbirdUrl(date: string, cameraId?: string): string {
+  return journalExportUrl("ebird", date, cameraId);
+}
+
+/** URL de download da planilha limpa em pt-BR. */
+export function fieldJournalCsvUrl(date: string, cameraId?: string): string {
+  return journalExportUrl("csv", date, cameraId);
+}
+
+/* ——— Rede Global Bem-Ti-Vi ——— */
+
+/** Destaques recentes do jardim e das instâncias parceiras. */
+export async function fetchNetworkFeed(limit = 12): Promise<NetworkFeed> {
+  const { data } = await api.get<NetworkFeed>("/network/feed", {
+    params: { limit },
+  });
+  return data;
+}
+
+/** Estado da integração global (sem tokens ou URLs privadas). */
+export async function fetchNetworkStatus(): Promise<NetworkStatus> {
+  const { data } = await api.get<NetworkStatus>("/network/status");
+  return data;
+}
+
+/* ——— Escuta Noturna de Migração (NFC) — Viajantes Noturnos ——— */
+
+/** Página de detecções noturnas (NFC) da aba "Viajantes Noturnos (Migração)". */
+export async function fetchAudioNfcPage(
+  limit = 5,
+  offset = 0,
+  nightDate?: string,
+): Promise<AudioDetectionPage> {
+  const { data } = await api.get<AudioDetectionPage>("/audio-detections/nfc", {
+    params: { limit, offset, night_date: nightDate },
+  });
+  return data;
+}
+
+/* ——— Reels verticais (9:16) para redes sociais ——— */
+
+/** Gera o Reel vertical de uma visita (ou reaproveita o já gerado). */
+export async function generateReel(
+  visitId: string,
+  force = false,
+): Promise<ReelInfo> {
+  const { data } = await api.post<ReelInfo>(
+    `/media/generate-reel/${encodeURIComponent(visitId)}`,
+    null,
+    { params: { force }, timeout: 120_000 },
+  );
+  return data;
+}
+
+/** URL pública do Reel vertical de uma visita. */
+export function reelUrl(visitId: string): string {
+  return `/api/media/reel/${encodeURIComponent(visitId)}`;
 }

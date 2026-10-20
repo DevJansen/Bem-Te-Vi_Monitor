@@ -63,10 +63,10 @@ No Explorador de Arquivos, vá até a pasta `Bem-Te-Vi` (onde estão `start.bat`
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
 DISCORD_WEBHOOK_URL=
-AI_EXTERNAL_API_KEY=
-AI_EXTERNAL_PROVIDER=
-AI_EXTERNAL_BASE_URL=https://api.openai.com/v1
-AI_EXTERNAL_MODEL=gpt-4o-mini
+# IA Externa: Google Gemini é o ÚNICO provedor suportado.
+# Chave gratuita: https://aistudio.google.com
+GEMINI_API_KEY=
+AI_EXTERNAL_MODEL=gemini-3.5-flash
 PORT=8000
 ```
 
@@ -99,10 +99,9 @@ O arquivo `back\.env.example` contém os nomes e os valores padrão. Copie-o par
 | `TELEGRAM_BOT_TOKEN` | Token do bot do Telegram | Obtenha um bot com o BotFather; trate como senha |
 | `TELEGRAM_CHAT_ID` | Destino dos alertas no Telegram | ID da conversa, grupo ou canal acessível pelo bot |
 | `DISCORD_WEBHOOK_URL` | Envio de alertas ao Discord | URL secreta de um webhook do seu servidor |
-| `AI_EXTERNAL_API_KEY` | Identificação opcional de espécies | Chave do provedor de IA; necessária somente para identificação externa |
-| `AI_EXTERNAL_PROVIDER` | Provedor da IA externa | `google` (Google Gemini, endpoint oficial) ou `openai` (compatível com a OpenAI). Vazio → detecta pela URL base |
-| `AI_EXTERNAL_BASE_URL` | URL base do provedor compatível com OpenAI | Padrão: `https://api.openai.com/v1`. Aceita OpenRouter, Groq, Ollama etc. **Ignorada no Google Gemini** (usa o endpoint oficial `generativelanguage.googleapis.com`) |
-| `AI_EXTERNAL_MODEL` | Modelo com suporte a visão | Padrão: `gpt-4o-mini`. Para o Gemini: `gemini-2.5-flash` ou `gemini-1.5-flash` |
+| `GEMINI_API_KEY` | Identificação opcional de espécies (Google Gemini) | Chave do Google Gemini — obtenha a sua gratuita em [aistudio.google.com](https://aistudio.google.com). Tem precedência sobre `AI_EXTERNAL_API_KEY` |
+| `AI_EXTERNAL_API_KEY` | Legado da chave do Gemini | Mantido por compatibilidade; use `GEMINI_API_KEY` |
+| `AI_EXTERNAL_MODEL` | Modelo Gemini com suporte a visão | Padrão: `gemini-3.5-flash`. Testados: `gemini-3.5-flash`, `gemini-3.7-flash`, `gemini-3.8-flash`, `gemini-3.1-pro-preview`. O prefixo `models/` é removido automaticamente (evita HTTP 404) |
 | `PORT` | Porta configurada na aplicação | Padrão: `8000`; os comandos de inicialização fornecidos usam a porta `8000` |
 | `YOLO_MODEL` | Arquivo/modelo de detecção | Padrão: `yolov8n.pt` |
 | `YOLO_CONFIDENCE` | Sensibilidade da detecção (menor = mais sensível) | Padrão: `0.22`; faixa: `0.05` a `1.0` |
@@ -167,9 +166,17 @@ O arquivo `back\.env.example` contém os nomes e os valores padrão. Copie-o par
 | `ANOMALY_COOLDOWN_DAYS` | Janela (dias) para não repetir a mesma anomalia de espécie | Padrão: `30` |
 | `ALLOW_REMOTE_ACCESS` | Libera acesso à API fora do computador local | Padrão: `false` (somente loopback). Use `true` só com VPN/proxy autenticado |
 | `ALLOWED_HOSTS` | Hosts aceitos no cabeçalho `Host` | Padrão: `127.0.0.1,localhost` |
+| `GLOBAL_NETWORK_ENABLED` | Liga/desliga o Feed Global e o webhook de entrada | Padrão: `true`; o webhook só funciona com token |
+| `GLOBAL_NETWORK_INSTANCE_NAME` | Nome deste jardim exibido nas outras instâncias | Padrão: `Meu Jardim` |
+| `GLOBAL_NETWORK_TOKEN` | Segredo compartilhado do webhook | Vazio desativa o recebimento; use uma string longa e aleatória |
+| `GLOBAL_NETWORK_PEERS` | URLs base das instâncias parceiras | Separadas por vírgula; o envio vai para `{url}/api/network/webhook` |
+| `GLOBAL_NETWORK_SHARE_ALL` | Compartilha também avistamentos comuns | Padrão: `false` (apenas raros/incomuns) |
+| `GLOBAL_NETWORK_FEED_DAYS` | Janela (dias) do card Feed Global | Padrão: `7`; faixa: `1` a `90` |
+| `GLOBAL_NETWORK_FEED_LIMIT` | Máximo de eventos exibidos no card | Padrão: `20`; faixa: `1` a `100` |
+| `GLOBAL_NETWORK_TIMEOUT_SECONDS` | Timeout (s) da publicação em cada parceiro | Padrão: `5.0`; faixa: `1` a `30` |
 
-O painel administra a integração de IA Externa por completo (provedor, chave,
-URL base e modelo), os segredos do Telegram e do Discord, e as preferências de
+O painel administra a integração de IA Externa por completo (chave do Gemini e
+modelo), os segredos do Telegram e do Discord, e as preferências de
 alerta. A seção **Alertas e Notificações** permite ligar/desligar os avisos,
 escolher o modo (`all` ou `new_species`), informar token e chat do Telegram e
 disparar um teste de envio real. As demais opções avançadas continuam sendo
@@ -183,19 +190,21 @@ backend.
   correspondente em `TELEGRAM_CHAT_ID`.
 - **Discord:** nas configurações do servidor/canal, crie um webhook em
   **Integrações → Webhooks** e guarde a URL completa em `DISCORD_WEBHOOK_URL`.
-- **IA externa:** use a chave do provedor de sua preferência. O Bem-Te-Vi aceita
-  dois modos:
-  - **Google Gemini** (`AI_EXTERNAL_PROVIDER=google`): usa o **endpoint oficial**
-    do Google Generative Language
-    (`https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent`),
-    com a chave na *query string*. A `AI_EXTERNAL_BASE_URL` é **ignorada** nesse
-    modo. Modelos: `gemini-2.5-flash`, `gemini-1.5-flash` etc.
-  - **Compatível com a OpenAI** (`AI_EXTERNAL_PROVIDER=openai`): a própria OpenAI,
-    OpenRouter, Groq ou Ollama (local), via `AI_EXTERNAL_BASE_URL`.
+- **IA externa (Google Gemini):** o Bem-Ti-Vi usa **exclusivamente** o Google
+  Gemini, via a biblioteca oficial `google-genai`. A chave é gratuita e sai de
+  [aistudio.google.com](https://aistudio.google.com) — informe em
+  `GEMINI_API_KEY` (ou no painel, em **Configurações → Inteligência Artificial
+  Externa**). Modelos suportados: `gemini-3.5-flash` (padrão),
+  `gemini-3.7-flash`, `gemini-3.8-flash` e `gemini-3.1-pro-preview`.
 
-  Se `AI_EXTERNAL_PROVIDER` ficar vazio, o provedor é detectado pela URL base.
-  Também é possível preencher tudo pela tela **Configurações → Variáveis de
-  ambiente** (basta escolher o provedor no seletor).
+  O nome do modelo é **sanitizado** pelo backend (`sanitize_model_name`): um
+  prefixo `models/` gravado por engano é removido, evitando o `HTTP 404
+  NOT_FOUND` da API oficial. O botão **Testar Conexão com Gemini** usa um prompt
+  mínimo, faz *backoff exponencial* (3 tentativas) em 429/503 e, se o modelo
+  responder 404, tenta automaticamente o próximo modelo validado (`gemini-3.5-flash` → `gemini-3.7-flash` → …).
+
+  Provedores legados removidos: OpenAI, Anthropic, OpenRouter, Groq e Ollama.
+
 
 Tokens de bot, URL de webhook e chaves de API funcionam como senhas: qualquer pessoa
 que os obtenha pode usar a integração associada. Revogue e gere uma nova credencial
@@ -445,12 +454,9 @@ sem reiniciar o backend.
   com os nomes comum e científico retornados.
 - A identificação usa a **imagem tratada** da visita — o recorte da ave ou a
   thumbnail oficial em alta definição geradas pelo pipeline —, enviada por HTTPS
-  ao provedor configurado. No **Google Gemini** (`AI_EXTERNAL_PROVIDER=google`),
-  a chamada usa o endpoint oficial `generateContent` do Google (a chave vai na
-  URL e a `AI_EXTERNAL_BASE_URL` é ignorada). Nos demais provedores
-  (`openai`), usa-se a API de chat compatível com a OpenAI (`AI_EXTERNAL_BASE_URL`,
-  `AI_EXTERNAL_MODEL`) — OpenAI, OpenRouter, Groq ou Ollama. Basta definir
-  `AI_EXTERNAL_API_KEY`.
+  ao **Google Gemini** (único provedor suportado) através da biblioteca oficial
+  `google-genai`. Basta definir `GEMINI_API_KEY` (ou informar a chave em
+  **Configurações → Inteligência Artificial Externa**).
 - Ao identificar, o Bem-Te-Vi **cadastra automaticamente a espécie no Catálogo
   Local (Life List)** e associa a visita (a foto tratada vira a imagem de
   referência da espécie), sem gerar duplicatas. Pela API, o parâmetro
@@ -486,10 +492,26 @@ curadoria a cada registro:
 - **Player integrado por card:** cada detecção tem o **clipe de áudio** gravado
   (WAV) reproduzível ali mesmo — botão play/pause, barra de progresso arrastável,
   volume e mudo. Nada toca sozinho: o observador decide quando ouvir.
+- **Espectrograma visual:** ao lado do player, o card exibe o gráfico de
+  **frequência × tempo** do canto, gerado com **Librosa + Matplotlib** (backend
+  `Agg`) e salvo em `back\app-data\spectrograms\{id}.png`. O mesmo PNG é enviado
+  à IA externa quando o observador pede a identificação. Clique na imagem para
+  ampliar. Endpoint: `GET /api/audio-detections/{id}/spectrogram` (gera sob
+  demanda e reaproveita o arquivo).
+- **🌙 Viajantes Noturnos (Migração — NFC):** o alternador no topo do painel troca
+  entre **Todos os cantos** e **Viajantes Noturnos (Migração)**. Durante a janela
+  noturna configurada (padrão 22:00–05:00 no horário local da câmera), o limiar
+  de confiança do BirdNET é reduzido (`NFC_CONFIDENCE_THRESHOLD`, padrão 0.45) para
+  captar os **chamados de voo curtos** (*flight calls*) de aves migrantes que
+  cruzam o céu acima do jardim. Cada detecção noturna recebe `is_nfc=1`, pontuação
+  `nfc_score` e a `night_date` (data local da noite que começou no dia anterior).
+  A migração v17 adiciona as colunas `is_nfc`, `nfc_score` e `night_date` à tabela
+  `audio_detections`. Endpoint: `GET /api/audio-detections/nfc`.
 - **Associar manualmente:** o seletor **Associar à espécie** vincula o canto a um
   card já existente da **Life List** (`Minhas Aves`), sem duplicar espécies.
 - **Identificar com IA Externa:** o botão envia o **espectrograma** do áudio
-  (desenhado localmente com `numpy`+`cv2`, sem `matplotlib`) para o provedor de IA
+  (gerado localmente pelo módulo de espectrogramas, com fallback OpenCV quando o
+  Matplotlib não está instalado) para o provedor de IA
   configurado e devolve o nome popular/científico — cadastrando a espécie quando
   for nova. Endpoint: `POST /api/audio-detections/{id}/identify-external`.
 - **Perguntar à IA Externa:** abre a **ficha ornitológica profunda** da espécie
@@ -499,6 +521,84 @@ curadoria a cada registro:
 
 O mesmo painel aparece na **Galeria → aba "Áudios"**, mantendo **imagens/vídeos** e
 **áudios** em galerias separadas. A análise é 100% local; nenhum áudio sai da máquina.
+
+### Diário de Campo e exportação para ciência cidadã (eBird)
+
+A aba **Diário de Campo** compila automaticamente o relatório de observação do
+dia — e transforma o histórico local em dados prontos para a ciência global.
+
+- **Relatório do dia:** data, horários de primeira/última observação, clima
+  (Open-Meteo, gravado em cada visita e com consulta ao vivo quando necessário),
+  coordenadas de cada jardim/câmera, espécies, comportamento, confiança e as
+  fotos/clipes das aves avistadas. O botão **Ler o diário completo em texto**
+  mostra a versão para imprimir ou copiar.
+- **Exportar eBird:** gera um CSV no **eBird Record Format** (Cornell Lab of
+  Ornithology), com as 19 colunas oficiais, uma linha por espécie/jardim. O
+  arquivo sai **sem cabeçalho**, com data `mês/dia/ano`, nomes popular/científico
+  (gênero e espécie separados), contagem, coordenadas decimais, horário local,
+  duração, protocolo `Stationary`, país em código ISO e observações. Rótulos
+  genéricos (`bird`, "Pássaro Desconhecido") são omitidos — o eBird exige uma
+  espécie válida. O checklist é marcado como automático/incompleto (`N` em
+  *All observations reported?*), pois a IA pode não registrar todas as aves.
+- **Baixar CSV limpo:** planilha em pt-BR, uma linha por espécie/jardim, com
+  clima, confiança, status ecológico e observações.
+- **Rotas:** `GET /api/journal?date=AAAA-MM-DD`, `GET /api/journal/export/ebird`
+  e `GET /api/journal/export/csv` (todas aceitam `camera_id` para filtrar um
+  jardim). O serviço fica em `app/services/field_journal.py` e é somente leitura.
+
+### Alertas Preditivos e Resumo Matinal Automatizado
+
+#### Central de Regras de Alerta Personalizadas (Smart Alerts)
+
+A aba **Configurações** ganhou a seção **Regras de Alerta Personalizadas**. O
+observador cria regras condicionais que são avaliadas em background antes de
+disparar qualquer notificação (Telegram/Discord):
+
+- **Campos:** espécie nova, espécie rara, nitidez mínima, confiança mínima,
+  jardim específico, tipo de visitante, indivíduo recorrente.
+- **Operadores:** `=`, `≠`, `>`, `≥`, `<`, `≤`, `contém`, `em lista`.
+- **Lógica:** OR entre regras habilitadas, AND entre condições de uma regra.
+  Uma regra sem condições é sempre satisfeita.
+- **Endpoints:** `GET/PUT/POST/DELETE/PATCH /api/settings/smart-alerts`
+- **Serviço:** `app/services/smart_alerts.py` — persiste regras como JSON no
+  `SettingsRepository` sob a chave `smart_alert_rules`.
+
+#### Resumo Matinal Automatizado (Morning Briefing)
+
+Agendador diário (`MorningBriefingScheduler`) que dispara no horário configurado
+(padrão 07:00). Compila e envia via Telegram/Discord:
+
+- **Clima:** previsão Open-Meteo para cada jardim cadastrado.
+- **Predição:** visitas prováveis do dia via Alaris Core (memória comportamental).
+- **Foto de destaque:** postal do Momento Raro do dia anterior.
+
+Configuração: `MORNING_BRIEFING_ENABLED`, `MORNING_BRIEFING_HOUR`,
+`MORNING_BRIEFING_MINUTE` (env) ou via painel de configurações.
+
+### Feed Global Bem-Ti-Vi (jardins conectados)
+
+O Painel Principal ganhou o card **Feed Global Bem-Ti-Vi**: um mural em tempo
+real com os destaques **raros e incomuns** deste jardim e das instâncias
+parceiras (ex.: *“🦜 Rara Tangará avistada no Jardim de Paris há 5 minutos”*).
+
+- **Funciona sozinho:** mesmo sem parceiros, o feed mostra os destaques das
+  câmeras locais. O status de conservação regional (`rara`, `endêmica`,
+  `migratória`), as anomalias de reaparecimento e a **frequência local**
+  (primeiros registros de uma espécie no jardim) definem o destaque.
+- **Webhook seguro (opcional):** `POST /api/network/webhook` recebe eventos de
+  outra instância. Só responde quando `GLOBAL_NETWORK_TOKEN` está definido; o
+  token vai no cabeçalho `X-Bem-Te-Vi-Token` e é comparado em tempo constante
+  (`hmac.compare_digest`). Sem token, a rota responde **503**; token inválido,
+  **401**. A rota tem *rate limit* e não aceita mídia/URLs externas.
+- **Publicação assíncrona:** ao registrar uma ave rara/incomum, o backend grava
+  o evento em `network_feed_events` (migração v16) e envia aos parceiros em uma
+  thread separada, com timeout curto. A captura nunca espera a rede.
+- **Configuração:** `GLOBAL_NETWORK_ENABLED`, `GLOBAL_NETWORK_INSTANCE_NAME`,
+  `GLOBAL_NETWORK_TOKEN`, `GLOBAL_NETWORK_PEERS` (URLs base separadas por
+  vírgula), `GLOBAL_NETWORK_SHARE_ALL`, `GLOBAL_NETWORK_FEED_DAYS`,
+  `GLOBAL_NETWORK_FEED_LIMIT` e `GLOBAL_NETWORK_TIMEOUT_SECONDS`.
+- **Rotas de leitura:** `GET /api/network/feed` e `GET /api/network/status`
+  (o status nunca devolve token nem URLs privadas).
 
 ### Montar resumos do dia (time-lapse)
 
@@ -528,6 +628,24 @@ instalado no sistema, o Bem-Te-Vi usa automaticamente o binário embutido no pac
 Python `imageio-ffmpeg` (instalado pelo `requirements.txt`); só quando nem esse
 binário existe a geração fica indisponível (com aviso no log) e o restante do
 sistema segue normal.
+
+### Reels verticais (9:16) para redes sociais
+
+O Bem-Ti-Vi gera vídeos verticais **1080×1920** prontos para Instagram Reels,
+TikTok e YouTube Shorts a partir do clipe de ~6 segundos de cada visita.
+
+- **Corte inteligente:** o `crop` do FFmpeg é centrado na **bounding box** da ave
+  (ou no centro do quadro, sem bbox), mantendo a proporção 9:16.
+- **Moldura translúcida:** faixas escuras no topo e na base (`drawbox`) garantem a
+  legibilidade da sobreposição.
+- **Sobreposição oficial:** marca d'água **Bem-Ti-Vi**, nome popular e científico
+  da espécie, temperatura do momento e data, com `drawtext`.
+- **Geração preguiçosa:** o MP4 é criado uma única vez por visita (cache em
+  `app-data/captures/reels/{visit_id}.mp4`) e reaproveitado nas próximas chamadas.
+- **Onde usar:** botão **🎬 Gerar Reel p/ Redes** em cada card da **Galeria** e no
+  player dos **Resumos do Dia (Time-Lapse)** (que usa a melhor visita do dia).
+- **Endpoints:** `POST /api/media/generate-reel/{visit_id}` (gera),
+  `GET /api/media/reel/{visit_id}` (streaming), `DELETE /api/media/reel/{visit_id}`.
 
 ### Monitorar 24 horas com visão noturna (infravermelho)
 
@@ -905,6 +1023,7 @@ Bem-Te-Vi/
 | GET | `/api/settings/env` | Ler integrações com credenciais mascaradas |
 | POST | `/api/settings/env` | Salvar variáveis permitidas no `back/.env` e aplicá-las em runtime |
 | POST | `/api/settings/env/test` | Testar credenciais digitadas sem salvá-las (no Telegram envia uma mensagem real) |
+| POST | `/api/settings/test-ai` | **Testar Conexão com Gemini**: prompt mínimo, *backoff exponencial* (3 tentativas) em 429/503 e *fallback* automático no `proximo modelo validado (gemini-3.5-flash)` quando o modelo responde 404. Sempre retorna HTTP 200 com `status` (`success`/`warning`/`error`) |
 | GET | `/api/stats` | Métricas do painel |
 | GET | `/api/analytics/summary?camera_id=` | Visitas de hoje, últimos 7 dias e total; espécie líder, duração média e horário de pico. Com `camera_id`, restringe a um jardim (visão por jardim × consolidada) |
 | GET | `/api/analytics/hourly-distribution?camera_id=` | Contagem histórica de visitas para cada hora do dia (00h–23h), consolidada ou de um jardim |
@@ -915,6 +1034,15 @@ Bem-Te-Vi/
 | POST | `/api/anomalies/{id}/acknowledge` | Marca uma anomalia como reconhecida |
 | GET | `/api/ai/status` | **Alaris Core**: estado do motor (`signature: "Alaris Core v1.0"`), FPS, latência da inferência, inferências hoje/total, detecções, recursos (CPU/RAM), modelo/backend/dispositivo e tempo de atividade |
 | GET | `/api/ai/logs?limit=&since_id=` | **Logs cognitivos da Alaris**: "pensamentos" em tempo real assinados com `[Alaris]` (detecção, nitidez do frame, espécie identificada, auto-calibração por clima, anomalias); `since_id` habilita polling incremental |
+| GET | `/api/ai/learning/status` | **Aprendizado ativo**: fila de amostras por espécie, elegibilidade para o fine-tuning, modelo adaptado e última execução |
+| POST | `/api/ai/learning/optimize` | Dispara o fine-tuning incremental do Bem-Ti-Vi Core com as amostras da fila (roda em segundo plano) |
+| GET | `/api/ai/behavioral-prediction?species=&horizon_hours=&limit=` | **Memória comportamental**: probabilidade de pico por espécie nas próximas horas, cruzando horário, temperatura/umidade, clima e sazonalidade. Devolve `highlight` com a frase pronta do card |
+| GET | `/api/ai/behavioral-memory` | Resumo dos perfis comportamentais persistidos (dias de histórico, espécies e visitas) |
+| POST | `/api/ai/behavioral-memory/refresh` | Reconstrói os perfis comportamentais agora (fora do ciclo automático) |
+| GET | `/api/ai/individuals?species_id=&limit=` | **Conhecidos do Jardim**: indivíduos re-identificados por assinatura visual, com avistagens recentes e similaridade |
+| GET | `/api/ai/individuals/{id}` | Histórico completo de um indivíduo (visitas, fotos, similaridade, clima e jardim) |
+| GET | `/api/ai/visual/status` | Contadores das assinaturas visuais: amostras, indivíduos, recorrentes, modelo e limiar de similaridade |
+| POST | `/api/visits/{id}/confirm` | Confirma a detecção (rótulo já associado ou informado no corpo) e enfileira a amostra + assinatura visual |
 | GET | `/api/streams` | **Multi-câmera**: estado em tempo real de cada stream (status de conexão, FPS, backend, aves ativas no comedouro, pico de indivíduos e inferências) |
 | GET | `/api/streams/proxy/{id}` | **Proxy seguro de vídeo (MJPEG)**: anonimiza a URL e as credenciais da câmera externa — o navegador nunca as vê |
 | GET | `/api/analytics/weather-correlation` | Relação entre o clima (chuva/temperatura/vento) e as visitas |
@@ -929,13 +1057,25 @@ Bem-Te-Vi/
 | DELETE | `/api/analytics/timelapses/{arquivo}` | Remove um resumo do dia |
 | GET | `/api/audio-detections?limit=30` | Detecções sonoras recentes, confiança e visita visual associada |
 | GET | `/api/audio-detections/page?limit=5&offset=` | Página de detecções sonoras para a aba **Detecção Sonora** (blocos de 5, carregamento incremental pelo botão "Ver mais…") |
+| GET | `/api/audio-detections/nfc?limit=5&offset=&night_date=` | **Viajantes Noturnos (Migração)**: detecções NFC da janela noturna (flight calls) |
 | GET | `/api/audio-detections/status` | Estado da análise BirdNET e câmeras monitoradas |
 | GET | `/api/audio-detections/devices` | Dispositivos de áudio de entrada disponíveis (microfones) |
 | GET | `/api/audio-detections/{id}/audio` | Clipe de áudio (WAV) da detecção, para o player integrado ao card |
+| GET | `/api/audio-detections/{id}/spectrogram` | **Espectrograma** (PNG) do canto, gerado sob demanda com Librosa/Matplotlib e cacheado em `app-data/spectrograms/` |
 | PUT | `/api/audio-detections/{id}/identify` | Associação **manual** do canto a uma espécie da Life List (`{"species_id":"..."}`) |
 | POST | `/api/audio-detections/{id}/identify-external` | IA externa identifica a espécie pelo **espectrograma** do áudio (`add_to_catalog` opcional) |
 | POST | `/api/audio-detections/{id}/ask-ai` | Ficha ornitológica profunda (IA externa) da espécie detectada por som (`refresh=true` reconsulta) |
 | DELETE | `/api/audio-detections/{id}` | Remove a detecção sonora (e o clipe de áudio no disco) |
+| GET | `/api/journal?date=AAAA-MM-DD&camera_id=` | **Diário de Campo** do dia: clima, coordenadas, espécies, fotos, clipes e texto em pt-BR |
+| GET | `/api/journal/export/ebird?date=&camera_id=` | Checklist CSV no **eBird Record Format** (19 colunas, sem cabeçalho, data mês/dia/ano) |
+| GET | `/api/journal/export/csv?date=&camera_id=` | Planilha CSV limpa em pt-BR (uma linha por espécie/jardim) |
+| GET | `/api/network/feed?days=&limit=` | **Feed Global Bem-Ti-Vi**: destaques raros/incomuns locais e de jardins parceiros |
+| GET | `/api/network/status` | Estado da rede global (webhook, parceiros e contadores; sem expor token/URLs) |
+| POST | `/api/network/webhook` | Recebe um destaque de outra instância; exige `X-Bem-Te-Vi-Token` e `GLOBAL_NETWORK_TOKEN` |
+| POST | `/api/media/generate-reel/{visit_id}` | Gera o **Reel vertical (9:16)** da visita (`force` regera) |
+| GET | `/api/media/reel/{visit_id}` | Streaming do Reel vertical gerado |
+| DELETE | `/api/media/reel/{visit_id}` | Remove o Reel gerado |
+| GET | `/api/visits/day/{day}` | Visitas de um dia (`AAAA-MM-DD`) para o Reel do Resumo do Dia |
 | GET | `/api/video-feed/{id}?boxes=true` | Stream MJPEG com caixas de detecção (use `boxes=false` para ocultá-las) |
 | GET | `/api/video-feed/{id}/snapshot` | Foto atual da câmera |
 | GET | `/api/weather/current` | Clima atual no alimentador (temperatura, chuva e vento) |
@@ -1021,6 +1161,41 @@ em `visits.sharpness` (migração v14, com índice). O `RareMomentsService`:
 O `RareMomentsWorker` roda em background (`RARE_MOMENTS_SCAN_HOURS`, com atraso
 inicial) e o endpoint `POST /api/gallery/rare-moments/refresh` força a varredura sob
 demanda. Toda a curadoria é local; nada sai do computador.
+
+### Inteligência adaptativa (`back/app/ai/`)
+
+Três módulos opcionais transformam as correções do dia a dia em aprendizado
+contínuo. Todos são tolerantes a falhas: um erro neles nunca interrompe a captura.
+
+**Aprendizado ativo (`active_learning.py`)** — sempre que o usuário associa uma
+espécie, confirma uma detecção ou usa a identificação externa, o recorte tratado
+da visita é copiado para `back/app-data/training_queue/{espécie}/` e registrado na
+tabela `training_samples` (idempotente por `visit_id`). Rótulos genéricos
+(`bird`, `Pássaro Desconhecido`, …) são recusados. Em **Configurações →
+Bem-Ti-Vi Core adaptativo**, o botão *"Otimizar Bem-Ti-Vi Core com Novas
+Amostras"* monta um dataset `train/val` determinístico e roda um fine-tuning
+YOLOv8-cls em segundo plano (`fine_tune_runs`). O `best.pt` é copiado para
+`back/app-data/models/bem_te_vi_core.pt` e o classificador do pipeline passa a
+usá-lo sem reiniciar o servidor. Requer `ultralytics` + `torch`
+(`FINE_TUNE_*` no `.env`).
+
+**Memória comportamental (`behavioral_memory.py`)** — agrega o histórico por
+espécie em perfis de hora do dia, temperatura/umidade, condição climática e mês.
+O `BehavioralMemoryWorker` reconstrói os perfis a cada
+`BEHAVIORAL_REFRESH_MINUTES` e persiste o cache em `app_settings`
+(`behavioral_memory_profiles_v1`). O card **Previsão de picos do jardim** mostra,
+por exemplo: *"Probabilidade de pico de Beija-Flores nas próximas 2 horas: 85% —
+condizente com a umidade e histórico de temperatura"*, com os fatores que
+pesaram na conta.
+
+**Assinaturas visuais (`visual_embeddings.py`)** — extrai um vetor normalizado do
+recorte (MobileNetV3-Small via `torchvision`, 576-D; fallback OpenCV
+HSV/gradientes, 180-D) apenas de fotos nítidas. A similaridade de cosseno é
+comparada aos centróides por espécie em `bird_individuals`; acima de
+`INDIVIDUAL_MATCH_THRESHOLD` a visita é ligada ao mesmo indivíduo e o centróide é
+atualizado incrementalmente. Cada ave recorrente vira um **"Conhecido do
+Jardim"**, com histórico individual no painel do Dashboard. Os vetores ficam em
+`bird_embedding_samples` como BLOBs `float32` (100% local).
 
 ### Bioacústica com BirdNET
 
@@ -1114,7 +1289,7 @@ espaço.
 | Front sem dados / 404 nas rotas | Confirme que a API em `:8000` é a do Bem-Te-Vi atual (`/docs` deve listar `/api/visits`, `/api/stats`, `/api/settings`). Outro processo antigo na porta 8000 causa 404 |
 | `ModuleNotFoundError` ao iniciar a API | Alguma dependência nova não foi instalada. Rode o `start.bat` de novo (ele reinstala pelo hash do `requirements.txt`) ou `back\venv\Scripts\python.exe -m pip install -r back\requirements.txt` |
 | Front sem dados | Confirme http://127.0.0.1:8000/api/health e a janela do backend |
-| Identificação externa indisponível | Confira `AI_EXTERNAL_API_KEY`, `AI_EXTERNAL_PROVIDER`, o modelo com suporte a visão e o acesso de rede ao provedor escolhido. No **Google Gemini** o provedor deve ser `google` (a URL base é ignorada); um **HTTP 404** indica que a chamada caiu numa rota padrão da OpenAI em vez do endpoint oficial do Google |
+| Identificação externa indisponível | Confira `GEMINI_API_KEY` (ou a chave salva em Configurações), o modelo escolhido (`AI_EXTERNAL_MODEL`) e o acesso de rede ao Google. Um **HTTP 404** indica que o nome do modelo foi gravado com o prefixo `models/` — o backend já o remove automaticamente via `sanitize_model_name`, mas confira o valor salvo. Mensagens de **401/403** significam chave inválida; **429/503** significam instabilidade temporária do Google (o sistema já tenta 3 vezes com *backoff*) |
 | Importação de gravação rejeitada | Use MP4, AVI, MOV ou MKV com menos de 2 GB e associe o arquivo a uma câmera cadastrada |
 | Análise offline falhou | Confirme se o vídeo abre em outro player e se o modelo YOLO foi carregado; tente exportar novamente o arquivo do cartão |
 | Clipe não reproduz na Galeria | Os clipes novos usam H.264 (compatível com navegadores). O Bem-Te-Vi usa o `ffmpeg` do sistema ou o embutido no pacote `imageio-ffmpeg`; se nenhum estiver disponível, instale o `ffmpeg` e coloque-o no `PATH`. Clipes antigos em `mp4v` podem não abrir no player: use **Baixar clipe** |

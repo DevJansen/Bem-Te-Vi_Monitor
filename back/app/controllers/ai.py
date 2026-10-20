@@ -11,9 +11,16 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Query
 
+from app.ai.active_learning import (
+    ActiveLearningError,
+    get_active_learning_service,
+)
+from app.ai.behavioral_memory import get_behavioral_memory_service
+from app.ai.visual_embeddings import get_visual_embeddings_service
 from app.core.branding import ALARIS_SIGNATURE
 from app.core.config import get_settings
 from app.domain.models import (
+    ActiveLearningStatusOut,
     AiEngineOut,
     AiLogOut,
     AiLogsOut,
@@ -21,6 +28,12 @@ from app.domain.models import (
     AiResourcesOut,
     AiStatusOut,
     AiThroughputOut,
+    BehavioralMemoryStatusOut,
+    BehavioralPredictionListOut,
+    KnownIndividualDetailOut,
+    KnownIndividualListOut,
+    KnownIndividualOut,
+    VisualEmbeddingsStatusOut,
 )
 from app.infra.camera.manager import get_camera_manager
 from app.infra.database.repository import CameraRepository
@@ -122,4 +135,146 @@ def ai_logs(
         logger.exception("ai_logs failed")
         raise HTTPException(
             status_code=500, detail="Falha ao obter o log da IA"
+        ) from exc
+
+
+# --------------------------------------------------------------------------- #
+# Inteligência adaptativa
+# --------------------------------------------------------------------------- #
+
+
+@router.get("/learning/status", response_model=ActiveLearningStatusOut)
+def ai_learning_status() -> ActiveLearningStatusOut:
+    """Fila de amostras e histórico de fine-tuning do Bem-Ti-Vi Core."""
+    try:
+        status = get_active_learning_service().status()
+        return ActiveLearningStatusOut(**status)
+    except Exception as exc:
+        logger.exception("ai_learning_status failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Falha ao obter o status do aprendizado ativo",
+        ) from exc
+
+
+@router.post("/learning/optimize", response_model=ActiveLearningStatusOut)
+def ai_learning_optimize() -> ActiveLearningStatusOut:
+    """Dispara o fine-tuning incremental ("Otimizar Bem-Ti-Vi Core")."""
+    try:
+        status = get_active_learning_service().start_fine_tuning()
+        return ActiveLearningStatusOut(**status)
+    except ActiveLearningError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("ai_learning_optimize failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Falha ao iniciar a otimização do Bem-Ti-Vi Core",
+        ) from exc
+
+
+@router.get("/behavioral-prediction", response_model=BehavioralPredictionListOut)
+def ai_behavioral_prediction(
+    species: str | None = Query(
+        default=None,
+        description="Restringe a previsão a uma espécie (nome popular).",
+    ),
+    horizon_hours: int | None = Query(
+        default=None,
+        ge=1,
+        le=12,
+        description="Janela de previsão em horas (padrão das configurações).",
+    ),
+    limit: int = Query(default=8, ge=1, le=24),
+) -> BehavioralPredictionListOut:
+    """Prevê picos de atividade cruzando histórico, clima e sazonalidade."""
+    try:
+        payload = get_behavioral_memory_service().predict(
+            species=species,
+            horizon_hours=horizon_hours,
+            limit=limit,
+        )
+        return BehavioralPredictionListOut(**payload)
+    except Exception as exc:
+        logger.exception("ai_behavioral_prediction failed")
+        raise HTTPException(
+            status_code=500, detail="Falha ao calcular a previsão comportamental"
+        ) from exc
+
+
+@router.get("/behavioral-memory", response_model=BehavioralMemoryStatusOut)
+def ai_behavioral_memory() -> BehavioralMemoryStatusOut:
+    """Resumo da memória comportamental persistida."""
+    try:
+        return BehavioralMemoryStatusOut(
+            **get_behavioral_memory_service().status()
+        )
+    except Exception as exc:
+        logger.exception("ai_behavioral_memory failed")
+        raise HTTPException(
+            status_code=500, detail="Falha ao obter a memória comportamental"
+        ) from exc
+
+
+@router.post("/behavioral-memory/refresh", response_model=BehavioralMemoryStatusOut)
+def ai_behavioral_memory_refresh() -> BehavioralMemoryStatusOut:
+    """Força a reconstrução dos perfis comportamentais agora."""
+    try:
+        service = get_behavioral_memory_service()
+        service.refresh()
+        return BehavioralMemoryStatusOut(**service.status())
+    except Exception as exc:
+        logger.exception("ai_behavioral_memory_refresh failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Falha ao atualizar a memória comportamental",
+        ) from exc
+
+
+@router.get("/individuals", response_model=KnownIndividualListOut)
+def ai_individuals(
+    species_id: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> KnownIndividualListOut:
+    """Lista os "Conhecidos do Jardim" reconhecidos por assinatura visual."""
+    try:
+        individuals = get_visual_embeddings_service().list_individuals(
+            species_id=species_id, limit=limit
+        )
+        return KnownIndividualListOut(
+            individuals=[KnownIndividualOut(**item) for item in individuals],
+            total=len(individuals),
+        )
+    except Exception as exc:
+        logger.exception("ai_individuals failed")
+        raise HTTPException(
+            status_code=500, detail="Falha ao listar os indivíduos conhecidos"
+        ) from exc
+
+
+@router.get("/individuals/{individual_id}", response_model=KnownIndividualDetailOut)
+def ai_individual_detail(individual_id: str) -> KnownIndividualDetailOut:
+    """Histórico completo de um indivíduo ("Conhecido do Jardim")."""
+    try:
+        payload = get_visual_embeddings_service().individual_history(individual_id)
+    except Exception as exc:
+        logger.exception("ai_individual_detail failed")
+        raise HTTPException(
+            status_code=500, detail="Falha ao obter o histórico do indivíduo"
+        ) from exc
+    if payload is None:
+        raise HTTPException(status_code=404, detail="Indivíduo não encontrado")
+    return KnownIndividualDetailOut(**payload)
+
+
+@router.get("/visual/status", response_model=VisualEmbeddingsStatusOut)
+def ai_visual_status() -> VisualEmbeddingsStatusOut:
+    """Contadores das assinaturas visuais (re-identificação individual)."""
+    try:
+        return VisualEmbeddingsStatusOut(**get_visual_embeddings_service().status())
+    except Exception as exc:
+        logger.exception("ai_visual_status failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Falha ao obter o status das assinaturas visuais",
         ) from exc

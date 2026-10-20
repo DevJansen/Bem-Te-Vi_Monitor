@@ -661,6 +661,45 @@ class VisitRepository:
             ).fetchall()
             return [dict(r) for r in rows]
 
+    def list_by_day(
+        self, day: str, *, limit: int = 50, visitor_kind: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Visitas de um dia específico (data local ``YYYY-MM-DD``).
+
+        Usado pelo Reel do Resumo do Dia: localiza a melhor visita (com clipe)
+        daquele dia para gerar o vídeo vertical. A janela UTC é calculada a
+        partir da data local assumindo o fuso do servidor (consistência com o
+        time-lapse diário).
+        """
+        # Converte o dia local em intervalo UTC (aproximação de 24h centrado
+        # no dia local, compatível com a montagem do time-lapse).
+        start_utc = f"{day}T00:00:00+00:00"
+        end_utc = f"{day}T23:59:59+00:00"
+        clausula_visitante, params_visitante = _clausula_visitante("v", visitor_kind)
+        clauses = ["v.detected_at >= ?", "v.detected_at <= ?"]
+        params: list[Any] = [start_utc, end_utc]
+        if clausula_visitante:
+            clauses.append(clausula_visitante)
+            params.extend(params_visitante)
+        where = " AND ".join(clauses)
+        params.append(limit)
+        with db_session(self.db_path) as conn:
+            rows = conn.execute(
+                f"""
+                SELECT v.*, c.name AS camera_name,
+                    bs.common_name AS assigned_species_common_name,
+                    bs.scientific_name AS assigned_species_scientific_name
+                FROM visits v
+                LEFT JOIN cameras c ON c.id = v.camera_id
+                LEFT JOIN bird_species bs ON bs.id = v.species_id
+                WHERE {where}
+                ORDER BY v.detected_at DESC
+                LIMIT ?
+                """,
+                params,
+            ).fetchall()
+        return [dict(r) for r in rows]
+
     def list_clip_paths_between(
         self, start_utc: str, end_utc: str
     ) -> list[str]:

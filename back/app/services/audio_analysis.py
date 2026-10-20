@@ -149,6 +149,16 @@ class AudioCameraWorker(threading.Thread):
         self._camera_repo = CameraRepository(settings.db_path)
         self._settings_repo = SettingsRepository(settings.db_path)
         self._detection_repo = AudioDetectionRepository(settings.db_path)
+        # Fuso horário da câmera para a janela noturna (NFC).
+        self._camera_timezone = self._load_camera_timezone()
+
+    def _load_camera_timezone(self) -> str | None:
+        try:
+            row = self._camera_repo.get(self.camera_id)
+            return str(row.get("timezone") or "") if row else None
+        except Exception:
+            logger.debug("Fuso da câmera indisponível para NFC", exc_info=True)
+            return None
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -272,7 +282,20 @@ class AudioCameraWorker(threading.Thread):
         captured_at: datetime,
         analyzer: Any,
     ) -> None:
-        min_confidence = self._confidence_threshold()
+        base_confidence = self._confidence_threshold()
+        # Escuta Noturna de Migração (NFC): reduz o limiar à noite para captar
+        # chamados curtos de aves que cruzam o céu acima do jardim.
+        from app.services.nfc_monitor import get_nfc_monitor
+
+        nfc = get_nfc_monitor()
+        is_night = nfc.is_night(timezone_name=self._camera_timezone)
+        min_confidence = nfc.effective_confidence_threshold(
+            base_confidence,
+            timezone_name=self._camera_timezone,
+        )
+        night_date = nfc.night_date(timezone_name=self._camera_timezone) if is_night else None
+        nfc.maybe_report_transition(is_night=is_night)
+
         detections = _read_detections(analyzer, samples, min_confidence)
 
         # O clipe de áudio do bloco é o mesmo para todas as detecções nele: grava
@@ -306,6 +329,13 @@ class AudioCameraWorker(threading.Thread):
                 # Sonora). Falhas não impedem o registro da detecção.
                 audio_path = save_audio_clip(samples)
                 bloco_gravado = True
+            is_nfc = is_night
+            nfc_score = nfc.classify_nfc_score(
+                common_name=common_name,
+                scientific_name=scientific_name,
+                confidence=float(detection["confidence"]),
+                is_night=is_night,
+            )
             result = self._detection_repo.create_and_link(
                 camera_id=self.camera_id,
                 detected_at=detected_at.isoformat(),
@@ -313,7 +343,32 @@ class AudioCameraWorker(threading.Thread):
                 scientific_name=scientific_name,
                 confidence=float(detection["confidence"]),
                 audio_path=audio_path,
+                is_nfc=is_nfc,
+                nfc_score=nfc_score,
+                night_date=night_date,
             )
+            # Espectrograma visual do canto (PNG). É gerado uma única vez por
+            # detecção e reaproveitado pela galeria de áudio e pela IA externa.
+            # Roda em thread separada para não atrasar a leitura do próximo
+            # bloco de áudio (o endpoint gera sob demanda se necessário).
+            detection_id = str(result["id"])
+            audio_relative = result.get("audio_path")
+            try:
+                from app.services.spectrogram import ensure_detection_spectrogram
+
+                threading.Thread(
+                    target=ensure_detection_spectrogram,
+                    args=(detection_id, audio_relative),
+                    kwargs={"title": f"Espectrograma · {common_name}"},
+                    name=f"spectrogram-{detection_id[:8]}",
+                    daemon=True,
+                ).start()
+            except Exception:
+                logger.debug(
+                    "Falha ao agendar o espectrograma da detecção %s",
+                    detection_id,
+                    exc_info=True,
+                )
             logger.info(
                 "BirdNET detection camera=%s species=%s confidence=%.3f linked_visit=%s",
                 self.camera_id,

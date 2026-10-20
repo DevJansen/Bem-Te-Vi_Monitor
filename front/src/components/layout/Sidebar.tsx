@@ -2,6 +2,7 @@ import {
   AudioLines,
   Bird,
   BookOpen,
+  CalendarDays,
   ChartNoAxesCombined,
   Camera,
   Images,
@@ -21,6 +22,7 @@ const NAV: Array<{ id: AppTab; label: string; icon: typeof LayoutDashboard }> = 
   { id: "dashboard", label: "Painel", icon: LayoutDashboard },
   { id: "cameras", label: "Câmeras", icon: Camera },
   { id: "gallery", label: "Galeria", icon: Images },
+  { id: "journal", label: "Diário de Campo", icon: CalendarDays },
   { id: "audio", label: "Detecção Sonora", icon: AudioLines },
   { id: "species", label: "Minhas Aves", icon: BookOpen },
   {

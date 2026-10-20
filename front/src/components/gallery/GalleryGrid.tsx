@@ -1,17 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Bot,
+  CheckCircle2,
   Download,
+  Film,
   Filter,
   LoaderCircle,
   Moon,
   Play,
   Trash2,
 } from "lucide-react";
-import type { BirdSpecies, BirdVisit } from "@/types";
+import type { BirdSpecies, BirdVisit, ReelInfo } from "@/types";
 import {
   assignVisitSpecies,
+  confirmVisit,
   deleteVisit,
+  generateReel,
   getErrorMessage,
   identifyVisitExternal,
   resolveMediaUrl,
@@ -52,6 +56,7 @@ export function GalleryGrid({
   >({});
   const [identifyingVisitId, setIdentifyingVisitId] = useState<string | null>(null);
   const [assigningVisitId, setAssigningVisitId] = useState<string | null>(null);
+  const [confirmingVisitId, setConfirmingVisitId] = useState<string | null>(null);
   const [assignmentError, setAssignmentError] = useState<{
     visitId: string;
     message: string;
@@ -71,6 +76,11 @@ export function GalleryGrid({
   const [toast, setToast] = useState<string | null>(null);
   // Visita cujo clipe está aberto no player de vídeo (null = fechado).
   const [playingVisit, setPlayingVisit] = useState<BirdVisit | null>(null);
+  // Visita cujo Reel vertical está sendo gerado/preview (null = fechado).
+  const [reelVisit, setReelVisit] = useState<BirdVisit | null>(null);
+  const [reelInfo, setReelInfo] = useState<ReelInfo | null>(null);
+  const [reelBusy, setReelBusy] = useState(false);
+  const [reelError, setReelError] = useState<string | null>(null);
 
   // Atalho do painel "Visitas de Hoje": abre o player da visita solicitada
   // assim que ela aparece na lista (aguarda o primeiro carregamento).
@@ -167,6 +177,56 @@ export function GalleryGrid({
     const timeout = window.setTimeout(() => setToast(null), 3500);
     return () => window.clearTimeout(timeout);
   }, [toast]);
+
+  /** Gera (ou reaproveita) o Reel vertical 9:16 da visita e abre o preview. */
+  const handleGenerateReel = async (visit: BirdVisit) => {
+    setReelVisit(visit);
+    setReelInfo(null);
+    setReelError(null);
+    setReelBusy(true);
+    try {
+      const info = await generateReel(visit.id);
+      setReelInfo(info);
+    } catch (cause) {
+      setReelError(
+        getErrorMessage(cause, "Não foi possível gerar o Reel desta visita."),
+      );
+    } finally {
+      setReelBusy(false);
+    }
+  };
+
+  /**
+   * Confirma a espécie já associada e alimenta o aprendizado ativo.
+   *
+   * Diferente de apenas associar no dropdown: aqui o usuário atesta que a
+   * detecção está correta, gerando uma amostra de treino de alta qualidade e a
+   * assinatura visual do indivíduo.
+   */
+  const confirmDetection = async (visit: BirdVisit) => {
+    setConfirmingVisitId(visit.id);
+    setAssignmentError(null);
+    try {
+      const result = await confirmVisit(visit.id, {
+        species_id: visit.species_id,
+        species_name: visit.assigned_species_common_name ?? visit.species,
+      });
+      setToast(
+        result.training_queued
+          ? "Detecção confirmada — amostra enviada ao Bem-Ti-Vi Core."
+          : result.training_reason ||
+              "Detecção confirmada para a memória do jardim.",
+      );
+      onVisitUpdated();
+    } catch (error) {
+      setAssignmentError({
+        visitId: visit.id,
+        message: getErrorMessage(error, "Não foi possível confirmar a detecção."),
+      });
+    } finally {
+      setConfirmingVisitId(null);
+    }
+  };
 
   const confirmDeleteVisit = async () => {
     if (!deletingVisit) return;
@@ -526,6 +586,27 @@ export function GalleryGrid({
                       ))}
                     </select>
                   </label>
+                  {visit.species_id ? (
+                    <button
+                      type="button"
+                      onClick={() => void confirmDetection(visit)}
+                      disabled={confirmingVisitId !== null || assigningVisitId !== null}
+                      title="Confirmar que esta detecção está correta e ensinar o Core"
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-2.5 py-1.5 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-500/25 disabled:cursor-wait disabled:opacity-60"
+                    >
+                      {confirmingVisitId === visit.id ? (
+                        <>
+                          <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                          Confirmando…
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          Confirmar detecção
+                        </>
+                      )}
+                    </button>
+                  ) : null}
                   {assignmentError?.visitId === visit.id ? (
                     <p role="alert" className="text-xs text-red-300">
                       {assignmentError.message}
@@ -591,6 +672,22 @@ export function GalleryGrid({
                     >
                       <Play className="h-3.5 w-3.5 fill-current" />
                       Reproduzir clipe
+                    </button>
+                  ) : null}
+                  {clip ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleGenerateReel(visit)}
+                      disabled={reelBusy}
+                      title="Gerar Reel vertical (9:16) com marca d'água, espécie e temperatura"
+                      className="mt-1 ml-3 inline-flex items-center gap-1 pt-1 text-xs font-medium text-violet-400 transition hover:text-violet-300 disabled:opacity-50"
+                    >
+                      {reelBusy ? (
+                        <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Film className="h-3.5 w-3.5" />
+                      )}
+                      {reelBusy ? "Gerando Reel…" : "🎬 Gerar Reel p/ Redes"}
                     </button>
                   ) : null}
                   <button
@@ -661,6 +758,69 @@ export function GalleryGrid({
         visit={consultVisit}
         onClose={() => setConsultVisit(null)}
       />
+      {/* Preview do Reel vertical (9:16) gerado para redes sociais */}
+      {reelVisit ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Reel vertical gerado"
+          onClick={() => setReelVisit(null)}
+        >
+          <div
+            className="flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-dark-600 bg-dark-800 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-dark-700 px-4 py-3">
+              <h3 className="font-display text-sm font-semibold text-[var(--color-text-primary)]">
+                🎬 Reel vertical (9:16)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setReelVisit(null)}
+                aria-label="Fechar preview do Reel"
+                className="rounded-md p-1 text-[var(--color-text-muted)] transition hover:text-[var(--color-text-primary)]"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex flex-1 flex-col items-center gap-3 overflow-y-auto p-4">
+              {reelBusy ? (
+                <div className="flex flex-col items-center gap-2 py-10 text-sm text-[var(--color-text-muted)]">
+                  <LoaderCircle className="h-6 w-6 animate-spin text-violet-300" />
+                  Gerando vídeo vertical…
+                </div>
+              ) : reelError ? (
+                <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                  {reelError}
+                </p>
+              ) : reelInfo ? (
+                <>
+                  <video
+                    src={reelInfo.url}
+                    controls
+                    autoPlay
+                    muted
+                    playsInline
+                    className="max-h-[55vh] w-auto rounded-xl border border-dark-600 bg-black"
+                  />
+                  <a
+                    href={reelInfo.url}
+                    download
+                    className="inline-flex items-center gap-2 rounded-lg border border-violet-400/40 bg-violet-500/15 px-4 py-2 text-xs font-semibold text-violet-200 transition hover:bg-violet-500/25"
+                  >
+                    <Download className="h-4 w-4" />
+                    Baixar Reel (MP4 1080×1920)
+                  </a>
+                  <p className="text-center text-[11px] text-[var(--color-text-muted)]">
+                    Pronto para Instagram Reels, TikTok e YouTube Shorts.
+                  </p>
+                </>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

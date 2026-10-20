@@ -19,6 +19,8 @@ from app.domain.models import (
     EnvironmentConnectionTest,
     EnvironmentSettingsOut,
     EnvironmentSettingsUpdate,
+    GeminiConnectionTestRequest,
+    GeminiConnectionTestResponse,
     NotificationTestRequest,
     NotificationTestResponse,
     RoiSettings,
@@ -112,6 +114,13 @@ def _build_out() -> AppSettingsOut:
         notify_mode=_notify_mode(stored),
         min_confidence_notify=_float(
             "min_confidence_notify", settings.yolo_confidence
+        ),
+        morning_briefing_enabled=_bool("morning_briefing_enabled", True),
+        morning_briefing_hour=min(
+            23, max(0, int(_float("morning_briefing_hour", 7)))
+        ),
+        morning_briefing_minute=min(
+            59, max(0, int(_float("morning_briefing_minute", 0)))
         ),
         extra=extra,
     )
@@ -249,6 +258,76 @@ def test_environment(
         ) from exc
 
 
+@router.post("/test-ai", response_model=GeminiConnectionTestResponse)
+def test_gemini(
+    payload: GeminiConnectionTestRequest,
+    request: Request,
+) -> GeminiConnectionTestResponse:
+    """Testa a chave/modelo do **Google Gemini** com um prompt mínimo.
+
+    Resposta HTTP **200** em todos os casos (sucesso, instabilidade ou chave
+    inválida): o ``status`` no corpo (``success`` / ``warning`` / ``error``)
+    é que orienta o painel. Isso evita o HTTP 503 crônico que paralisava o
+    botão "Testar Conexão" no frontend.
+    """
+    _require_local_environment_request(request)
+    from app.services.ai_service import test_gemini_connection
+    from app.services.environment_settings import _read_env_file
+
+    chave = (payload.api_key or "").strip() or _read_env_file().get(
+        "AI_EXTERNAL_API_KEY", ""
+    )
+    if not chave:
+        return GeminiConnectionTestResponse(
+            status="error",
+            message="Informe a chave da API do Google Gemini para testar.",
+        )
+
+    try:
+        ok, mensagem = test_gemini_connection(chave, payload.model_name)
+    except Exception as exc:  # pragma: no cover - rede/SDK inesperada
+        logger.exception("test_gemini failed")
+        return GeminiConnectionTestResponse(
+            status="error",
+            message=f"Não foi possível testar o Gemini: {exc}",
+        )
+
+    if ok:
+        return GeminiConnectionTestResponse(status="success", message=mensagem)
+    # Erros transitórios (429 de cota / 503 de sobrecarga) → ``warning``;
+    # chave inválida ou modelo inexistente → ``error``.
+    transient = (
+        "superlotado" in mensagem.lower()
+        or "429" in mensagem
+        or "limite de requisições" in mensagem.lower()
+        or "503" in mensagem
+    )
+    status = "warning" if transient else "error"
+    return GeminiConnectionTestResponse(status=status, message=mensagem)
+
+
+@router.get("/ai/models")
+def list_gemini_models(request: Request) -> dict:
+    """Lista os modelos Gemini **realmente disponíveis** para a chave informada.
+
+    O Google descontinua modelos com frequência, então o dropdown de
+    Configurações é alimentado por esta rota (com os presets oficiais como
+    fallback quando a API não responde).
+    """
+    _require_local_environment_request(request)
+    from app.services.ai_service import list_available_models
+    from app.services.environment_settings import _read_env_file
+
+    chave = _read_env_file().get("AI_EXTERNAL_API_KEY", "").strip()
+    if not chave:
+        return {"models": [], "source": "none"}
+    modelos = list_available_models(chave)
+    return {
+        "models": modelos,
+        "source": "api" if modelos else "none",
+    }
+
+
 @router.put("", response_model=AppSettingsOut)
 async def update_app_settings(payload: AppSettingsUpdate) -> AppSettingsOut:
     try:
@@ -262,6 +341,15 @@ async def update_app_settings(payload: AppSettingsUpdate) -> AppSettingsOut:
             repo.set("min_confidence_notify", str(payload.min_confidence_notify))
         if payload.notify_mode is not None:
             repo.set("notify_mode", payload.notify_mode.strip().lower())
+        if payload.morning_briefing_enabled is not None:
+            repo.set(
+                "morning_briefing_enabled",
+                "true" if payload.morning_briefing_enabled else "false",
+            )
+        if payload.morning_briefing_hour is not None:
+            repo.set("morning_briefing_hour", str(payload.morning_briefing_hour))
+        if payload.morning_briefing_minute is not None:
+            repo.set("morning_briefing_minute", str(payload.morning_briefing_minute))
         if payload.yolo_confidence is not None:
             # Encaminha para a calibração (fonte de verdade) e aplica em runtime.
             get_calibration_service().update(
@@ -353,3 +441,77 @@ async def test_notification(payload: NotificationTestRequest) -> NotificationTes
             ) from exc
 
     raise HTTPException(status_code=400, detail="Canal inválido. Use 'telegram' ou 'discord'.")
+
+
+# ---------------------------------------------------------------------------
+# Smart Alerts — regras personalizadas de notificação
+# ---------------------------------------------------------------------------
+
+
+@router.get("/smart-alerts")
+async def list_smart_alert_rules(request: Request) -> dict[str, Any]:
+    """Lista as regras de alerta personalizadas configuradas."""
+    _require_local_environment_request(request)
+    from app.services.smart_alerts import load_rules
+
+    return {"rules": load_rules()}
+
+
+@router.put("/smart-alerts")
+async def save_smart_alert_rules(
+    request: Request, payload: dict[str, Any]
+) -> dict[str, Any]:
+    """Salva (substitui) a lista completa de regras de alerta."""
+    _require_local_environment_request(request)
+    from app.services.smart_alerts import save_rules
+
+    rules = payload.get("rules", [])
+    if not isinstance(rules, list):
+        raise HTTPException(status_code=422, detail="Campo 'rules' deve ser uma lista.")
+    save_rules(rules)
+    return {"rules": rules, "saved": True}
+
+
+@router.post("/smart-alerts")
+async def create_smart_alert_rule(
+    request: Request, payload: dict[str, Any]
+) -> dict[str, Any]:
+    """Cria uma nova regra de alerta."""
+    _require_local_environment_request(request)
+    from app.services.smart_alerts import create_rule
+
+    name = payload.get("name", "Nova regra")
+    conditions = payload.get("conditions", [])
+    if not isinstance(conditions, list):
+        raise HTTPException(status_code=422, detail="Campo 'conditions' deve ser uma lista.")
+    rule = create_rule(
+        name=name,
+        conditions=conditions,
+        enabled=payload.get("enabled", True),
+        description=payload.get("description", ""),
+    )
+    return {"rule": rule, "created": True}
+
+
+@router.delete("/smart-alerts/{rule_id}")
+async def delete_smart_alert_rule(request: Request, rule_id: str) -> dict[str, Any]:
+    """Remove uma regra de alerta pelo ID."""
+    _require_local_environment_request(request)
+    from app.services.smart_alerts import delete_rule
+
+    deleted = delete_rule(rule_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Regra não encontrada.")
+    return {"deleted": True}
+
+
+@router.patch("/smart-alerts/{rule_id}/toggle")
+async def toggle_smart_alert_rule(request: Request, rule_id: str) -> dict[str, Any]:
+    """Inverte o estado (ligado/desligado) de uma regra."""
+    _require_local_environment_request(request)
+    from app.services.smart_alerts import toggle_rule
+
+    rule = toggle_rule(rule_id)
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Regra não encontrada.")
+    return {"rule": rule}

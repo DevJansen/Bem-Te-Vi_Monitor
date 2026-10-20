@@ -123,7 +123,7 @@ export function AudioAiConsultModal({ detection, onClose }: Props) {
             </span>
             {consult?.provider ? (
               <span className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold text-violet-200">
-                {consult.provider === "google" ? "Google Gemini" : "OpenAI"}
+                Google Gemini
                 {consult.model ? ` · ${consult.model}` : ""}
               </span>
             ) : null}
