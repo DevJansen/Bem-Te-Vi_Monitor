@@ -381,6 +381,63 @@ class ActiveLearningService:
             ).fetchone()
             return int(row["total"]) if row else 0
 
+    def repair_sample_paths(self) -> int:
+        """Reaponta amostras cujo arquivo ficou na pasta antiga do projeto.
+
+        ``training_samples.image_path`` guarda caminhos **absolutos**. Se o
+        projeto for movido/copiado (ex.: ``Documentos`` → ``C:\\DevJansen``),
+        todas as amostras antigas passam a apontar para um caminho inexistente
+        e a fila de aprendizado ativo fica "vazia" no painel.
+
+        O reparo é conservador e idempotente: só altera linhas cujo arquivo
+        atual não existe **e** cujo nome é encontrado em
+        ``app-data/training_queue``. Nenhuma amostra é apagada.
+
+        Devolve a quantidade de linhas corrigidas.
+        """
+        queue_dir = self.settings.training_queue_dir
+        if not queue_dir.is_dir():
+            return 0
+
+        # Índice nome do arquivo → caminho atual (a fila é pequena e plana por
+        # espécie, então o custo é desprezível no startup).
+        por_nome: dict[str, Path] = {}
+        for candidate in queue_dir.rglob("*"):
+            try:
+                if candidate.is_file():
+                    por_nome.setdefault(candidate.name, candidate)
+            except OSError:
+                continue
+
+        repaired = 0
+        with db_session(self.db_path) as conn:
+            rows = conn.execute(
+                "SELECT id, image_path FROM training_samples"
+            ).fetchall()
+            for row in rows:
+                try:
+                    current = Path(str(row["image_path"]))
+                    if current.is_file():
+                        continue
+                    match = por_nome.get(current.name)
+                    if match is None:
+                        continue
+                    conn.execute(
+                        "UPDATE training_samples SET image_path = ? WHERE id = ?",
+                        (str(match), row["id"]),
+                    )
+                    repaired += 1
+                except OSError:
+                    continue
+
+        if repaired:
+            logger.info(
+                "Aprendizado ativo: %s caminho(s) de amostra reparado(s) após "
+                "mudança de pasta do projeto.",
+                repaired,
+            )
+        return repaired
+
     # ------------------------------------------------------------------ #
     # Métricas e status
     # ------------------------------------------------------------------ #

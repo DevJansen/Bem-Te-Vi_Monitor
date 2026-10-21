@@ -122,25 +122,83 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("Failed to start camera pipelines")
 
-    retention_worker = MediaRetentionWorker(settings)
-    retention_worker.start()
+    # ------------------------------------------------------------------ #
+    # Workers opcionais.
+    #
+    # Nenhum deles pode impedir a API de subir: se um worker falhar (ex.:
+    # FFmpeg/OpenH264 ausente, webhook inválido, disco cheio), o painel deve
+    # continuar abrindo e apenas aquele recurso fica temporariamente off.
+    # Antes, uma exceção aqui derrubava o `lifespan` inteiro e o programa
+    # "quebrava ao iniciar" sem que o painel chegasse a abrir.
+    # ------------------------------------------------------------------ #
+    retention_worker = None
+    timelapse_scheduler = None
+    morning_briefing_scheduler = None
+    rare_moments_worker = None
+
+    try:
+        retention_worker = MediaRetentionWorker(settings)
+        retention_worker.start()
+    except Exception:
+        logger.exception(
+            "Falha ao iniciar a retenção de mídias; o painel continuará ativo."
+        )
+        retention_worker = None
+
     # Gera o resumo do dia (time-lapse) no fim do dia e recupera dias pendentes.
-    timelapse_scheduler = TimelapseScheduler()
-    timelapse_scheduler.start()
+    try:
+        timelapse_scheduler = TimelapseScheduler()
+        timelapse_scheduler.start()
+    except Exception:
+        logger.exception(
+            "Falha ao iniciar o agendador de time-lapse; o painel continuará ativo."
+        )
+        timelapse_scheduler = None
+
     # Resumo Matinal Automatizado: compila clima, predições e foto de destaque
     # e envia via Telegram/Discord no horário configurado (padrão 07:00).
-    morning_briefing_scheduler = None
     if settings.morning_briefing_enabled:
-        morning_briefing_scheduler = get_morning_briefing_scheduler()
-        morning_briefing_scheduler.start()
+        try:
+            morning_briefing_scheduler = get_morning_briefing_scheduler()
+            morning_briefing_scheduler.start()
+        except Exception:
+            logger.exception(
+                "Falha ao iniciar o resumo matinal; o painel continuará ativo."
+            )
+            morning_briefing_scheduler = None
+
     # Curadoria de "Momentos Raros": mede a nitidez das capturas novas em
     # segundo plano (primeira passada após alguns segundos, depois a cada N h).
-    rare_moments_worker = None
     if settings.rare_moments_enabled:
-        from app.services.rare_moments import RareMomentsWorker
+        try:
+            from app.services.rare_moments import RareMomentsWorker
 
-        rare_moments_worker = RareMomentsWorker()
-        rare_moments_worker.start()
+            rare_moments_worker = RareMomentsWorker()
+            rare_moments_worker.start()
+        except Exception:
+            logger.exception(
+                "Falha ao iniciar a curadoria de momentos raros; o painel "
+                "continuará ativo."
+            )
+            rare_moments_worker = None
+
+    # ------------------------------------------------------------------ #
+    # Reparo de caminhos da fila de aprendizado ativo.
+    #
+    # `training_samples.image_path` é absoluto. Quando o projeto é movido de
+    # pasta (ex.: Documentos → C:\DevJansen), as amostras apontam para um
+    # caminho que não existe mais. Aqui cada arquivo é reencontrado pelo nome
+    # dentro de `app-data/training_queue` e a linha é corrigida — sem apagar
+    # nenhuma amostra e sem impedir o startup.
+    # ------------------------------------------------------------------ #
+    try:
+        from app.ai.active_learning import get_active_learning_service
+
+        get_active_learning_service().repair_sample_paths()
+    except Exception:
+        logger.exception(
+            "Não foi possível reparar os caminhos da fila de aprendizado ativo."
+        )
     # Memória comportamental: reconstrói os perfis (horário + clima + estação)
     # em segundo plano e os mantém frescos para o card preditivo do painel.
     behavioral_worker = None
@@ -157,7 +215,11 @@ async def lifespan(app: FastAPI):
     yield
 
     logger.info("Shutting down Bem-Te-Vi…")
-    retention_worker.stop()
+    try:
+        if retention_worker is not None:
+            retention_worker.stop()
+    except Exception:
+        logger.exception("Retention worker shutdown error")
     try:
         if behavioral_worker is not None:
             behavioral_worker.stop()

@@ -2,11 +2,27 @@
 setlocal EnableExtensions
 cd /d "%~dp0"
 
-set "PY=back\venv\Scripts\python.exe"
+REM =====================================================================
+REM  Caminhos absolutos.
+REM
+REM  IMPORTANTE: o Bem-Te-Vi chama SEMPRE "%PY%" -m <modulo> — nunca
+REM  "activate.bat", "pip.exe", "uvicorn.exe" ou "yolo.exe". Esses arquivos
+REM  gravam o caminho absoluto da pasta em que o venv foi criado; se o
+REM  projeto for movido/copiado (ex.: de Documentos para C:\DevJansen), eles
+REM  continuam apontando para a pasta antiga e quebram a inicializacao.
+REM  O python.exe do venv, ao contrario, funciona de qualquer pasta.
+REM =====================================================================
+set "ROOT=%~dp0"
+set "PY=%ROOT%back\venv\Scripts\python.exe"
 set "REQ_FILE=back\requirements.txt"
 set "REQ_STAMP=back\venv\.requirements.sha256"
 set "PKG_LOCK=front\package-lock.json"
 set "NPM_STAMP=front\node_modules\.package-lock.sha256"
+set "STARTUP_LOG=back\startup.log"
+
+REM Saida UTF-8 no console (evita acentos corrompidos nos logs da IA).
+set "PYTHONUTF8=1"
+set "PYTHONIOENCODING=utf-8"
 
 echo ========================================
 echo   Bem-Te-Vi - inicializacao local
@@ -34,12 +50,22 @@ if not exist "%PY%" (
   if errorlevel 1 goto :fail_venv
 )
 
-call "back\venv\Scripts\activate.bat"
+REM Sanidade: o interpretador do venv precisa executar de verdade.
+"%PY%" -c "import sys" >nul 2>&1
+if errorlevel 1 (
+  echo [back] Ambiente virtual invalido; recriando em back\venv...
+  rmdir /s /q "back\venv" 2>nul
+  python -m venv "back\venv"
+  if errorlevel 1 goto :fail_venv
+  "%PY%" -c "import sys" >nul 2>&1
+  if errorlevel 1 goto :fail_venv
+)
 
 REM =====================================================================
 REM  3. Backend: dependencias Python
-REM     Instala sempre que o requirements.txt mudar (comparacao por hash),
-REM     para que um "git pull" nunca deixe pacotes faltando.
+REM     Instala sempre que o requirements.txt mudar (comparacao por hash).
+REM     Uma falha de rede no pip NAO aborta a inicializacao se os imports
+REM     essenciais continuarem funcionando — o painel abre normalmente.
 REM =====================================================================
 set "REQ_HASH="
 for /f "usebackq delims=" %%H in (`powershell -NoProfile -Command "if (Test-Path '%REQ_FILE%') { (Get-FileHash -Algorithm SHA256 '%REQ_FILE%').Hash }"`) do set "REQ_HASH=%%H"
@@ -49,10 +75,9 @@ if exist "%REQ_STAMP%" set /p REQ_HASH_OLD=<"%REQ_STAMP%"
 if not "%REQ_HASH%"=="" if /i "%REQ_HASH%"=="%REQ_HASH_OLD%" goto :backend_ok
 
 echo [back] Instalando/atualizando dependencias Python ^(a primeira vez pode demorar^)...
-"%PY%" -m pip install --upgrade pip
-"%PY%" -m pip install -r "%REQ_FILE%"
-if errorlevel 1 goto :fail_pip
->"%REQ_STAMP%" echo %REQ_HASH%
+"%PY%" -m pip install --upgrade pip --disable-pip-version-check
+"%PY%" -m pip install -r "%REQ_FILE%" --disable-pip-version-check
+if not errorlevel 1 >"%REQ_STAMP%" echo %REQ_HASH%
 goto :backend_check
 
 :backend_ok
@@ -64,9 +89,8 @@ REM Sanidade: garante que os imports essenciais resolvem de fato.
 if not errorlevel 1 goto :backend_ready
 
 echo [back] Dependencias incompletas detectadas; reinstalando...
-"%PY%" -m pip install -r "%REQ_FILE%"
-if errorlevel 1 goto :fail_pip
->"%REQ_STAMP%" echo %REQ_HASH%
+"%PY%" -m pip install -r "%REQ_FILE%" --disable-pip-version-check
+if not errorlevel 1 >"%REQ_STAMP%" echo %REQ_HASH%
 
 "%PY%" -c "import fastapi, uvicorn, cv2, dotenv, requests, cryptography, numpy, multipart, pydantic, slowapi, fpdf, imageio_ffmpeg" >nul 2>&1
 if errorlevel 1 goto :fail_pip
@@ -77,7 +101,7 @@ REM abre, mas a deteccao YOLO fica desativada. Avisa em vez de abortar.
 "%PY%" -c "import ultralytics" >nul 2>&1
 if not errorlevel 1 goto :backend_ultralytics_ok
 echo [aviso] ultralytics nao instalou. O painel abre, mas a deteccao YOLO ficara off.
-echo         Para tentar de novo: back\venv\Scripts\python.exe -m pip install ultralytics
+echo         Para tentar de novo: "%PY%" -m pip install ultralytics
 :backend_ultralytics_ok
 
 if not exist "back\.env" (
@@ -101,7 +125,7 @@ for /f "usebackq delims=" %%H in (`powershell -NoProfile -Command "if (Test-Path
 set "PKG_HASH_OLD="
 if exist "%NPM_STAMP%" set /p PKG_HASH_OLD=<"%NPM_STAMP%"
 
-if not exist "front\node_modules" goto :npm_install
+if not exist "front\node_modules\vite" goto :npm_install
 if "%PKG_HASH%"=="" goto :npm_install
 if /i "%PKG_HASH%"=="%PKG_HASH_OLD%" goto :front_ok
 
@@ -111,9 +135,15 @@ pushd front
 call npm install --no-audit --no-fund
 set "NPM_EXIT=%errorlevel%"
 popd
-if not "%NPM_EXIT%"=="0" goto :fail_node
-if "%PKG_HASH%"=="" goto :front_ready
->"%NPM_STAMP%" echo %PKG_HASH%
+if "%NPM_EXIT%"=="0" goto :npm_done
+if exist "front\node_modules\vite\bin\vite.js" (
+  echo [aviso] npm install retornou erro, mas as dependencias ja estao presentes. Continuando.
+  goto :front_ready
+)
+goto :fail_node
+
+:npm_done
+if not "%PKG_HASH%"=="" >"%NPM_STAMP%" echo %PKG_HASH%
 goto :front_ready
 
 :front_ok
@@ -134,8 +164,10 @@ echo.
 echo [start] Iniciando uvicorn ^(API^) e Vite ^(UI^) simultaneamente...
 echo.
 
-start "Bem-Te-Vi Backend" /D "%~dp0back" cmd /k "call venv\Scripts\activate.bat && python -m uvicorn app.main:app --host 127.0.0.1 --port 8000"
-start "Bem-Te-Vi Frontend" /D "%~dp0front" cmd /k "npm run dev -- --host 127.0.0.1 --port 5173"
+REM Usa o python.exe do venv pelo caminho absoluto (sem activate.bat): assim a
+REM janela funciona mesmo que o projeto tenha sido movido de pasta.
+start "Bem-Te-Vi Backend" /D "%ROOT%back" cmd /k ""%PY%" -m uvicorn app.main:app --host 127.0.0.1 --port 8000"
+start "Bem-Te-Vi Frontend" /D "%ROOT%front" cmd /k "npm run dev -- --host 127.0.0.1 --port 5173"
 
 echo [check] Aguardando API em http://127.0.0.1:8000/api/health ...
 set /a _tries=0
@@ -223,9 +255,10 @@ echo        Verifique o espaco em disco e as permissoes da pasta.
 goto :fail_end
 
 :fail_pip
-echo [erro] Falha ao instalar as dependencias Python.
+echo [erro] Dependencias Python ausentes e a instalacao falhou.
 echo        Verifique sua conexao com a internet e tente de novo:
-echo        back\venv\Scripts\python.exe -m pip install -r back\requirements.txt
+echo        "%PY%" -m pip install -r back\requirements.txt
+echo        (dica: se o projeto foi movido, apague back\venv e rode de novo)
 goto :fail_end
 
 :fail_node
@@ -237,6 +270,7 @@ goto :fail_end
 :fail_end
 echo.
 echo A inicializacao foi interrompida.
+echo Se precisar de ajuda, copie a mensagem acima.
 pause
 endlocal
 exit /b 1
