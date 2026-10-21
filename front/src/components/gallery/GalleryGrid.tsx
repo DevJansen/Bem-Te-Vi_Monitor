@@ -5,9 +5,11 @@ import {
   Download,
   Film,
   Filter,
+  ImageDown,
   LoaderCircle,
   Moon,
   Play,
+  RefreshCw,
   Trash2,
 } from "lucide-react";
 import type { BirdSpecies, BirdVisit, ReelInfo } from "@/types";
@@ -19,6 +21,7 @@ import {
   getErrorMessage,
   identifyVisitExternal,
   resolveMediaUrl,
+  visitCropDownloadUrl,
   visitCropUrl,
 } from "@/services/api";
 import { formatDateTime, formatPercent, formatSpeciesLabel } from "@/utils/format";
@@ -26,6 +29,12 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { VideoPlayerModal } from "@/components/common/VideoPlayerModal";
 import { WeatherBadges } from "@/components/common/WeatherBadges";
 import { SpeciesAiConsultModal } from "@/components/species/SpeciesAiConsultModal";
+import { ReclassifySpeciesModal } from "@/components/gallery/ReclassifySpeciesModal";
+import {
+  isEcologicalUnknown,
+  resolveEcological,
+  resolveIdentificationBadge,
+} from "@/utils/visits";
 
 type Props = {
   visits: BirdVisit[];
@@ -76,6 +85,8 @@ export function GalleryGrid({
   const [toast, setToast] = useState<string | null>(null);
   // Visita cujo clipe está aberto no player de vídeo (null = fechado).
   const [playingVisit, setPlayingVisit] = useState<BirdVisit | null>(null);
+  // Visita aberta no modal de reclassificação (null = fechado).
+  const [reclassifyVisit, setReclassifyVisit] = useState<BirdVisit | null>(null);
   // Visita cujo Reel vertical está sendo gerado/preview (null = fechado).
   const [reelVisit, setReelVisit] = useState<BirdVisit | null>(null);
   const [reelInfo, setReelInfo] = useState<ReelInfo | null>(null);
@@ -213,7 +224,7 @@ export function GalleryGrid({
       });
       setToast(
         result.training_queued
-          ? "Detecção confirmada — amostra enviada ao Bem-Ti-Vi Core."
+          ? "Detecção confirmada — amostra enviada ao Bem-Te-Vi Core."
           : result.training_reason ||
               "Detecção confirmada para a memória do jardim.",
       );
@@ -281,7 +292,7 @@ export function GalleryGrid({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `bem-te-vi-visitas-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `bem-te-vi-monitor-visitas-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -390,18 +401,16 @@ export function GalleryGrid({
             const catalogEntry = visit.species_id
               ? catalogSpecies.find((item) => item.id === visit.species_id)
               : undefined;
+            const ecological = resolveEcological(visit, catalogEntry);
+            // O selo "⚪ Status desconhecido" é omitido: a identificação já é
+            // comunicada pelo badge elegante ("Identificado pelo Bem-Te-Vi Core" /
+            // "Espécie Confirmada") exibido no topo do card.
             const ecologicalBadge =
-              visit.metadata?.ecological?.badge ??
-              catalogEntry?.ecological_badge ??
-              undefined;
-            const ecologicalStatus =
-              visit.metadata?.ecological?.status ??
-              catalogEntry?.ecological_status ??
-              undefined;
-            const ecologicalLabel =
-              visit.metadata?.ecological?.label ??
-              catalogEntry?.ecological_status_label ??
-              "";
+              ecological && !isEcologicalUnknown(ecological)
+                ? (ecological.badge ?? undefined)
+                : undefined;
+            const ecologicalStatus = ecological?.status;
+            const ecologicalLabel = ecological?.label ?? "";
             const isRareSpecies = ecologicalStatus === "rara";
             const individualsPeak = visit.metadata?.individuals_peak ?? 0;
             const individualsSummary = visit.metadata?.individuals_summary;
@@ -418,6 +427,8 @@ export function GalleryGrid({
                   ? "bg-amber-400"
                   : "bg-red-400";
             const aiAnnotation = visit.metadata?.ai_analysis?.annotation;
+            // Selo de identificação (substitui a antiga tag "Desconhecido").
+            const identificationBadge = resolveIdentificationBadge(visit);
             return (
               <article
                 key={visit.id}
@@ -465,7 +476,7 @@ export function GalleryGrid({
                       HD
                     </span>
                   ) : null}
-                  {/* Recorte focado da ave (close-up tratado pelo Alaris Core):
+                  {/* Recorte focado da ave (close-up tratado pelo Bem-Te-Vi Core):
                       clicar nele abre **direto** a ficha ornitológica da IA
                       externa daquela ave — sem passo extra. */}
                   {visit.metadata?.crop_path && !cropFailures.has(visit.id) ? (
@@ -496,6 +507,15 @@ export function GalleryGrid({
                   <p className="font-medium text-[var(--color-text-primary)]">
                     {formatSpeciesLabel(visit.species)}
                   </p>
+                  {identificationBadge ? (
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${identificationBadge.className}`}
+                      title={identificationBadge.title}
+                    >
+                      <CheckCircle2 className="h-2.5 w-2.5" />
+                      {identificationBadge.label}
+                    </span>
+                  ) : null}
                   {visit.assigned_species_scientific_name ? (
                     <p className="text-xs italic text-[var(--color-text-muted)]">
                       {visit.assigned_species_scientific_name}
@@ -612,6 +632,29 @@ export function GalleryGrid({
                       {assignmentError.message}
                     </p>
                   ) : null}
+                  {/* Exportação do recorte HD + curadoria (reclassificação). */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    {visit.metadata?.crop_path ? (
+                      <a
+                        href={visitCropDownloadUrl(visit.id)}
+                        download
+                        title="Baixar o recorte da ave em alta resolução (JPEG HD)"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-sky-400/40 bg-sky-500/10 px-2.5 py-1.5 text-xs font-semibold text-sky-200 transition hover:bg-sky-500/20"
+                      >
+                        <ImageDown className="h-3.5 w-3.5" />
+                        Baixar Recorte HD (Crop)
+                      </a>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => setReclassifyVisit(visit)}
+                      title="A associação está errada? Escolha a espécie correta — o recorte é salvo para o retreinamento do Core"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-2.5 py-1.5 text-xs font-semibold text-cyan-200 transition hover:bg-cyan-500/20"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      Associação Incorreta / Reclassificar
+                    </button>
+                  </div>
                   {alreadyExternallyIdentified ? (
                     <p className="text-[11px] text-emerald-300">
                       Identificado por IA Externa
@@ -757,6 +800,22 @@ export function GalleryGrid({
       <SpeciesAiConsultModal
         visit={consultVisit}
         onClose={() => setConsultVisit(null)}
+      />
+      {/* Modal de curadoria: "Associação Incorreta / Reclassificar". */}
+      <ReclassifySpeciesModal
+        visit={reclassifyVisit}
+        species={catalogSpecies}
+        onClose={() => setReclassifyVisit(null)}
+        onReclassified={(updated) => {
+          setIdentificationOverrides((current) => ({
+            ...current,
+            [updated.id]: updated,
+          }));
+          setToast(
+            "Correção salva — o recorte foi enviado para o retreinamento do Core.",
+          );
+          onVisitUpdated();
+        }}
       />
       {/* Preview do Reel vertical (9:16) gerado para redes sociais */}
       {reelVisit ? (

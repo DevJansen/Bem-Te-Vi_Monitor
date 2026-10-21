@@ -188,7 +188,7 @@ def ask_ai_about_species(
             detail="Cadastre o nome popular ou científico antes de consultar a IA.",
         )
 
-    # Envia a foto de referência tratada (close-up do Alaris), se disponível.
+    # Envia a foto de referência tratada (close-up do Bem-Te-Vi Core), se disponível.
     image_bytes: bytes | None = None
     image_source: str | None = None
     reference_path = row.get("reference_image_path")

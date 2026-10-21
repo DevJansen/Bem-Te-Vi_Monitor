@@ -72,7 +72,7 @@ def export_field_journal_ebird(
         media_type="text/csv; charset=utf-8",
         headers={
             "Content-Disposition": (
-                f'attachment; filename="ebird-bem-te-vi-{reference_day}.csv"'
+                f'attachment; filename="ebird-bem-te-vi-monitor-{reference_day}.csv"'
             )
         },
     )
@@ -106,7 +106,7 @@ def export_field_journal_csv(
         media_type="text/csv; charset=utf-8",
         headers={
             "Content-Disposition": (
-                f'attachment; filename="diario-campo-bem-te-vi-{reference_day}.csv"'
+                f'attachment; filename="diario-campo-bem-te-vi-monitor-{reference_day}.csv"'
             )
         },
     )

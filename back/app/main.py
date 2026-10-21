@@ -1,4 +1,4 @@
-"""Bem-Te-Vi API — entry point."""
+"""Bem-Te-Vi Core API — entry point (motor do Bem-Te-Vi Monitor)."""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 instalar_sanitizador()
-logger = logging.getLogger("bem-te-vi")
+logger = logging.getLogger("bem-te-vi-core")
 
 
 @asynccontextmanager
@@ -116,7 +116,8 @@ async def lifespan(app: FastAPI):
         supervisor.sync_from_db()
         audio_analysis.start()
         logger.info(
-            "Bem-Te-Vi ready — data dir=%s (local only, no cloud sync)",
+            "Bem-Te-Vi Core Backend iniciado com sucesso — data dir=%s "
+            "(local only, no cloud sync)",
             settings.app_data_dir,
         )
     except Exception:
@@ -214,7 +215,7 @@ async def lifespan(app: FastAPI):
     app.state.settings = settings
     yield
 
-    logger.info("Shutting down Bem-Te-Vi…")
+    logger.info("Shutting down Bem-Te-Vi Core…")
     try:
         if retention_worker is not None:
             retention_worker.stop()
@@ -267,8 +268,10 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Bem-Te-Vi",
-    description="Sistema local de monitoramento de avifauna por IA",
+    title="Bem-Te-Vi Core API",
+    description=(
+        "Motor inteligente de monitoramento de vida silvestre do Bem-Te-Vi Monitor"
+    ),
     version="0.2.0",
     lifespan=lifespan,
 )
@@ -334,7 +337,7 @@ async def root() -> str:
 <head>
   <meta charset="utf-8" />
   <meta http-equiv="refresh" content="0;url=http://127.0.0.1:5173" />
-  <title>Bem-Te-Vi API</title>
+  <title>Bem-Te-Vi Core API</title>
   <style>
     body { font-family: Segoe UI, sans-serif; background:#0a0f0d; color:#e8f5ef;
            display:flex; min-height:100vh; align-items:center; justify-content:center; }
@@ -344,7 +347,7 @@ async def root() -> str:
 </head>
 <body>
   <div class="box">
-    <h1>Bem-Te-Vi — API</h1>
+    <h1>Bem-Te-Vi Core — API</h1>
     <p>Esta é a porta da <strong>API</strong> (8000), não o painel.</p>
     <p>Abra o painel em <a href="http://127.0.0.1:5173">http://127.0.0.1:5173</a></p>
     <p>Docs: <a href="/docs">/docs</a></p>

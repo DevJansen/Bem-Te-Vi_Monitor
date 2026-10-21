@@ -65,9 +65,23 @@ import type {
   ReelInfo,
 } from "@/types";
 
+/**
+ * Origem da API (opcional).
+ *
+ * No uso normal (navegador + proxy do Vite) as URLs são **relativas** e ficam
+ * no mesmo host da interface. Na versão desktop (Tauri) a interface é servida
+ * pelo próprio app, então é preciso apontar para o backend local:
+ *
+ * - `VITE_API_BASE`   → base do cliente Axios (padrão: `/api`);
+ * - `VITE_API_ORIGIN` → prefixo absoluto das URLs de mídia/API
+ *   (padrão: vazio, ou seja, URLs relativas).
+ */
+const API_BASE = import.meta.env.VITE_API_BASE ?? "/api";
+const API_ORIGIN = import.meta.env.VITE_API_ORIGIN ?? "";
+
 /** Cliente Axios apontando para a API FastAPI local (proxy Vite → :8000). */
 export const api = axios.create({
-  baseURL: "/api",
+  baseURL: API_BASE,
   timeout: 20_000,
   headers: {
     "Content-Type": "application/json",
@@ -124,7 +138,7 @@ export async function updateCamera(
   return data;
 }
 
-/** Liga ou desliga o Alaris Core (IA visual - YOLOv8 + gravação) para uma câmera específica. */
+/** Liga ou desliga o Bem-Te-Vi Core (IA visual - YOLOv8 + gravação) para uma câmera específica. */
 export async function toggleCameraAi(
   cameraId: string,
   enabled: boolean,
@@ -212,7 +226,7 @@ export async function deleteCamera(id: string): Promise<void> {
 
 /* ——— Multi-Câmera / Streams (Central de Câmeras) ——— */
 
-/** Estado em tempo real de cada stream (Alaris Core distribuído). */
+/** Estado em tempo real de cada stream (Bem-Te-Vi Core distribuído). */
 export async function fetchStreams(): Promise<StreamStats[]> {
   const { data } = await api.get<StreamStats[]>("/streams");
   return data;
@@ -223,7 +237,7 @@ export async function fetchStreams(): Promise<StreamStats[]> {
  * o backend descriptografa as credenciais em memória e retransmite os quadros.
  */
 export function streamProxyUrl(cameraId: string): string {
-  return `/api/streams/proxy/${encodeURIComponent(cameraId)}`;
+  return `${API_ORIGIN}/api/streams/proxy/${encodeURIComponent(cameraId)}`;
 }
 
 export async function uploadOfflineVideo(
@@ -551,12 +565,12 @@ export async function fetchBioacousticsSummary(
 
 /** URL do stream de áudio ao vivo da câmera (player do painel). */
 export function cameraAudioUrl(cameraId: string): string {
-  return `/api/bioacoustics/audio/${cameraId}`;
+  return `${API_ORIGIN}/api/bioacoustics/audio/${cameraId}`;
 }
 
 /** URL de download do Laudo Ornitológico em PDF. */
 export function laudoPdfUrl(): string {
-  return "/api/analytics/report/pdf";
+  return `${API_ORIGIN}/api/analytics/report/pdf`;
 }
 export async function fetchTodayVisits(
   limit = 50,
@@ -644,7 +658,7 @@ export async function fetchAudioDetectionPage(
 
 /** URL do clipe de áudio gravado da detecção (player integrado ao card). */
 export function audioDetectionClipUrl(detectionId: string): string {
-  return `/api/audio-detections/${encodeURIComponent(detectionId)}/audio`;
+  return `${API_ORIGIN}/api/audio-detections/${encodeURIComponent(detectionId)}/audio`;
 }
 
 /** Associa **manualmente** a detecção sonora à espécie selecionada da Life List. */
@@ -795,11 +809,11 @@ export async function fetchGeminiModels(): Promise<string[]> {
 /* ——— Mídia / stream ——— */
 
 export function videoFeedUrl(cameraId: string, boxes = true): string {
-  return `/api/video-feed/${encodeURIComponent(cameraId)}?boxes=${boxes}`;
+  return `${API_ORIGIN}/api/video-feed/${encodeURIComponent(cameraId)}?boxes=${boxes}`;
 }
 
 export function snapshotUrl(cameraId: string, boxes = true): string {
-  return `/api/video-feed/${encodeURIComponent(cameraId)}/snapshot?boxes=${boxes}&t=${Date.now()}`;
+  return `${API_ORIGIN}/api/video-feed/${encodeURIComponent(cameraId)}/snapshot?boxes=${boxes}&t=${Date.now()}`;
 }
 
 export function resolveMediaUrl(pathOrUrl: string | null | undefined): string | null {
@@ -808,18 +822,64 @@ export function resolveMediaUrl(pathOrUrl: string | null | undefined): string | 
     return pathOrUrl;
   }
   if (pathOrUrl.startsWith("/")) return pathOrUrl;
-  return `/captures/${pathOrUrl.replace(/^captures\//, "")}`;
+  return `${API_ORIGIN}/captures/${pathOrUrl.replace(/^captures\//, "")}`;
 }
 
 /**
- * URL do recorte (close-up) da ave tratado pelo Alaris Core.
+ * URL do recorte (close-up) da ave tratado pelo Bem-Te-Vi Core.
  *
  * Os recortes ficam em `app-data/crops` (irmã da pasta estática `captures`),
  * por isso são servidos pelo endpoint dedicado `/api/visits/{id}/crop` — e não
  * por `/captures/crops/...`.
  */
 export function visitCropUrl(visitId: string): string {
-  return `/api/visits/${encodeURIComponent(visitId)}/crop`;
+  return `${API_ORIGIN}/api/visits/${encodeURIComponent(visitId)}/crop`;
+}
+
+/**
+ * URL de download do **recorte HD** (close-up em alta resolução).
+ *
+ * O endpoint reescala e realça o recorte tratado, devolvendo um JPEG otimizado
+ * como anexo (`Content-Disposition: attachment`) — pronto para compartilhar,
+ * imprimir ou usar como material de retreinamento.
+ */
+export function visitCropDownloadUrl(visitId: string): string {
+  return `${API_ORIGIN}/api/visits/${encodeURIComponent(visitId)}/crop/hd`;
+}
+
+/**
+ * Reclassifica uma visita (botão "Associação Incorreta / Reclassificar").
+ *
+ * Aplica a espécie correta escolhida no modal, grava o recorte em
+ * `app-data/fine_tuning/` (material de retreinamento) e alimenta o aprendizado
+ * ativo do Bem-Te-Vi Core.
+ */
+export async function reclassifyVisitSpecies(
+  visitId: string,
+  speciesId: string,
+  notes?: string | null,
+): Promise<BirdVisit> {
+  const { data } = await api.post<BirdVisit>(
+    `/visits/${encodeURIComponent(visitId)}/reclassify`,
+    { species_id: speciesId, notes: notes ?? null },
+    { timeout: 30_000 },
+  );
+  return data;
+}
+
+/**
+ * Reexecuta a auto-associação visual (Bem-Te-Vi Core) sob demanda.
+ *
+ * Útil quando o Catálogo Local ganhou novas fotos de referência depois da
+ * captura. Visitas com curadoria humana são preservadas pelo backend.
+ */
+export async function autoIdentifyVisit(visitId: string): Promise<BirdVisit> {
+  const { data } = await api.post<BirdVisit>(
+    `/visits/${encodeURIComponent(visitId)}/auto-identify`,
+    undefined,
+    { timeout: 30_000 },
+  );
+  return data;
 }
 
 /* ——— Insights preditivos, Radar Global e Momentos Raros ——— */
@@ -873,7 +933,7 @@ export async function refreshRareMoments(
 
 /** URL de download da foto de postal (moldura + marca d'água). */
 export function rareMomentPostcardUrl(visitId: string): string {
-  return `/api/gallery/rare-moments/${encodeURIComponent(visitId)}/postcard`;
+  return `${API_ORIGIN}/api/gallery/rare-moments/${encodeURIComponent(visitId)}/postcard`;
 }
 
 /* ——— Inteligência adaptativa ———
@@ -903,7 +963,7 @@ export async function fetchActiveLearningStatus(): Promise<ActiveLearningStatus>
   return data;
 }
 
-/** Dispara o fine-tuning incremental ("Otimizar Bem-Ti-Vi Core"). */
+/** Dispara o fine-tuning incremental ("Otimizar Bem-Te-Vi Core"). */
 export async function optimizeCore(): Promise<ActiveLearningStatus> {
   const { data } = await api.post<ActiveLearningStatus>(
     "/ai/learning/optimize",
@@ -1000,7 +1060,7 @@ function journalExportUrl(
 ): string {
   const params = new URLSearchParams({ date });
   if (cameraId) params.set("camera_id", cameraId);
-  return `/api/journal/export/${format}?${params.toString()}`;
+  return `${API_ORIGIN}/api/journal/export/${format}?${params.toString()}`;
 }
 
 /** URL de download do checklist no formato de importação do eBird. */
@@ -1013,7 +1073,7 @@ export function fieldJournalCsvUrl(date: string, cameraId?: string): string {
   return journalExportUrl("csv", date, cameraId);
 }
 
-/* ——— Rede Global Bem-Ti-Vi ——— */
+/* ——— Rede Global Bem-Te-Vi ——— */
 
 /** Destaques recentes do jardim e das instâncias parceiras. */
 export async function fetchNetworkFeed(limit = 12): Promise<NetworkFeed> {
@@ -1060,5 +1120,5 @@ export async function generateReel(
 
 /** URL pública do Reel vertical de uma visita. */
 export function reelUrl(visitId: string): string {
-  return `/api/media/reel/${encodeURIComponent(visitId)}`;
+  return `${API_ORIGIN}/api/media/reel/${encodeURIComponent(visitId)}`;
 }

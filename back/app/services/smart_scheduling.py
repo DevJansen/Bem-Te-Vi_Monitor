@@ -1,6 +1,6 @@
 """Agendamento Inteligente e Economia de Recursos (Smart Scheduling).
 
-O Alaris Core ajusta a carga do motor de IA conforme o horário local da câmera:
+O Bem-Te-Vi Core ajusta a carga do motor de IA conforme o horário local da câmera:
 
 * **Horários de pico** (manhã e tardinha): análise em plena capacidade.
 * **Madrugada/silêncio absoluto**: reduz a taxa de frames ou pausa a análise
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 class ModoVarredura(str, Enum):
-    """Modo de varredura do Alaris Core."""
+    """Modo de varredura do Bem-Te-Vi Core."""
 
     PLENO = "pleno"            # análise em capacidade total
     ECONOMIA = "economia"      # taxa de frames reduzida

@@ -145,7 +145,7 @@ def ai_logs(
 
 @router.get("/learning/status", response_model=ActiveLearningStatusOut)
 def ai_learning_status() -> ActiveLearningStatusOut:
-    """Fila de amostras e histórico de fine-tuning do Bem-Ti-Vi Core."""
+    """Fila de amostras e histórico de fine-tuning do Bem-Te-Vi Core."""
     try:
         status = get_active_learning_service().status()
         return ActiveLearningStatusOut(**status)
@@ -159,7 +159,7 @@ def ai_learning_status() -> ActiveLearningStatusOut:
 
 @router.post("/learning/optimize", response_model=ActiveLearningStatusOut)
 def ai_learning_optimize() -> ActiveLearningStatusOut:
-    """Dispara o fine-tuning incremental ("Otimizar Bem-Ti-Vi Core")."""
+    """Dispara o fine-tuning incremental ("Otimizar Bem-Te-Vi Core")."""
     try:
         status = get_active_learning_service().start_fine_tuning()
         return ActiveLearningStatusOut(**status)
@@ -169,7 +169,7 @@ def ai_learning_optimize() -> ActiveLearningStatusOut:
         logger.exception("ai_learning_optimize failed")
         raise HTTPException(
             status_code=500,
-            detail="Falha ao iniciar a otimização do Bem-Ti-Vi Core",
+            detail="Falha ao iniciar a otimização do Bem-Te-Vi Core",
         ) from exc
 
 

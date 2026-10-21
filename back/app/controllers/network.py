@@ -1,4 +1,4 @@
-"""Rotas da Rede Global Bem-Ti-Vi (feed e webhook entre jardins).
+"""Rotas da Rede Global Bem-Te-Vi Monitor (feed e webhook entre jardins).
 
 O webhook é **opcional** e só aceita eventos quando ``GLOBAL_NETWORK_TOKEN``
 está definido. O token deve ser enviado no cabeçalho ``X-Bem-Te-Vi-Token``.
@@ -41,7 +41,7 @@ def get_global_feed(
         logger.exception("get_global_feed failed")
         raise HTTPException(
             status_code=500,
-            detail="Não foi possível carregar o Feed Global Bem-Ti-Vi.",
+            detail="Não foi possível carregar o Feed Global Bem-Te-Vi.",
         ) from exc
 
 
@@ -69,12 +69,12 @@ def receive_global_webhook(
         description="Segredo compartilhado configurado em GLOBAL_NETWORK_TOKEN.",
     ),
 ) -> NetworkWebhookResultOut:
-    """Recebe um destaque de outra instância Bem-Ti-Vi (rota opcional)."""
+    """Recebe um destaque de outra instância Bem-Te-Vi (rota opcional)."""
     settings = get_settings()
     if not settings.global_network_enabled:
         raise HTTPException(
             status_code=503,
-            detail="A Rede Global Bem-Ti-Vi está desativada nesta instância.",
+            detail="A Rede Global Bem-Te-Vi Monitor está desativada nesta instância.",
         )
     if not settings.global_network_token:
         raise HTTPException(

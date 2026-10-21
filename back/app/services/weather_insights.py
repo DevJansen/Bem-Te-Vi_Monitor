@@ -538,7 +538,7 @@ def build_feeding_insight(
     """Cruza a **previsão** de um jardim com o comportamento histórico das aves.
 
     A pergunta que o card responde é prática: *vai chover no meu jardim e isso
-    muda a atividade dos pássaros?* O Alaris Core mede, no histórico daquele
+    muda a atividade dos pássaros?* O Bem-Te-Vi Core mede, no histórico daquele
     jardim, quantas visitas por dia acontecem em dias de chuva versus dias
     secos. Essa diferença vira a estimativa percentual exibida no painel.
 
@@ -634,7 +634,7 @@ def build_feeding_insight(
                 f"Atividade de pássaros tende a {verb} {percent:.0f}% {moment}."
             )
             detail = (
-                "O Alaris Core otimizou o buffer de captura e a sensibilidade "
+                "O Bem-Te-Vi Core otimizou o buffer de captura e a sensibilidade "
                 "para luz baixa."
             )
             action = "Buffer de captura reforçado · sensibilidade para luz baixa"
@@ -656,14 +656,14 @@ def build_feeding_insight(
                     if best_window
                     else ""
                 )
-                + " O Alaris Core mantém a captura em ritmo normal."
+                + " O Bem-Te-Vi Core mantém a captura em ritmo normal."
             )
             action = "Captura em ritmo normal · condições estáveis"
             tone = "positive"
     else:
         headline = f"🌐 Sem previsão online para {garden} agora."
         detail = (
-            "O Alaris Core segue monitorando normalmente e tentará atualizar a "
+            "O Bem-Te-Vi Core segue monitorando normalmente e tentará atualizar a "
             "previsão em alguns minutos."
         )
         action = "Monitoramento local contínuo"

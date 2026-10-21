@@ -30,7 +30,7 @@ const MODES: Array<{ value: GridMode; label: string; icon: typeof Square }> = [
  *
  * Cada feed usa o **proxy seguro** do backend (`/api/streams/proxy/{id}`), com
  * barra de ferramentas flutuante contendo os controles operacionais em tempo real:
- * - Ligar / Desligar Alaris Core (IA)
+ * - Ligar / Desligar Bem-Te-Vi Core (IA)
  * - Player de Áudio Ao Vivo (Mute / Unmute com volume)
  * - Monitorar Áudio (BirdNET)
  */
@@ -46,7 +46,7 @@ export function CameraWall({
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [stats, setStats] = useState<Record<string, StreamStats>>({});
 
-  // Polling do estado em tempo real do Alaris Core por stream.
+  // Polling do estado em tempo real do Bem-Te-Vi Core por stream.
   useEffect(() => {
     let active = true;
     const tick = async () => {
@@ -102,7 +102,7 @@ export function CameraWall({
             Mural de Câmeras
           </h2>
           <p className="text-sm text-[var(--color-text-muted)]">
-            Alaris Core ativo e independente em cada fluxo
+            Bem-Te-Vi Core ativo e independente em cada fluxo
           </p>
         </div>
         <div className="flex items-center gap-1 rounded-lg border border-dark-700 bg-dark-800 p-1">
@@ -185,7 +185,7 @@ function CameraTile({
   const offline = ["error", "stopped", "disabled"].includes(status);
   const avesAtivas = stats?.active_birds ?? 0;
   const especiesAtivas = stats?.active_species ?? [];
-  // Alaris rastreando ativamente a ave no comedouro agora.
+  // Bem-Te-Vi Core rastreando ativamente a ave no comedouro agora.
   const rastreando = avesAtivas > 0;
 
   const connLabel = online ? "Online" : reconectando ? "Reconectando" : "Offline";
@@ -228,7 +228,7 @@ function CameraTile({
           </div>
         ) : null}
 
-        {/* Selo de conexão (Alaris Core) */}
+        {/* Selo de conexão (Bem-Te-Vi Core) */}
         <div className="absolute left-2 top-2 flex items-center gap-1.5 rounded-md bg-black/60 px-2 py-1 backdrop-blur-sm">
           <span className={cn("h-1.5 w-1.5 rounded-full", dotTone)} />
           <span className={cn("text-[11px] font-semibold", connTone)}>
@@ -299,7 +299,7 @@ function CameraTile({
         </div>
         <span className="inline-flex shrink-0 items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-400/80">
           <Wifi className="h-3 w-3" />
-          Alaris
+          Bem-Te-Vi Core
         </span>
       </div>
     </article>

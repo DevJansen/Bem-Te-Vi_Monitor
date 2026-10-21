@@ -15,7 +15,7 @@ camada (core, domain, services) sem risco de importação circular.
 
 from __future__ import annotations
 
-#: Modelo padrão do Bem-Ti-Vi (rápido, leve, com visão e **validado** na API).
+#: Modelo padrão do Bem-Te-Vi (rápido, leve, com visão e **validado** na API).
 #: Modelos antigos (``gemini-1.5-*``/``gemini-2.5-*``) foram descontinuados pelo
 #: Google e respondem ``404 NOT_FOUND`` para chaves novas — usá-los como padrão
 #: fazia a IA "quebrar" logo na primeira consulta.

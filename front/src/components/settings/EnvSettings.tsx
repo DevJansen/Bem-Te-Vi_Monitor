@@ -634,7 +634,7 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
               onClearChange={(clearAiExternal) =>
                 setDraft({ ...draft, clearAiExternal })
               }
-              hint="O Google Gemini é o único provedor de IA do Bem-Ti-Vi. Ele identifica as aves nas fotos, interpreta os espectrogramas dos cantos e monta a ficha ornitológica — tudo local, sem enviar imagens para nenhum outro serviço."
+              hint="O Google Gemini é o único provedor de IA do Bem-Te-Vi. Ele identifica as aves nas fotos, interpreta os espectrogramas dos cantos e monta a ficha ornitológica — tudo local, sem enviar imagens para nenhum outro serviço."
               fields={[
                 {
                   label: "Chave da API (GEMINI_API_KEY)",

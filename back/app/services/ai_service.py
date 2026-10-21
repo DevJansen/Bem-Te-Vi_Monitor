@@ -1,6 +1,6 @@
 """Serviço de Inteligência Artificial Externa — Google Gemini (provedor único).
 
-Este módulo é o **único** ponto de contato do Bem-Ti-Vi com a IA externa.
+Este módulo é o **único** ponto de contato do Bem-Te-Vi com a IA externa.
 Todas as identificações de aves por imagem/espectrograma e todas as consultas
 ornitológicas profundas usam exclusivamente a biblioteca oficial
 ``google-genai`` (sucessor do ``google-generativeai``) com o modelo Gemini
@@ -743,7 +743,7 @@ def build_consult_prompt(common_name: str, scientific_name: str) -> str:
 def _normalize_consult(
     raw: dict[str, Any], *, common_name: str, scientific_name: str
 ) -> dict[str, Any]:
-    """Normaliza o JSON devolvido pelo Gemini para o formato do Bem-Ti-Vi."""
+    """Normaliza o JSON devolvido pelo Gemini para o formato do Bem-Te-Vi."""
 
     def _texto(chave: str) -> str:
         valor = raw.get(chave)

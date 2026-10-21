@@ -1,18 +1,33 @@
-"""Overlays visuais do Alaris Core (caixas modernas + selos de identificação).
+"""Overlays visuais do Bem-Te-Vi Core (caixas modernas + selos de identificação).
 
 Este módulo desenha, sobre os quadros do OpenCV:
 
-- **Caixas delimitadoras arredondadas** ao redor de cada ave/fauna, na cor do
-  Alaris (esmeralda para aves, âmbar para fauna noturna).
-- **Selos flutuantes** acima da caixa com a marca ``Alaris AI``, o nome da
-  espécie identificada e o escore de confiança (ex.: ``Tangara sayaca  96%``).
+- **Caixas delimitadoras modernizadas** ao redor de cada ave/fauna, com
+  cantos sutilmente arredondados, borda de **2 px semi-transparente** e cor
+  dinâmica conforme o **status da identificação**:
+
+  * **Ciano / Azul Prussiano** — ave **confirmada** (nome real de espécie);
+  * **Âmbar** — **pré-associação** (ainda sem espécie: aguardando o Bem-Te-Vi Core
+    Core ou a curadoria do observador);
+  * **Rosa** — fauna não-ave (Visitante Especial).
+
+- **Selos flutuantes** em *dark mode* (fundo ``slate-900`` translúcido, texto
+  claro e destaque na cor do status) com a identificação real da ave, no formato
+  ``Cardeal-do-norte • 88%``. A legenda genérica *"pássaro 25%"* foi removida:
+  enquanto não há espécie, o selo informa ``Aguardando ID`` **sem** exibir uma
+  confiança que não é da espécie.
+
 - **Tarja de identificação** (watermark/legenda) para os clipes gravados,
   garantindo que o vídeo salvo já mostre a espécie mesmo fora do painel.
 
-Tudo é desenhado de forma leve (poucas chamadas por caixa, com antialiasing e
-sem cópias extras de quadro) para **não introduzir atraso no stream em tempo
-real**. As fontes do OpenCV só renderizam ASCII, por isso o "brilho" da marca é
-desenhado como um pequeno losango (sparkle) em vez de emoji.
+Tudo é desenhado de forma leve (poucas chamadas por caixa, com antialiasing,
+mistura alfa restrita à região do desenho e sem cópias extras do quadro inteiro)
+para **não introduzir atraso no stream em tempo real**.
+
+Detalhe técnico: as fontes do OpenCV só renderizam ASCII. Por isso o "•" do
+rótulo é desenhado como um pequeno círculo (via ``cv2.circle``) e o "✨" da
+marca como um losango (``_draw_sparkle``) — nenhum caractere Unicode é
+passado a ``cv2.putText``.
 """
 
 from __future__ import annotations
@@ -20,26 +35,51 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
+from app.domain.species_labels import is_generic_species
 from app.infra.ai.detector import Detection, translate_class_name
 
-# --- Paleta do Alaris Core (BGR) ----------------------------------------- #
-EMERALD_BGR = (16, 200, 80)      # aves (verde esmeralda)
-FAUNA_BGR = (40, 170, 240)       # fauna noturna (âmbar)
-TAG_BG_BGR = (16, 20, 18)        # fundo escuro do selo (dark mode)
-TAG_TEXT_BGR = (236, 241, 238)   # texto claro
-TAG_MUTED_BGR = (150, 168, 158)  # texto secundário
+# --- Paleta do Bem-Te-Vi Core (BGR) ----------------------------------------- #
+CONFIRMED_BGR = (238, 211, 34)   # ciano #22D3EE — ave confirmada
+PRUSSIAN_BGR = (107, 59, 18)    # azul prussiano moderno #123B6B
+PENDING_BGR = (11, 158, 245)     # âmbar #F59E0B — pré-associação
+FAUNA_BGR = (182, 114, 244)      # rosa #F472B6 — fauna não-ave
+TAG_BG_BGR = (42, 23, 15)        # fundo dark mode do selo (slate-900)
+TAG_TEXT_BGR = (240, 232, 226)   # texto claro (slate-200)
+TAG_MUTED_BGR = (184, 163, 148)  # texto secundário (slate-400)
 BANNER_BG_BGR = (10, 13, 12)     # fundo da tarja do clipe
 
 # Marca do motor. Mantida em ASCII (putText não renderiza emoji).
-ALARIS_LABEL = "Alaris AI"
+ALARIS_LABEL = "Bem-Te-Vi Core"
+
+#: Marca exibida no selo (alias oficial do nome do motor).
+CORE_LABEL = ALARIS_LABEL
+# Rótulo usado enquanto a ave ainda não tem espécie associada.
+PENDING_LABEL = "Aguardando ID"
 
 BOX_THICKNESS = 2
 CORNER_RADIUS = 10
+# Opacidade da borda da caixa (2 px) — semi-transparente, como no design system.
+BOX_ALPHA = 0.85
+# Opacidade do fundo do selo (equivalente a bg-slate-900/90).
+TAG_ALPHA = 0.90
 
 
-def _color_for(class_name: str) -> tuple[int, int, int]:
-    """Cor da caixa conforme a classe: ave (esmeralda) ou fauna (âmbar)."""
-    return EMERALD_BGR if str(class_name).strip().lower() == "bird" else FAUNA_BGR
+def _is_identified(label: str | None) -> bool:
+    """Indica se o rótulo já é uma espécie real (não um rótulo genérico)."""
+    return not is_generic_species(label)
+
+
+def _color_for(class_name: str, label: str | None = None) -> tuple[int, int, int]:
+    """Cor da caixa conforme a classe e o status da identificação.
+
+    * ave **confirmada** → ciano;
+    * ave em **pré-associação** → âmbar;
+    * fauna (não-ave) → rosa.
+    """
+    is_bird = str(class_name).strip().lower() == "bird"
+    if not is_bird:
+        return FAUNA_BGR
+    return CONFIRMED_BGR if _is_identified(label) else PENDING_BGR
 
 
 def _rounded_rectangle(
@@ -54,7 +94,7 @@ def _rounded_rectangle(
     radius: int = CORNER_RADIUS,
     fill: bool = False,
 ) -> None:
-    """Desenha um retângulo de cantos arredondados (contorno ou preenchido).
+    """Desenha um retângulo de cantos arredondados (contorno ou preenchimento).
 
     Feito com 4 retas + 4 arcos de elipse — barato e com antialiasing, sem
     depender de bibliotecas externas.
@@ -87,6 +127,74 @@ def _rounded_rectangle(
         )
 
 
+def _soft_shape(
+    img: np.ndarray,
+    x1: int,
+    y1: int,
+    x2: int,
+    y2: int,
+    color: tuple[int, int, int],
+    *,
+    thickness: int = 1,
+    radius: int = CORNER_RADIUS,
+    alpha: float = BOX_ALPHA,
+    fill: bool = False,
+) -> None:
+    """Desenha uma forma arredondada **semi-transparente**.
+
+    A mistura alfa é restrita à região (ROI) afetada pelo desenho — o quadro
+    inteiro nunca é copiado, mantendo o custo por caixa muito baixo. A máscara
+    é suavizada com um blur de 3×3 para preservar o antialiasing nas bordas.
+    """
+    altura, largura = img.shape[:2]
+    pad = thickness + radius + 2
+    x0 = max(0, x1 - pad)
+    y0 = max(0, y1 - pad)
+    x3 = min(largura, x2 + pad + 1)
+    y3 = min(altura, y2 + pad + 1)
+    if x3 <= x0 or y3 <= y0:
+        return
+
+    roi = img[y0:y3, x0:x3]
+    local_x1 = x1 - x0
+    local_y1 = y1 - y0
+    local_x2 = x2 - x0
+    local_y2 = y2 - y0
+
+    overlay = roi.copy()
+    _rounded_rectangle(
+        overlay,
+        local_x1,
+        local_y1,
+        local_x2,
+        local_y2,
+        color,
+        thickness=thickness,
+        radius=radius,
+        fill=fill,
+    )
+    mask = np.zeros(roi.shape[:2], dtype=np.uint8)
+    _rounded_rectangle(
+        mask,
+        local_x1,
+        local_y1,
+        local_x2,
+        local_y2,
+        255,
+        thickness=thickness,
+        radius=radius,
+        fill=fill,
+    )
+    mask = cv2.GaussianBlur(mask, (3, 3), 0)
+
+    pesos = (mask.astype(np.float32) / 255.0) * float(alpha)
+    misturado = (
+        overlay.astype(np.float32) * pesos[..., None]
+        + roi.astype(np.float32) * (1.0 - pesos[..., None])
+    )
+    roi[:] = np.clip(misturado, 0, 255).astype(np.uint8)
+
+
 def _draw_sparkle(
     img: np.ndarray, cx: int, cy: int, size: int, color: tuple[int, int, int]
 ) -> None:
@@ -116,35 +224,87 @@ def _species_label(det: Detection, species_by_track: dict[int, str] | None) -> s
     return translate_class_name(det.class_name)
 
 
-def _draw_alaris_tag(
+def _draw_name_with_dot(
+    img: np.ndarray,
+    x: int,
+    y: int,
+    name: str,
+    percent: str | None,
+    *,
+    font: int,
+    scale: float,
+    thickness: int,
+    text_color: tuple[int, int, int],
+    dot_color: tuple[int, int, int],
+) -> int:
+    """Escreve ``<nome> • <NN>%`` e devolve a largura total (em px).
+
+    O separador "•" é um círculo desenhado (as fontes do OpenCV não suportam
+    Unicode), e a porcentagem só aparece quando a ave já tem espécie real — a
+    confiança do detector não é confiança de espécie.
+    """
+    cv2.putText(img, name, (x, y), font, scale, text_color, thickness, cv2.LINE_AA)
+    (name_w, _), _ = cv2.getTextSize(name, font, scale, thickness)
+    cursor = x + name_w
+    if not percent:
+        return cursor - x
+
+    gap = 8
+    radius = 2
+    cursor += gap
+    cv2.circle(img, (cursor + radius, y - 5), radius, dot_color, -1, cv2.LINE_AA)
+    cursor += radius * 2 + gap
+    cv2.putText(
+        img, percent, (cursor, y), font, scale, dot_color, thickness, cv2.LINE_AA
+    )
+    (pct_w, _), _ = cv2.getTextSize(percent, font, scale, thickness)
+    return cursor + pct_w - x
+
+
+def _draw_core_tag(
     annotated: np.ndarray,
     x1: int,
     y1: int,
     species: str,
     confidence: float,
     color: tuple[int, int, int],
+    *,
+    identified: bool = True,
 ) -> None:
-    """Desenha o selo flutuante do Alaris acima da caixa delimitadora.
+    """Desenha o selo flutuante do Bem-Te-Vi Core acima da caixa delimitadora.
 
-    Layout (2 linhas): ``Alaris AI`` (marca, na cor de destaque) e
-    ``<espécie>  <confiança>%`` (texto claro). O selo é posicionado acima da
-    caixa e, quando não há espaço, encaixado dentro do topo dela.
+    Layout (2 linhas) no estilo *dark mode*:
+
+    * linha 1 — ``Bem-Te-Vi Core`` (marca, na cor do status) com losango;
+    * linha 2 — ``<espécie> • <NN>%`` quando a ave está associada, ou
+      ``Aguardando ID`` enquanto a associação ainda não aconteceu.
+
+    O fundo é translúcido (``slate-900`` a 90%) e o selo é posicionado acima da
+    caixa; quando não há espaço, encaixa dentro do topo dela.
     """
     altura, largura = annotated.shape[:2]
     font = cv2.FONT_HERSHEY_SIMPLEX
     f1, t1 = 0.38, 1   # marca
     f2, t2 = 0.52, 1   # espécie + confiança
 
-    linha2 = f"{species}  {int(round(confidence * 100))}%"
+    nome = str(species or "").strip()
+    percentual = f"{int(round(float(confidence) * 100))}%" if identified else None
+    if not identified:
+        nome = PENDING_LABEL
+
     (w1, h1), b1 = cv2.getTextSize(ALARIS_LABEL, font, f1, t1)
-    (w2, h2), b2 = cv2.getTextSize(linha2, font, f2, t2)
+    (w_nome, h2), b2 = cv2.getTextSize(nome, font, f2, t2)
+    w_pct = 0
+    if percentual:
+        (w_pct, _), _ = cv2.getTextSize(percentual, font, f2, t2)
+    # Largura da linha 2: nome + separador + porcentagem.
+    largura_linha2 = w_nome + (8 * 2 + 4 + w_pct if percentual else 0)
 
     pad = 7
     accent_w = 4
     sparkle = 5
     gap = 6
-    # Largura do conteúdo = maior entre a 1ª linha (com sparkle) e a 2ª linha.
-    conteudo = max(sparkle * 2 + gap + w1, w2)
+    conteudo = max(sparkle * 2 + gap + w1, largura_linha2)
     tag_w = pad + accent_w + pad + conteudo + pad
     tag_h = pad + h1 + b1 + gap + h2 + b2 + pad
 
@@ -156,23 +316,41 @@ def _draw_alaris_tag(
         # Sem espaço acima: encaixa dentro do topo da caixa.
         tag_y = max(0, min(y1 + 2, altura - tag_h - 1))
 
-    # Sombra discreta + fundo escuro + borda de destaque (visual "dark tech").
-    _rounded_rectangle(
-        annotated, tag_x + 2, tag_y + 2, tag_x + tag_w + 2, tag_y + tag_h + 2,
-        (0, 0, 0), fill=True, radius=8,
+    # Fundo escuro translúcido + borda de destaque (visual "dark tech").
+    _soft_shape(
+        annotated,
+        tag_x,
+        tag_y,
+        tag_x + tag_w,
+        tag_y + tag_h,
+        TAG_BG_BGR,
+        radius=8,
+        alpha=TAG_ALPHA,
+        fill=True,
     )
-    _rounded_rectangle(
-        annotated, tag_x, tag_y, tag_x + tag_w, tag_y + tag_h,
-        TAG_BG_BGR, fill=True, radius=8,
+    _soft_shape(
+        annotated,
+        tag_x,
+        tag_y,
+        tag_x + tag_w,
+        tag_y + tag_h,
+        color,
+        thickness=1,
+        radius=8,
+        alpha=0.9,
+        fill=False,
     )
-    _rounded_rectangle(
-        annotated, tag_x, tag_y, tag_x + tag_w, tag_y + tag_h,
-        color, thickness=1, radius=8,
-    )
-    # Barra de destaque à esquerda (identidade visual do Alaris).
-    _rounded_rectangle(
-        annotated, tag_x, tag_y, tag_x + accent_w + 2, tag_y + tag_h,
-        color, fill=True, radius=3,
+    # Barra de destaque à esquerda (identidade visual do Bem-Te-Vi Core).
+    _soft_shape(
+        annotated,
+        tag_x,
+        tag_y,
+        tag_x + accent_w + 2,
+        tag_y + tag_h,
+        color,
+        radius=3,
+        alpha=1.0,
+        fill=True,
     )
 
     content_x = tag_x + pad + accent_w + 2
@@ -182,9 +360,17 @@ def _draw_alaris_tag(
         annotated, ALARIS_LABEL, (content_x + sparkle * 2 + gap, linha1_y),
         font, f1, color, t1, cv2.LINE_AA,
     )
-    cv2.putText(
-        annotated, linha2, (content_x, linha1_y + b1 + gap + h2),
-        font, f2, TAG_TEXT_BGR, t2, cv2.LINE_AA,
+    _draw_name_with_dot(
+        annotated,
+        content_x,
+        linha1_y + b1 + gap + h2,
+        nome,
+        percentual,
+        font=font,
+        scale=f2,
+        thickness=t2,
+        text_color=TAG_TEXT_BGR,
+        dot_color=color if identified else TAG_MUTED_BGR,
     )
 
 
@@ -194,12 +380,14 @@ def draw_bird_detections(
     *,
     min_confidence: float | None = None,
     species_by_track: dict[int, str] | None = None,
-    show_alaris: bool = True,
+    show_core: bool = True,
 ) -> np.ndarray:
-    """Retorna cópia do quadro com as caixas modernas e os selos do Alaris.
+    """Retorna cópia do quadro com as caixas modernas e os selos do Bem-Te-Vi Core.
 
     ``species_by_track`` mapeia ``track_id`` → nome da espécie identificada,
-    permitindo ao selo exibir o nome real da ave (e não apenas "Ave").
+    permitindo ao selo exibir o nome real da ave (e não apenas "Ave"). A cor da
+    caixa acompanha o status: **ciano** para ave confirmada e **âmbar** para a
+    pré-associação.
     """
     if frame is None or frame.size == 0:
         return frame
@@ -211,7 +399,9 @@ def draw_bird_detections(
         if min_confidence is not None and det.confidence < min_confidence:
             continue
 
-        color = _color_for(det.class_name)
+        rotulo = _species_label(det, species_by_track)
+        identified = _is_identified(rotulo)
+        color = _color_for(det.class_name, rotulo)
         x1, y1, x2, y2 = det.bbox
         x1_i = max(0, min(largura - 1, int(round(x1))))
         y1_i = max(0, min(altura - 1, int(round(y1))))
@@ -220,35 +410,56 @@ def draw_bird_detections(
         if x2_i <= x1_i or y2_i <= y1_i:
             continue
 
-        # Caixa arredondada (contorno) com um leve realce por dentro.
-        _rounded_rectangle(
-            annotated, x1_i, y1_i, x2_i, y2_i, color, thickness=BOX_THICKNESS
+        # Caixa arredondada com borda de 2 px semi-transparente.
+        _soft_shape(
+            annotated,
+            x1_i,
+            y1_i,
+            x2_i,
+            y2_i,
+            color,
+            thickness=BOX_THICKNESS,
+            radius=CORNER_RADIUS,
+            alpha=BOX_ALPHA,
         )
 
-        if show_alaris:
-            _draw_alaris_tag(
+        if show_core:
+            _draw_core_tag(
                 annotated,
                 x1_i,
                 y1_i,
-                _species_label(det, species_by_track),
+                rotulo,
                 det.confidence,
                 color,
+                identified=identified,
             )
         else:
             # Modo simples (compatibilidade): rótulo curto com a espécie/confiança.
-            pct = int(round(det.confidence * 100))
-            label = f"{_species_label(det, species_by_track)}: {pct}%"
+            pct = f"{int(round(det.confidence * 100))}%" if identified else None
+            font = cv2.FONT_HERSHEY_SIMPLEX
             (tw, th), baseline = cv2.getTextSize(
-                label, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1
+                rotulo if identified else PENDING_LABEL, font, 0.55, 1
             )
+            largura_texto = tw + (24 if pct else 0)
             topo = max(0, y1_i - th - baseline - 8)
             cv2.rectangle(
-                annotated, (x1_i, topo), (x1_i + tw + 8, max(th + baseline + 8, y1_i)),
-                color, -1,
+                annotated,
+                (x1_i, topo),
+                (x1_i + largura_texto + 8, max(th + baseline + 8, y1_i)),
+                color,
+                -1,
             )
-            cv2.putText(
-                annotated, label, (x1_i + 4, max(th + baseline + 4, y1_i) - baseline - 4),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (10, 20, 14), 1, cv2.LINE_AA,
+            _draw_name_with_dot(
+                annotated,
+                x1_i + 4,
+                max(th + baseline + 4, y1_i) - baseline - 4,
+                rotulo if identified else PENDING_LABEL,
+                pct,
+                font=font,
+                scale=0.55,
+                thickness=1,
+                text_color=TAG_BG_BGR,
+                dot_color=TAG_BG_BGR,
             )
 
     return annotated
@@ -276,28 +487,31 @@ def build_clip_banner(
     strip[:] = BANNER_BG_BGR
 
     font = cv2.FONT_HERSHEY_SIMPLEX
-    # Linha de destaque no topo da tarja (identidade do Alaris).
-    cv2.line(strip, (0, 0), (largura, 0), EMERALD_BGR, 2, cv2.LINE_AA)
+    # Linha de destaque no topo da tarja (identidade do Bem-Te-Vi Core).
+    cv2.line(strip, (0, 0), (largura, 0), CONFIRMED_BGR, 2, cv2.LINE_AA)
 
     x = 16
-    # Marca: sparkle + "Alaris AI".
-    _draw_sparkle(strip, x + 6, 20, 6, EMERALD_BGR)
+    # Marca: sparkle + "Bem-Te-Vi Core".
+    _draw_sparkle(strip, x + 6, 20, 6, CONFIRMED_BGR)
     cv2.putText(
-        strip, ALARIS_LABEL, (x + 20, 25), font, 0.5, EMERALD_BGR, 1, cv2.LINE_AA
+        strip, ALARIS_LABEL, (x + 20, 25), font, 0.5, CONFIRMED_BGR, 1, cv2.LINE_AA
     )
 
-    # Espécie (destaque) + confiança.
+    # Espécie (destaque) + separador + confiança.
+    rotulo = str(species).strip() or PENDING_LABEL
+    percentual = f"{int(round(float(confidence) * 100))}%"
     cv2.putText(
-        strip, str(species), (x, 50), font, 0.72, TAG_TEXT_BGR, 2, cv2.LINE_AA
+        strip, rotulo, (x, 50), font, 0.72, TAG_TEXT_BGR, 2, cv2.LINE_AA
     )
-    (tw, _), _ = cv2.getTextSize(str(species), font, 0.72, 2)
+    (tw, _), _ = cv2.getTextSize(rotulo, font, 0.72, 2)
+    cv2.circle(strip, (x + tw + 14, 42), 2, CONFIRMED_BGR, -1, cv2.LINE_AA)
     cv2.putText(
         strip,
-        f"{int(round(confidence * 100))}%",
-        (x + tw + 16, 50),
+        percentual,
+        (x + tw + 24, 50),
         font,
         0.62,
-        EMERALD_BGR,
+        CONFIRMED_BGR,
         2,
         cv2.LINE_AA,
     )

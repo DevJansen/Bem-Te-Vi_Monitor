@@ -141,7 +141,7 @@ def get_report_pdf():
             media_type="application/pdf",
             headers={
                 "Content-Disposition": (
-                    "attachment; filename=laudo-ornitologico-bem-te-vi.pdf"
+                    "attachment; filename=laudo-ornitologico-bem-te-vi-monitor.pdf"
                 )
             },
         )
@@ -412,7 +412,7 @@ def get_feeding_weather_insights(
 ) -> FeedingWeatherInsightsOut:
     """Previsão de chuva × comportamento histórico de alimentação.
 
-    Para cada jardim geolocalizado, o Alaris Core busca as próximas 12 horas na
+    Para cada jardim geolocalizado, o Bem-Te-Vi Core busca as próximas 12 horas na
     Open-Meteo e compara com o histórico **daquele** jardim (visitas/dia em dias
     de chuva versus dias secos). Sem nenhuma câmera geolocalizada, usa a
     localização global do alimentador (`LATITUDE`/`LONGITUDE`) como "Jardim

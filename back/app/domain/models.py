@@ -238,7 +238,7 @@ class VisitOut(BaseModel):
     humidity: float | None = None
     weather_code: str | None = None
     wind_speed: float | None = None
-    # Nitidez (variância do Laplaciano) calculada pelo Alaris Core para a
+    # Nitidez (variância do Laplaciano) calculada pelo Bem-Te-Vi Core para a
     # curadoria "Momentos Raros". Pode ser nula enquanto a foto não foi avaliada.
     sharpness: float | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -260,6 +260,18 @@ class BirdSpeciesOut(BaseModel):
 
 class VisitSpeciesAssignment(BaseModel):
     species_id: str | None
+
+
+class VisitReclassificationRequest(BaseModel):
+    """Correção humana de uma associação automática/incorreta.
+
+    ``species_id`` é obrigatório: reclassificar significa apontar a espécie
+    correta. ``notes`` é opcional e fica registrado no índice de fine-tuning
+    para auditoria (ex.: "era um sabiá-laranjeira, não um cardeal").
+    """
+
+    species_id: str
+    notes: str | None = Field(default=None, max_length=500)
 
 
 class AppSettingsOut(BaseModel):
@@ -534,7 +546,7 @@ class SpeciesSightingOut(BaseModel):
     detected_at: str
     confidence: float
     thumbnail_url: str | None = None
-    # Recorte tratado pelo Alaris Core (close-up da ave), servido por endpoint.
+    # Recorte tratado pelo Bem-Te-Vi Core (close-up da ave), servido por endpoint.
     crop_url: str | None = None
     temperature: float | None = None
     humidity: float | None = None
@@ -1090,7 +1102,7 @@ class FeedingWeatherHistoryOut(BaseModel):
 
 
 class FeedingWeatherGardenOut(BaseModel):
-    """Card de um jardim: previsão + histórico + frase do Alaris Core."""
+    """Card de um jardim: previsão + histórico + frase do Bem-Te-Vi Core."""
 
     camera_id: str
     garden: str
@@ -1170,7 +1182,7 @@ class GardenRadarOut(BaseModel):
 # Momentos Raros / Fotos de Postal
 # --------------------------------------------------------------------------- #
 class RareMomentOut(BaseModel):
-    """Uma captura selecionada pela curadoria do Alaris Core."""
+    """Uma captura selecionada pela curadoria do Bem-Te-Vi Core."""
 
     visit_id: str
     camera_id: str
@@ -1259,7 +1271,7 @@ class AiResourcesOut(BaseModel):
 class AiStatusOut(BaseModel):
     """Retrato completo do motor de IA para o painel "AI Core"."""
 
-    signature: str = "Alaris Core v1.0"
+    signature: str = "Bem-Te-Vi Core v1.0"
     engine: AiEngineOut
     throughput: AiThroughputOut
     performance: AiPerformanceOut
@@ -1297,7 +1309,7 @@ class AiLogsOut(BaseModel):
 
 
 class StreamStatsOut(BaseModel):
-    """Estado em tempo real de um stream (Alaris Core distribuído)."""
+    """Estado em tempo real de um stream (Bem-Te-Vi Core distribuído)."""
 
     camera_id: str
     name: str = ""
@@ -1401,7 +1413,7 @@ class ActiveLearningClassOut(BaseModel):
 
 
 class FineTuneRunOut(BaseModel):
-    """Um ciclo de fine-tuning do Bem-Ti-Vi Core (passado ou em andamento)."""
+    """Um ciclo de fine-tuning do Bem-Te-Vi Core (passado ou em andamento)."""
 
     id: str
     # queued | running | completed | failed
@@ -1626,7 +1638,7 @@ class FieldJournalOut(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Rede Global Bem-Ti-Vi (jardins conectados)
+# Rede Global Bem-Te-Vi (jardins conectados)
 # ---------------------------------------------------------------------------
 
 
@@ -1670,7 +1682,7 @@ class NetworkStatusOut(BaseModel):
 
 
 class NetworkWebhookPayload(BaseModel):
-    """Corpo aceito no webhook de uma instância parceira do Bem-Ti-Vi."""
+    """Corpo aceito no webhook de uma instância parceira do Bem-Te-Vi."""
 
     instance: str = Field(min_length=1, max_length=120)
     event_id: str | None = Field(default=None, max_length=160)

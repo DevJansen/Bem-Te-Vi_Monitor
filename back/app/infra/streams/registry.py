@@ -1,9 +1,9 @@
-"""Registro thread-safe de estatísticas por stream (Alaris Core distribuído).
+"""Registro thread-safe de estatísticas por stream (Bem-Te-Vi Core distribuído).
 
 Cada câmera ativa mantém seu próprio estado em tempo real (status de conexão,
 FPS, backend de inferência, aves ativas no comedouro, pico de indivíduos e
 inferências). O ``CameraPipeline`` publica esses dados a cada ciclo e a API/
-painel os consome — é o que alimenta os selos "Alaris Core" no grid multi-câmera.
+painel os consome — é o que alimenta os selos "Bem-Te-Vi Core" no grid multi-câmera.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ class StreamStats:
     # idle | connecting | online | reconnecting | error | stopped
     status: str = "idle"
     fps: float = 0.0
-    # Backend de inferência do Alaris neste fluxo (tensorrt | onnx | pytorch).
+    # Backend de inferência do Bem-Te-Vi Core neste fluxo (tensorrt | onnx | pytorch).
     backend: str | None = None
     # Aves ativas no comedouro/bebedouro neste instante.
     active_birds: int = 0

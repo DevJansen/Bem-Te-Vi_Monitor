@@ -93,12 +93,22 @@ function BrandBlock({ compact = false }: { compact?: boolean }) {
         <Bird className="h-5 w-5" strokeWidth={1.75} />
       </div>
       <div>
-        <p className="font-display text-base font-bold tracking-tight text-[var(--color-text-primary)]">
-          Bem-Te-Vi
+        <p
+          className={cn(
+            "font-display font-bold tracking-tight text-[var(--color-text-primary)]",
+            compact ? "text-sm" : "text-base",
+          )}
+        >
+          Bem-Te-Vi Monitor
         </p>
-        {!compact ? (
-          <p className="text-xs text-[var(--color-text-muted)]">Monitoramento local</p>
-        ) : null}
+        <p
+          className={cn(
+            "text-[var(--color-text-muted)]",
+            compact ? "text-[10px]" : "text-xs",
+          )}
+        >
+          powered by Bem-Te-Vi Core
+        </p>
       </div>
     </div>
   );

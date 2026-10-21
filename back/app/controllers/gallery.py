@@ -89,7 +89,7 @@ def download_postcard(visit_id: str) -> Response:
             status_code=404,
             detail="Foto não encontrada para gerar o postal.",
         )
-    filename = f"bem-te-vi-postal-{visit_id[:8]}.jpg"
+    filename = f"bem-te-vi-monitor-postal-{visit_id[:8]}.jpg"
     return Response(
         content=content,
         media_type="image/jpeg",

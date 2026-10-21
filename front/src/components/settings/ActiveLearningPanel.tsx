@@ -100,10 +100,10 @@ function LastRun({ run }: { run: FineTuneRun }) {
 }
 
 /**
- * Painel de **Aprendizado Ativo** do Bem-Ti-Vi Core.
+ * Painel de **Aprendizado Ativo** do Bem-Te-Vi Core.
  *
  * Cada correção/confirmação do usuário vira uma amostra recortada na fila por
- * espécie. O botão "Otimizar Bem-Ti-Vi Core com Novas Amostras" dispara um
+ * espécie. O botão "Otimizar Bem-Te-Vi Core com Novas Amostras" dispara um
  * fine-tuning incremental em segundo plano, sem bloquear a captura.
  */
 export function ActiveLearningPanel() {
@@ -153,7 +153,7 @@ export function ActiveLearningPanel() {
               Aprendizado ativo
             </p>
             <h2 className="font-display text-base font-semibold text-[var(--color-text-primary)]">
-              Bem-Ti-Vi Core adaptativo
+              Bem-Te-Vi Core adaptativo
             </h2>
             <p className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">
               Suas correções viram amostras cirúrgicas de treino — o modelo
@@ -240,8 +240,8 @@ export function ActiveLearningPanel() {
             >
               <Zap className={cn("h-3.5 w-3.5", (optimizing || status.running) && "animate-pulse")} />
               {status.running || optimizing
-                ? "Otimizando Bem-Ti-Vi Core…"
-                : "Otimizar Bem-Ti-Vi Core com Novas Amostras"}
+                ? "Otimizando Bem-Te-Vi Core…"
+                : "Otimizar Bem-Te-Vi Core com Novas Amostras"}
             </button>
             <span className="text-[10px] text-[var(--color-text-muted)]">
               Fine-tuning incremental · roda em segundo plano

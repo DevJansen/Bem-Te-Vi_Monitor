@@ -5,7 +5,7 @@ cd /d "%~dp0"
 REM =====================================================================
 REM  Caminhos absolutos.
 REM
-REM  IMPORTANTE: o Bem-Te-Vi chama SEMPRE "%PY%" -m <modulo> — nunca
+REM  IMPORTANTE: o Bem-Te-Vi Monitor chama SEMPRE "%PY%" -m <modulo> — nunca
 REM  "activate.bat", "pip.exe", "uvicorn.exe" ou "yolo.exe". Esses arquivos
 REM  gravam o caminho absoluto da pasta em que o venv foi criado; se o
 REM  projeto for movido/copiado (ex.: de Documentos para C:\DevJansen), eles
@@ -25,7 +25,7 @@ set "PYTHONUTF8=1"
 set "PYTHONIOENCODING=utf-8"
 
 echo ========================================
-echo   Bem-Te-Vi - inicializacao local
+echo   Bem-Te-Vi Monitor - inicializacao local
 echo ========================================
 echo.
 
@@ -166,8 +166,8 @@ echo.
 
 REM Usa o python.exe do venv pelo caminho absoluto (sem activate.bat): assim a
 REM janela funciona mesmo que o projeto tenha sido movido de pasta.
-start "Bem-Te-Vi Backend" /D "%ROOT%back" cmd /k ""%PY%" -m uvicorn app.main:app --host 127.0.0.1 --port 8000"
-start "Bem-Te-Vi Frontend" /D "%ROOT%front" cmd /k "npm run dev -- --host 127.0.0.1 --port 5173"
+start "Bem-Te-Vi Core Backend" /D "%ROOT%back" cmd /k ""%PY%" -m uvicorn app.main:app --host 127.0.0.1 --port 8000"
+start "Bem-Te-Vi Monitor (UI)" /D "%ROOT%front" cmd /k "npm run dev -- --host 127.0.0.1 --port 5173"
 
 echo [check] Aguardando API em http://127.0.0.1:8000/api/health ...
 set /a _tries=0
@@ -177,7 +177,7 @@ set /a _tries+=1
 powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:8000/api/health' -UseBasicParsing -TimeoutSec 2; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
 if not errorlevel 1 goto api_ok
 if %_tries% GEQ 40 (
-  echo [aviso] A API ainda nao respondeu. Veja a janela "Bem-Te-Vi Backend".
+  echo [aviso] A API ainda nao respondeu. Veja a janela "Bem-Te-Vi Core Backend".
   goto wait_front
 )
 ping -n 3 127.0.0.1 >nul
@@ -195,7 +195,7 @@ set /a _tries+=1
 powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:5173/' -UseBasicParsing -TimeoutSec 2; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
 if not errorlevel 1 goto ui_ok
 if %_tries% GEQ 30 (
-  echo [aviso] O frontend ainda nao respondeu. Veja a janela "Bem-Te-Vi Frontend".
+  echo [aviso] O frontend ainda nao respondeu. Veja a janela "Bem-Te-Vi Monitor (UI)".
   goto print_urls
 )
 ping -n 3 127.0.0.1 >nul
@@ -208,7 +208,7 @@ start "" "http://127.0.0.1:5173"
 :print_urls
 echo.
 echo ========================================
-echo   Bem-Te-Vi em execucao
+echo   Bem-Te-Vi Monitor em execucao
 echo ========================================
 echo   PAINEL ^(abra este^):  http://127.0.0.1:5173
 echo   Backend API:          http://127.0.0.1:8000/api/health
@@ -219,8 +219,8 @@ echo IMPORTANTE: o painel e a porta 5173 ^(nao a 8000^).
 echo A porta 8000 e so a API.
 echo.
 echo Duas janelas precisam ficar abertas:
-echo   - Bem-Te-Vi Backend
-echo   - Bem-Te-Vi Frontend
+echo   - Bem-Te-Vi Core Backend
+echo   - Bem-Te-Vi Monitor (UI)
 echo.
 pause
 endlocal
@@ -239,7 +239,7 @@ goto :fail_end
 :fail_python_version
 echo [erro] A versao do Python encontrada e antiga.
 python --version
-echo        O Bem-Te-Vi exige Python 3.11 ou superior.
+echo        O Bem-Te-Vi Monitor exige Python 3.11 ou superior.
 echo        Instale a versao atual em https://www.python.org/downloads/
 goto :fail_end
 

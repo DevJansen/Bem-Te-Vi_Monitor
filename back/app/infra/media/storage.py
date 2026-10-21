@@ -154,7 +154,7 @@ def _prepare_frame(
 ) -> np.ndarray | None:
     """Normaliza um quadro (canais e tamanho) para a codificação de vídeo.
 
-    ``overlay_fn`` (opcional) aplica a tarja de identificação do Alaris sobre o
+    ``overlay_fn`` (opcional) aplica a tarja de identificação do Bem-Te-Vi Core sobre o
     quadro antes da codificação — é o que grava a espécie no clipe. A função
     nunca pode alterar o quadro original: deve devolver uma cópia.
     """
@@ -400,7 +400,7 @@ def save_clip_mp4(
        com o ffmpeg e salva o arquivo final na pasta da galeria;
     3. Se o ffmpeg não estiver disponível, mantém o arquivo do OpenCV.
 
-    ``overlay_fn`` (opcional) grava a **tarja de identificação do Alaris** em
+    ``overlay_fn`` (opcional) grava a **tarja de identificação do Bem-Te-Vi Core** em
     cada quadro — assim o vídeo salvo já mostra a espécie. Clipes corrompidos ou
     vazios são descartados (retorna `None`).
     """

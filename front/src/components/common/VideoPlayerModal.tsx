@@ -27,7 +27,7 @@ type Props = {
   /** URL de streaming do clipe (ex.: `/api/videos/arquivo.mp4`). */
   src: string | null;
   onClose: () => void;
-  /** Espécie identificada pelo Alaris Core (selo sobre o vídeo). */
+  /** Espécie identificada pelo Bem-Te-Vi Core (selo sobre o vídeo). */
   species?: string | null;
   /** Confiança da identificação (0..1). */
   confidence?: number | null;
@@ -114,7 +114,7 @@ export function VideoPlayerModal({
             </div>
           )}
 
-          {/* Selo de identificação do Alaris Core sobre o vídeo (dark mode). */}
+          {/* Selo de identificação do Bem-Te-Vi Core sobre o vídeo (dark mode). */}
           {showOverlay ? (
             <div className="pointer-events-none absolute inset-0 flex items-start justify-between gap-2 p-3">
               <div className="flex max-w-[78%] flex-col gap-1.5">
@@ -125,7 +125,7 @@ export function VideoPlayerModal({
                   <span className="flex min-w-0 flex-col leading-tight">
                     <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-300/90">
                       <Sparkles className="h-2.5 w-2.5" />
-                      Alaris AI
+                      Bem-Te-Vi Core
                     </span>
                     <span className="truncate text-sm font-semibold text-white sm:text-base">
                       {speciesLabel ?? "Ave"}

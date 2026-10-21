@@ -14,6 +14,7 @@ from typing import Any, Callable
 import cv2
 import numpy as np
 
+from app.ai.visit_media import read_visit_metadata
 from app.core.config import get_settings
 from app.domain.avifauna_sul import descrever, info_especie
 from app.domain.fauna_taxonomy import descrever_visitante
@@ -119,7 +120,7 @@ class CameraPipeline(threading.Thread):
             clahe_grid=self.settings.night_vision_clahe_grid,
             denoise=self.settings.night_vision_denoise,
         )
-        # Alaris Core (IA visual) ativo nesta câmera (controle em tempo real pelo painel).
+        # Bem-Te-Vi Core (IA visual) ativo nesta câmera (controle em tempo real pelo painel).
         row_cam = self.camera_repo.get(self.camera_id)
         self.ai_enabled: bool = bool(row_cam.get("ai_enabled", 1)) if row_cam else True
         self.camera_name: str = row_cam.get("name", "Câmera") if row_cam else "Câmera"
@@ -159,7 +160,7 @@ class CameraPipeline(threading.Thread):
         self._ultimo_ajuste_chave: tuple | None = None
         # Throttling do log de supressão anti-spam (mesma ave = mesmo evento).
         self._ultimo_log_supressao = 0.0
-        # Contador de inferências executadas neste fluxo (Alaris Core por stream).
+        # Contador de inferências executadas neste fluxo (Bem-Te-Vi Core por stream).
         self._inferencias = 0
         # Executor dedicado ao pós-processamento (clipe + foto tratada). Rodar
         # fora do laço evita travar a leitura da câmera durante o ffmpeg e o
@@ -173,7 +174,7 @@ class CameraPipeline(threading.Thread):
         self._stop.set()
 
     def set_ai_enabled(self, enabled: bool) -> None:
-        """Ativa ou pausa o processamento do Alaris Core para esta câmera em tempo real."""
+        """Ativa ou pausa o processamento do Bem-Te-Vi Core para esta câmera em tempo real."""
         self.ai_enabled = enabled
         if not enabled:
             self._last_detections = []
@@ -200,7 +201,7 @@ class CameraPipeline(threading.Thread):
         if not self.settings.ai_insights_enabled:
             return
         mensagem = (
-            mensagem if mensagem.startswith("[Alaris]") else f"[Alaris] {mensagem}"
+            mensagem if mensagem.startswith("[Bem-Te-Vi Core]") else f"[Bem-Te-Vi Core] {mensagem}"
         )
         registrar_pensamento(mensagem, nivel=nivel, origem=self.camera_id, **dados)
 
@@ -467,7 +468,7 @@ class CameraPipeline(threading.Thread):
         detections: list[Detection],
         species_by_track: dict[int, str] | None = None,
     ) -> None:
-        """Publica o estado do Alaris Core deste fluxo no registro de streams.
+        """Publica o estado do Bem-Te-Vi Core deste fluxo no registro de streams.
 
         Alimenta os selos em tempo real do grid multi-câmera (status de conexão,
         FPS, backend, aves ativas no comedouro, pico de indivíduos e as espécies
@@ -572,7 +573,7 @@ class CameraPipeline(threading.Thread):
     def _log_supressao(self) -> None:
         """Registra (com throttling) que a mesma ave continua — alerta suprimido.
 
-        Transparência do Alaris Core: a ave permanece no comedouro, então o
+        Transparência do Bem-Te-Vi Core: a ave permanece no comedouro, então o
         sistema mantém o rastreio e o buffer ativos, porém **não** cria um novo
         alerta/registro — evitando spam da mesma visita. O log é limitado a uma
         mensagem a cada 15 s para não poluir o painel.
@@ -861,7 +862,7 @@ class CameraPipeline(threading.Thread):
         # fuso da câmera (câmeras globais em fusos diferentes não distorcem as
         # estatísticas — ex.: 10h da manhã na Costa Rica, não madrugada no BR).
         local_hour, local_date = self._campos_hora_local(detected_at)
-        # Tarja de identificação do Alaris gravada no clipe: o vídeo salvo já
+        # Tarja de identificação do Bem-Te-Vi Core gravada no clipe: o vídeo salvo já
         # mostra a espécie e a confiança, mesmo fora do painel.
         overlay_fn = self._clip_overlay(event, detected_at, frames)
         clip_path = save_clip_mp4(
@@ -981,7 +982,7 @@ class CameraPipeline(threading.Thread):
             "bird", "passaro", "passaro desconhecido",
         }
 
-        # --- Taxonomia do Alaris Core (o "anti-esquilo") ---------------------
+        # --- Taxonomia do Bem-Te-Vi Core (o "anti-esquilo") ---------------------
         # Pós-processamento do rótulo: decide se o bicho é uma **ave** (fluxo
         # ornitológico normal) ou um **Visitante Especial** (esquilo, gato…).
         # Não-aves ficam FORA da Life List, das estatísticas de aves e dos
@@ -1087,7 +1088,23 @@ class CameraPipeline(threading.Thread):
                     days_absent=anomalia.get("days_absent"),
                 )
 
-        # --- Alaris Core Smart Match ----------------------------------------
+        # --- Auto-associação visual de espécie (Bem-Te-Vi Core) ---------------
+        # Quando o detector devolveu apenas o rótulo genérico ("bird"),
+        # comparamos a assinatura visual do recorte tratado com as fotos de
+        # referência do Catálogo Local ("Minhas Aves"). Superando o limiar
+        # configurado (65% por padrão), a visita passa a exibir o nome real da
+        # espécie — eliminando o "Pássaro Desconhecido" sem depender da IA
+        # externa e sem qualquer clique do observador.
+        if not tem_especie and visitante.eh_ave:
+            auto = self._auto_associar_especie(visit_id)
+            if auto is not None:
+                especie_evento = auto["common_name"]
+                nome_cientifico = auto.get("scientific_name")
+                tem_especie = True
+                visit = auto.get("row") or visit
+                metadata = read_visit_metadata(visit)
+
+        # --- Bem-Te-Vi Core Smart Match ----------------------------------------
         # Compara a identificação com a Life List ("Minhas Aves"): se a espécie
         # já existe, apenas vincula a visita (incrementa o contador e agrega a
         # foto/vídeo à galeria da espécie); se é nova, cria o card estruturado
@@ -1134,7 +1151,7 @@ class CameraPipeline(threading.Thread):
                     exc_info=True,
                 )
 
-            # --- Feed Global Bem-Ti-Vi -------------------------------------
+            # --- Feed Global Bem-Te-Vi Monitor -------------------------------------
             # Compartilha apenas destaques (raros/incomuns) com os jardins
             # parceiros. A publicação é assíncrona e nunca bloqueia a captura.
             try:
@@ -1165,6 +1182,9 @@ class CameraPipeline(threading.Thread):
                     exc_info=True,
                 )
 
+        # Relê a visita para refletir o vínculo com o catálogo (Smart Match e
+        # auto-associação podem ter gravado a espécie depois da criação).
+        visit = self.visit_repo.get(visit_id) or visit
         visit_out = self.visit_repo.to_out(visit)
 
         # Alertas (Telegram/Discord/Webhook): apenas para **aves**. Um esquilo
@@ -1176,6 +1196,56 @@ class CameraPipeline(threading.Thread):
                 except Exception:
                     logger.exception("on_visit callback failed")
 
+    def _auto_associar_especie(self, visit_id: str) -> dict[str, Any] | None:
+        """Associa automaticamente a espécie de uma visita pelo catálogo local.
+
+        Compara a assinatura visual do recorte tratado com as fotos de
+        referência das espécies já cadastradas ("Minhas Aves"). Quando a
+        similaridade de cosseno supera o limiar, a visita passa a exibir o nome
+        popular da espécie e recebe o selo **"Identificado pelo Bem-Te-Vi Core"**.
+
+        Devolve ``None`` quando não houve match (escore abaixo do limiar),
+        quando a visita já tem curadoria humana ou quando o recurso está
+        desligado — nunca levanta exceção.
+        """
+        try:
+            from app.ai.species_association import (
+                get_species_association_service,
+            )
+
+            resultado = get_species_association_service().associate_visit(visit_id)
+        except Exception:
+            logger.debug(
+                "Falha na auto-associação visual da visita %s",
+                visit_id,
+                exc_info=True,
+            )
+            return None
+
+        if not resultado.get("applied"):
+            return None
+
+        especie = resultado.get("species") or {}
+        nome = str(especie.get("common_name") or "").strip()
+        if not nome:
+            return None
+
+        similaridade = float(especie.get("score") or 0.0)
+        self._pensar(
+            f"Espécie identificada automaticamente: {nome} "
+            f"(similaridade {similaridade * 100:.0f}%).",
+            nivel=NIVEL_SUCESSO,
+            species=nome,
+            similarity=similaridade,
+            source="catalogo_local",
+        )
+        return {
+            "common_name": nome,
+            "scientific_name": especie.get("scientific_name"),
+            "similarity": similaridade,
+            "row": self.visit_repo.get(visit_id),
+        }
+
     def _smart_match_life_list(
         self,
         *,
@@ -1185,7 +1255,7 @@ class CameraPipeline(threading.Thread):
         crop_path: str | None,
         thumbnail_rel: str | None,
     ) -> None:
-        """Alaris Core Smart Match: evita duplicar espécies na Life List.
+        """Bem-Te-Vi Core Smart Match: evita duplicar espécies na Life List.
 
         Reaproveita o *match* do catálogo local (``match_or_create_species``) e
         vincula a visita à espécie correspondente — o contador de visitas é
@@ -1358,7 +1428,7 @@ class CameraPipeline(threading.Thread):
             )
         else:
             self._pensar(
-                f"Alaris Core pronto ({self.detector.backend or 'pytorch'}) — "
+                f"Bem-Te-Vi Core pronto ({self.detector.backend or 'pytorch'}) — "
                 "monitorando o stream em tempo real.",
                 nivel=NIVEL_SUCESSO,
                 backend=self.detector.backend,
@@ -1420,7 +1490,7 @@ class CameraPipeline(threading.Thread):
                 frame_idx += 1
 
                 if not self.ai_enabled:
-                    # Alaris Core (IA) pausado pelo usuário para esta câmera:
+                    # Bem-Te-Vi Core (IA) pausado pelo usuário para esta câmera:
                     # Atualiza o frame atual do stream (para visualização limpa),
                     # mas não consome inferência YOLOv8, zonas ou gravação de clipes.
                     streamer.set_annotated_frame(frame)
@@ -1503,7 +1573,7 @@ class CameraPipeline(threading.Thread):
                     if self._is_detection_allowed(detection, w, h)
                 ]
                 # Espécies por indivíduo (cache por track_id): alimenta os selos
-                # do Alaris no stream ao vivo e os cards de status do painel.
+                # do Bem-Te-Vi Core no stream ao vivo e os cards de status do painel.
                 if detections:
                     self._especies_dos_tracks(frame, detections)
                 species_by_track = self._especies_por_track
@@ -1626,7 +1696,7 @@ class PipelineSupervisor:
             pipeline.stop()
             pipeline.join(timeout=5.0)
         get_camera_manager().remove_streamer(camera_id)
-        # Limpa o estado do Alaris Core deste stream no registro por câmera.
+        # Limpa o estado do Bem-Te-Vi Core deste stream no registro por câmera.
         get_stream_registry().remove(camera_id)
 
     def restart_camera(self, camera_id: str) -> None:
@@ -1636,7 +1706,7 @@ class PipelineSupervisor:
             self.start_camera(camera_id)
 
     def set_camera_ai_enabled(self, camera_id: str, enabled: bool) -> None:
-        """Altera dinamicamente o status do Alaris Core para uma câmera específica."""
+        """Altera dinamicamente o status do Bem-Te-Vi Core para uma câmera específica."""
         with self._lock:
             pipeline = self._pipelines.get(camera_id)
             if pipeline:

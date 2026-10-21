@@ -16,7 +16,7 @@ DEFAULT_APP_DATA_DIR = BASE_DIR / "app-data"
 
 
 class Settings(BaseModel):
-    app_name: str = "Bem-Te-Vi"
+    app_name: str = "Bem-Te-Vi Monitor"
     port: int = Field(default=8000)
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
@@ -35,7 +35,7 @@ class Settings(BaseModel):
     # repouso. Recomendado definir via ENCRYPTION_KEY no .env (base64-url de 32
     # bytes). Vazio → usa/gera a chave em secrets/camera_key.fernet.
     encryption_key: str = ""
-    # --- Multi-Câmera (Central de Câmeras / Alaris Core distribuído) ---
+    # --- Multi-Câmera (Central de Câmeras / Bem-Te-Vi Core distribuído) ---
     # Acesso remoto: por padrão a API aceita SOMENTE conexões locais (loopback).
     # Defina ALLOW_REMOTE_ACCESS=true apenas se for expor a API na rede de forma
     # consciente (e idealmente atrás de um proxy reverso com autenticação).
@@ -46,7 +46,7 @@ class Settings(BaseModel):
     yolo_model: str = "yolov8n.pt"
     # Sensibilidade da detecção: quanto menor o limiar, mais aves são detectadas
     # (inclusive à distância, pequenas, camufladas ou com pouca luz), ao custo de
-    # mais falsos positivos. 0.22 é o padrão de ALTA SENSIBILIDADE do Alaris Core
+    # mais falsos positivos. 0.22 é o padrão de ALTA SENSIBILIDADE do Bem-Te-Vi Core
     # para câmeras de comedouro/ninho (aves pequenas e paradas ao pousar).
     yolo_confidence: float = Field(default=0.22, ge=0.05, le=1.0)
     # Tempo de permanência imóvel (segundos): por quanto tempo o rastreio mantém
@@ -183,8 +183,8 @@ class Settings(BaseModel):
     enhancement_min_width: int = Field(default=720, ge=0, le=4096)
     # Qualidade JPEG da foto tratada (thumbnail oficial e recorte).
     enhancement_jpeg_quality: int = Field(default=95, ge=50, le=100)
-    # --- Overlays visuais do Alaris Core (clipes gravados) ---
-    # Grava a tarja de identificação (marca Alaris + espécie + confiança) nos
+    # --- Overlays visuais do Bem-Te-Vi Core (clipes gravados) ---
+    # Grava a tarja de identificação (marca Bem-Te-Vi Core + espécie + confiança) nos
     # clipes salvos, para que o vídeo já mostre qual ave aparece mesmo fora do
     # painel. Não afeta o stream ao vivo (que desenha as caixas em tempo real).
     clip_overlay_enabled: bool = True
@@ -226,7 +226,7 @@ class Settings(BaseModel):
     rare_moments_scan_hours: float = Field(default=6.0, ge=1.0, le=48.0)
     # Janela (dias) padrão da galeria "Momentos Raros".
     rare_moments_days: int = Field(default=7, ge=1, le=90)
-    # --- Aprendizado ativo / fine-tuning incremental do Bem-Ti-Vi Core ---
+    # --- Aprendizado ativo / fine-tuning incremental do Bem-Te-Vi Core ---
     # Quando ligado, correções manuais de espécie e confirmações de detecção
     # alimentam a fila de treinamento (recortes tratados por espécie).
     active_learning_enabled: bool = True
@@ -260,11 +260,30 @@ class Settings(BaseModel):
     individual_min_sharpness: float = Field(default=25.0, ge=0.0)
     # Quantidade máxima de indivíduos (centroides) comparados por espécie.
     individual_max_candidates: int = Field(default=250, ge=10, le=5000)
+    # --- Auto-associação de espécie (re-ID visual contra o Catálogo Local) ---
+    # Quando o detector entrega apenas o rótulo genérico ("bird"), o Bem-Te-Vi Core
+    # compara a assinatura visual do recorte com as fotos de referência das
+    # espécies de "Minhas Aves". Ao superar o limiar, a visita recebe o nome da
+    # espécie automaticamente — sem depender de uma chamada à IA externa.
+    species_auto_association_enabled: bool = True
+    # Similaridade de cosseno mínima para aceitar a associação automática.
+    # 0.65 foi calibrado para o MobileNetV3-Small (e mantém o fallback OpenCV
+    # utilizável); valores menores aumentam o recall ao custo de confusões.
+    species_match_threshold: float = Field(default=0.65, ge=0.0, le=1.0)
+    # Nitidez mínima do recorte para tentar a associação (Laplaciano).
+    species_match_min_sharpness: float = Field(default=15.0, ge=0.0)
+    # Teto de fotos de referência avaliadas por consulta (proteção de CPU).
+    species_match_max_references: int = Field(default=500, ge=10, le=5000)
+    # --- Recorte HD sob demanda ---
+    # Menor lado desejado do recorte exportado (px). Imagens menores são
+    # reescaladas com Lanczos para garantir um arquivo realmente "HD".
+    hd_crop_min_side: int = Field(default=1080, ge=480, le=4096)
+    hd_crop_jpeg_quality: int = Field(default=94, ge=60, le=100)
     # --- Resumo Matinal Automatizado (Morning Briefing) ---
     morning_briefing_enabled: bool = True
     morning_briefing_hour: int = Field(default=7, ge=0, le=23)
     morning_briefing_minute: int = Field(default=0, ge=0, le=59)
-    # --- Rede global Bem-Ti-Vi (jardins conectados) ---
+    # --- Rede global Bem-Te-Vi (jardins conectados) ---
     # O feed local funciona mesmo sem pares: ele reúne os avistamentos raros das
     # câmeras deste jardim. Para receber avistamentos de outras instâncias, é
     # obrigatório definir um token compartilhado e liberar a rota de webhook.
@@ -367,6 +386,19 @@ class Settings(BaseModel):
         return self.app_data_dir / "training_queue"
 
     @property
+    def fine_tuning_dir(self) -> Path:
+        """Pasta local de retreinamento das correções manuais.
+
+        Cada correção feita pelo observador ("Associação Incorreta /
+        Reclassificar") grava o recorte tratado em
+        ``fine_tuning/{espécie}/{visit_id}.jpg`` e registra a proveniência em
+        ``fine_tuning/index.jsonl``. Essa pasta é o material de auditoria e de
+        retreinamento offline; a fila operacional do fine-tuning automático
+        continua em :attr:`training_queue_dir`.
+        """
+        return self.app_data_dir / "fine_tuning"
+
+    @property
     def fine_tune_dataset_dir(self) -> Path:
         """Dataset temporário (train/val) montado a partir da fila."""
         return self.app_data_dir / "fine_tune_dataset"
@@ -436,6 +468,7 @@ class Settings(BaseModel):
             self.reference_birds_dir,
             self.secrets_dir,
             self.training_queue_dir,
+            self.fine_tuning_dir,
             self.ai_models_dir,
         ):
             path.mkdir(parents=True, exist_ok=True)
@@ -751,6 +784,29 @@ class Settings(BaseModel):
             individual_max_candidates=min(
                 5000,
                 max(10, int(os.getenv("INDIVIDUAL_MAX_CANDIDATES", "250"))),
+            ),
+            species_auto_association_enabled=os.getenv(
+                "SPECIES_AUTO_ASSOCIATION_ENABLED", "true"
+            )
+            .strip()
+            .lower()
+            not in {"0", "false", "no", "off", "não", "nao"},
+            species_match_threshold=min(
+                1.0,
+                max(0.0, float(os.getenv("SPECIES_MATCH_THRESHOLD", "0.65"))),
+            ),
+            species_match_min_sharpness=max(
+                0.0, float(os.getenv("SPECIES_MATCH_MIN_SHARPNESS", "15"))
+            ),
+            species_match_max_references=min(
+                5000,
+                max(10, int(os.getenv("SPECIES_MATCH_MAX_REFERENCES", "500"))),
+            ),
+            hd_crop_min_side=min(
+                4096, max(480, int(os.getenv("HD_CROP_MIN_SIDE", "1080")))
+            ),
+            hd_crop_jpeg_quality=min(
+                100, max(60, int(os.getenv("HD_CROP_JPEG_QUALITY", "94")))
             ),
             morning_briefing_enabled=os.getenv(
                 "MORNING_BRIEFING_ENABLED", "true"

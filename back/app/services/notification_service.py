@@ -265,7 +265,7 @@ class NotificationService:
         if scientific and scientific.strip().lower() not in species.strip().lower():
             species = f"{species} ({scientific})"
         return (
-            "🐦 Bem-Te-Vi — visita detectada\n"
+            "🐦 Bem-Te-Vi Monitor — visita detectada\n"
             f"Espécie: {species}\n"
             f"Confiança: {visit.confidence:.0%}\n"
             f"Câmera: {camera}\n"

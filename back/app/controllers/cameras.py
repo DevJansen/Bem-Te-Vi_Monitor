@@ -261,7 +261,7 @@ async def update_camera(camera_id: str, payload: CameraUpdate) -> CameraOut:
 
 @router.patch("/{camera_id}/ai", response_model=CameraOut)
 async def toggle_camera_ai(camera_id: str, payload: CameraAiToggle) -> CameraOut:
-    """Ativa ou pausa o Alaris Core (YOLOv8 + gravação) para a câmera em tempo real."""
+    """Ativa ou pausa o Bem-Te-Vi Core (YOLOv8 + gravação) para a câmera em tempo real."""
     repo = _repo()
     existing = repo.get(camera_id)
     if existing is None:
@@ -276,13 +276,13 @@ async def toggle_camera_ai(camera_id: str, payload: CameraAiToggle) -> CameraOut
 
     if payload.enabled:
         registrar_pensamento(
-            f"Alaris Core (IA visual) ativado para a câmera '{row['name']}'.",
+            f"Bem-Te-Vi Core (IA visual) ativado para a câmera '{row['name']}'.",
             nivel=NIVEL_SUCESSO,
             camera_id=camera_id,
         )
     else:
         registrar_pensamento(
-            f"Alaris Core (IA visual) pausado para a câmera '{row['name']}' (economia de recursos).",
+            f"Bem-Te-Vi Core (IA visual) pausado para a câmera '{row['name']}' (economia de recursos).",
             nivel=NIVEL_INFO,
             camera_id=camera_id,
         )

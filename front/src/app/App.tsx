@@ -87,8 +87,22 @@ const TAB_META: Record<AppTab, { title: string; subtitle: string }> = {
   },
 };
 
+const TAB_IDS = Object.keys(TAB_META) as AppTab[];
+
+/**
+ * Resolve a aba a partir do hash da URL (ex.: `#galeria`).
+ *
+ * O **Bem-Te-Vi Monitor** é uma aplicação de página única: o hash permite
+ * abrir direto uma tela (link direto, F5 sem perder o contexto e automação de
+ * capturas da documentação).
+ */
+function tabFromHash(): AppTab {
+  const raw = window.location.hash.replace(/^#\/?/, "").trim().toLowerCase();
+  return TAB_IDS.includes(raw as AppTab) ? (raw as AppTab) : "dashboard";
+}
+
 export function App() {
-  const [tab, setTab] = useState<AppTab>("dashboard");
+  const [tab, setTab] = useState<AppTab>(() => tabFromHash());
   const [modalOpen, setModalOpen] = useState(false);
   const [zoneCamera, setZoneCamera] = useState<Camera | null>(null);
   const [roiCamera, setRoiCamera] = useState<Camera | null>(null);
@@ -189,6 +203,22 @@ export function App() {
     }
   };
 
+  // ------------------------------------------------------------------ #
+  // Navegação por hash: mantém a URL e a aba sempre em sincronia.
+  // ------------------------------------------------------------------ #
+  const handleTabChange = useCallback((next: AppTab) => {
+    setTab(next);
+    if (window.location.hash !== `#${next}`) {
+      window.history.replaceState(null, "", `#${next}`);
+    }
+  }, []);
+
+  useEffect(() => {
+    const onHashChange = () => setTab(tabFromHash());
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
   const handleVisitDeleted = (visitId: string) => {
     setDeletedVisitIds((current) => new Set(current).add(visitId));
     void Promise.all([visitsQuery.refresh(), metricsQuery.refresh()]);
@@ -197,7 +227,7 @@ export function App() {
   // Atalho "ver clipe na Galeria": troca de aba e abre o clipe da visita.
   const handleOpenVisitInGallery = useCallback((visitId: string) => {
     setGalleryFocusVisitId(visitId);
-    setTab("gallery");
+    handleTabChange("gallery");
   }, []);
 
   const handleGalleryFocusHandled = useCallback(
@@ -232,7 +262,7 @@ export function App() {
         }}
       />
 
-      <Sidebar activeTab={tab} onTabChange={setTab} />
+      <Sidebar activeTab={tab} onTabChange={handleTabChange} />
 
       <div className="relative pt-[6.5rem] md:pl-60 md:pt-0">
         <Header
@@ -317,7 +347,7 @@ export function App() {
             <div>
               <OfflineAnalysisScreen
                 cameras={camerasQuery.data ?? []}
-                onOpenGallery={() => setTab("gallery")}
+                onOpenGallery={() => handleTabChange("gallery")}
               />
               <CameraGrid
                 cameras={camerasQuery.data ?? []}
@@ -398,7 +428,7 @@ export function App() {
         onSaved={() => void camerasQuery.refresh()}
       />
 
-      <OfflineProgressDock onOpenGallery={() => setTab("gallery")} />
+      <OfflineProgressDock onOpenGallery={() => handleTabChange("gallery")} />
     </div>
   );
 }

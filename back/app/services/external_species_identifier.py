@@ -6,7 +6,7 @@ em :mod:`app.services.ai_service`, que usa exclusivamente a biblioteca oficial
 usados pelos controllers (``identify_bird_image``, ``identify_spectrogram``,
 ``consult_species_profile``…), evitando breakage em toda a aplicação.
 
-Nenhuma dependência de provedores OpenAI/Anthropic permanece: o Bem-Ti-Vi usa
+Nenhuma dependência de provedores OpenAI/Anthropic permanece: o Bem-Te-Vi usa
 **apenas** o Google Gemini.
 """
 
@@ -33,7 +33,7 @@ from app.services.ai_service import (
 
 logger = logging.getLogger(__name__)
 
-#: Provedor único suportado pelo Bem-Ti-Vi.
+#: Provedor único suportado pelo Bem-Te-Vi.
 PROVIDER_GOOGLE = "google"
 
 #: Alias legado (mantido só para compatibilidade com código antigo que

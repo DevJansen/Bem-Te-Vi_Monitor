@@ -1,0 +1,32 @@
+# Cargo.toml — Bem-Te-Vi Monitor (casca desktop Tauri)
+#
+# O motor (FastAPI + YOLOv8) continua sendo o backend local; esta crate
+# empacota a interface web do Bem-Te-Vi Monitor em uma janela nativa.
+
+[package]
+name = "bem-te-vi-monitor"
+version = "0.2.0"
+description = "Bem-Te-Vi Monitor — monitoramento local de vida silvestre (powered by Bem-Te-Vi Core)"
+authors = ["Bem-Te-Vi"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+# O nome da lib segue a convenção snake_case; o app é "Bem-Te-Vi Monitor".
+name = "bem_te_vi_monitor_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

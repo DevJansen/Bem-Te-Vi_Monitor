@@ -76,9 +76,16 @@ export function formatSpeciesLabel(species: string): string {
   return species.charAt(0).toUpperCase() + species.slice(1);
 }
 
-/** Rótulo curto de espécie para selos compactos (ex.: `bird` → "Desconhecido"). */
+/**
+ * Rótulo curto de espécie para selos compactos.
+ *
+ * Rótulos genéricos viram **"Identificando"** (e não "Desconhecido"): o painel
+ * informa que o Bem-Te-Vi Core está resolvendo a espécie em vez de exibir um
+ * status estático que sugere ausência de inteligência. A nomenclatura
+ * oficial completa continua em {@link formatSpeciesLabel}.
+ */
 export function formatSpeciesShort(species: string): string {
-  if (isGenericSpecies(species)) return "Desconhecido";
+  if (isGenericSpecies(species)) return "Identificando";
   return species.charAt(0).toUpperCase() + species.slice(1);
 }
 

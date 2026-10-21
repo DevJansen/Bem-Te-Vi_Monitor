@@ -260,7 +260,7 @@ def ensure_detection_spectrogram(
     return generate_spectrogram_png(
         audio_path,
         destination,
-        title=title or "Espectrograma do canto · Bem-Te-Vi",
+        title=title or "Espectrograma do canto · Bem-Te-Vi Monitor",
     )
 
 

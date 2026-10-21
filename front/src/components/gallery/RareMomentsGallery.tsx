@@ -70,7 +70,7 @@ export function RareMomentsGallery() {
       await query.refresh();
       setToast(
         result.scanned > 0
-          ? `${result.scanned} captura(s) avaliada(s) pelo Alaris Core.`
+          ? `${result.scanned} captura(s) avaliada(s) pelo Bem-Te-Vi Core.`
           : "Todas as capturas já estavam avaliadas.",
       );
     } catch (error) {
@@ -93,7 +93,7 @@ export function RareMomentsGallery() {
               Momentos Raros · Fotos de Postal
             </h2>
             <p className="text-sm text-[var(--color-text-muted)]">
-              Curadoria do Alaris Core: as fotos mais nítidas e as espécies
+              Curadoria do Bem-Te-Vi Core: as fotos mais nítidas e as espécies
               raras ou incomuns da semana.
             </p>
           </div>
@@ -151,7 +151,7 @@ export function RareMomentsGallery() {
             Nenhuma foto na curadoria ainda.
           </p>
           <p className="mx-auto mt-1 max-w-md text-xs text-[var(--color-text-muted)]">
-            Assim que as primeiras aves forem capturadas, o Alaris Core mede a
+            Assim que as primeiras aves forem capturadas, o Bem-Te-Vi Core mede a
             nitidez e destaca aqui as fotos de postal e as espécies raras.
           </p>
           <button
@@ -408,7 +408,7 @@ function DownloadPostcard({
   return (
     <a
       href={rareMomentPostcardUrl(moment.visit_id)}
-      download={`bem-te-vi-postal-${moment.species.replace(/\s+/g, "-").toLowerCase()}.jpg`}
+      download={`bem-te-vi-monitor-postal-${moment.species.replace(/\s+/g, "-").toLowerCase()}.jpg`}
       title="Baixar foto de postal com moldura e marca d'água"
       className={cn(
         "inline-flex items-center gap-1.5 rounded-lg border font-semibold transition",

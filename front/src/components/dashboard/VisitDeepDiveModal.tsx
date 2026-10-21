@@ -11,10 +11,12 @@ import {
   ExternalLink,
   Film,
   Image as ImageIcon,
+  ImageDown,
   Leaf,
   LoaderCircle,
   Moon,
   Play,
+  RefreshCw,
   Sparkles,
   Star,
   Thermometer,
@@ -23,7 +25,7 @@ import {
   X,
 } from "lucide-react";
 import type { BirdSpecies, BirdVisit } from "@/types";
-import { confirmVisit, resolveMediaUrl, visitCropUrl } from "@/services/api";
+import { confirmVisit, resolveMediaUrl, visitCropDownloadUrl, visitCropUrl } from "@/services/api";
 import { cn } from "@/utils/cn";
 import { formatDateTime, formatTime } from "@/utils/format";
 import { formatHumidity, formatTemperature, formatWind, weatherEmoji } from "@/utils/weather";
@@ -32,12 +34,15 @@ import {
   SHARPNESS_TONE_CLASS,
   confidenceTone,
   formatDwell,
+  isEcologicalUnknown,
   resolveEcological,
+  resolveIdentificationBadge,
   resolveSharpness,
   resolveVisitNames,
   resolveVisitSpeciesLabel,
 } from "@/utils/visits";
 import { SpeciesAiConsultModal } from "@/components/species/SpeciesAiConsultModal";
+import { ReclassifySpeciesModal } from "@/components/gallery/ReclassifySpeciesModal";
 
 type Props = {
   /** Visita aberta no deep-dive (null = modal fechado). */
@@ -47,6 +52,8 @@ type Props = {
   onClose: () => void;
   /** Abre o clipe completo (6 s) da visita na aba Galeria. */
   onOpenInGallery: (visitId: string) => void;
+  /** Avisa o painel que a visita mudou (após reclassificação). */
+  onVisitUpdated?: () => void;
 };
 
 /** Visão da imagem: quadro HD tratado ou o recorte (close-up) da ave. */
@@ -54,14 +61,16 @@ type ImageView = "frame" | "crop";
 
 /**
  * Modal imersivo (lightbox) com o "deep-dive" de uma visita: foto tratada em
- * alta definição + painel de telemetria do Alaris Core (nomes, confiança,
- * nitidez do quadro, clima e status ecológico) e atalho para o clipe na Galeria.
+ * alta definição + painel de telemetria do Bem-Te-Vi Core (nomes, confiança,
+ * nitidez do quadro, clima e status ecológico), download do recorte HD e
+ * atalhos para o clipe na Galeria e para a reclassificação da espécie.
  */
 export function VisitDeepDiveModal({
-  visit,
+  visit: initialVisit,
   catalogSpecies,
   onClose,
   onOpenInGallery,
+  onVisitUpdated,
 }: Props) {
   const [imageView, setImageView] = useState<ImageView>("frame");
   // Recorte indisponível no servidor (arquivo ausente) → esconde a alternância.
@@ -72,18 +81,27 @@ export function VisitDeepDiveModal({
   const [confirming, setConfirming] = useState(false);
   const [confirmMessage, setConfirmMessage] = useState<string | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
+  // Modal de curadoria ("Associação Incorreta / Reclassificar").
+  const [reclassifyOpen, setReclassifyOpen] = useState(false);
+  // Versão local da visita (após reclassificação) — tem prioridade sobre a
+  // prop até o painel recarregar a lista.
+  const [override, setOverride] = useState<BirdVisit | null>(null);
+
+  const visit = override ?? initialVisit;
 
   // Abre já no **recorte da ave** (close-up, mais legível) quando ele existir;
   // caso contrário, no quadro HD. Fecha com a tecla Esc.
   useEffect(() => {
-    if (visit) {
-      setImageView(visit.metadata?.crop_path ? "crop" : "frame");
+    setOverride(null);
+    if (initialVisit) {
+      setImageView(initialVisit.metadata?.crop_path ? "crop" : "frame");
       setCropFailed(false);
       setConsultOpen(false);
       setConfirmMessage(null);
       setConfirmError(null);
+      setReclassifyOpen(false);
     }
-  }, [visit]);
+  }, [initialVisit]);
 
   useEffect(() => {
     if (!visit) return;
@@ -105,11 +123,16 @@ export function VisitDeepDiveModal({
     const catalogEntry = visit.species_id
       ? catalogSpecies.find((item) => item.id === visit.species_id)
       : undefined;
+    const ecological = resolveEcological(visit, catalogEntry);
     return {
       frame,
       crop,
       clip,
-      ecological: resolveEcological(visit, catalogEntry),
+      ecological,
+      // O selo ecológico "desconhecido" é omitido no deep-dive: a
+      // identificação já é comunicada pelo badge elegante do cabeçalho.
+      showEcological:
+        Boolean(ecological?.badge) && !isEcologicalUnknown(ecological),
       sharpness: resolveSharpness(visit),
       names: resolveVisitNames(visit),
       label: resolveVisitSpeciesLabel(visit),
@@ -124,13 +147,14 @@ export function VisitDeepDiveModal({
         Math.min(1, Math.max(0, visit.confidence)) * 100,
       ),
       tone: confidenceTone(visit.confidence),
+      identificationBadge: resolveIdentificationBadge(visit),
     };
   }, [visit, catalogSpecies]);
 
   if (!visit || !data) return null;
 
   /**
-   * Confirma a detecção no Bem-Ti-Vi Core.
+   * Confirma a detecção no Bem-Te-Vi Core.
    *
    * Gera uma amostra de treino rotulada e a assinatura visual do indivíduo,
    * sem alterar o rótulo atual da visita.
@@ -146,7 +170,7 @@ export function VisitDeepDiveModal({
       });
       setConfirmMessage(
         result.training_queued
-          ? "Detecção confirmada — amostra enviada ao Bem-Ti-Vi Core."
+          ? "Detecção confirmada — amostra enviada ao Bem-Te-Vi Core."
           : result.training_reason ||
               "Detecção confirmada para a memória do jardim.",
       );
@@ -190,7 +214,7 @@ export function VisitDeepDiveModal({
           <div className="min-w-0 flex-1">
             <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-300/90">
               <Sparkles className="h-3 w-3" />
-              Alaris Core · Deep-Dive
+              Bem-Te-Vi Core · Deep-Dive
             </p>
             <h2 className="truncate font-display text-base font-semibold text-[var(--color-text-primary)] sm:text-lg">
               {data.label}
@@ -199,6 +223,18 @@ export function VisitDeepDiveModal({
               {formatDateTime(visit.detected_at)}
               {visit.camera_name ? ` · ${visit.camera_name}` : ""}
             </p>
+            {data.identificationBadge ? (
+              <span
+                className={cn(
+                  "mt-1.5 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                  data.identificationBadge.className,
+                )}
+                title={data.identificationBadge.title}
+              >
+                <CheckCircle2 className="h-2.5 w-2.5" />
+                {data.identificationBadge.label}
+              </span>
+            ) : null}
           </div>
           <button
             type="button"
@@ -218,7 +254,7 @@ export function VisitDeepDiveModal({
                 <img
                   key={heroSrc}
                   src={heroSrc}
-                  alt={`Foto tratada pelo Alaris Core: ${data.label}`}
+                  alt={`Foto tratada pelo Bem-Te-Vi Core: ${data.label}`}
                   onError={() => {
                     if (view === "crop") setCropFailed(true);
                   }}
@@ -233,7 +269,7 @@ export function VisitDeepDiveModal({
                 </div>
               )}
 
-              {/* Selo do Alaris Core sobre a foto. */}
+              {/* Selo do Bem-Te-Vi Core sobre a foto. */}
               <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-3">
                 <div className="flex items-start justify-between gap-2">
                   <span className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-black/65 px-3 py-2 shadow-lg backdrop-blur-md">
@@ -243,7 +279,7 @@ export function VisitDeepDiveModal({
                     <span className="flex min-w-0 flex-col leading-tight">
                       <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-300/90">
                         <Sparkles className="h-2.5 w-2.5" />
-                        Alaris AI
+                        Bem-Te-Vi Core
                       </span>
                       <span className="truncate text-sm font-semibold text-white">
                         {data.label}
@@ -258,7 +294,7 @@ export function VisitDeepDiveModal({
                     {data.enhanced ? (
                       <span
                         className="rounded-md bg-emerald-500/85 px-2 py-0.5 text-[10px] font-semibold text-white"
-                        title="Foto tratada automaticamente pelo Alaris (alta definição)"
+                        title="Foto tratada automaticamente pelo Bem-Te-Vi Core (alta definição)"
                       >
                         HD
                       </span>
@@ -294,7 +330,7 @@ export function VisitDeepDiveModal({
                   ) : (
                     <span />
                   )}
-                  {data.ecological ? (
+                  {data.showEcological && data.ecological ? (
                     <span
                       className={cn(
                         "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold backdrop-blur-md",
@@ -317,7 +353,7 @@ export function VisitDeepDiveModal({
             </div>
           </div>
 
-          {/* ——— Painel de informações do Alaris Core ——— */}
+          {/* ——— Painel de informações do Bem-Te-Vi Core ——— */}
           <div className="space-y-4 p-4 sm:p-5">
             <div>
               <h3 className="font-display text-lg font-semibold text-[var(--color-text-primary)]">
@@ -327,7 +363,7 @@ export function VisitDeepDiveModal({
                 {data.names.scientificName ?? "Nome científico não identificado"}
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                {data.ecological?.badge ? (
+                {data.showEcological && data.ecological?.badge ? (
                   <span
                     className={cn(
                       "rounded-md px-2 py-0.5 text-[11px] font-semibold",
@@ -460,7 +496,7 @@ export function VisitDeepDiveModal({
                   type="button"
                   onClick={() => void handleConfirm()}
                   disabled={confirming}
-                  title="Confirmar que esta detecção está correta e ensinar o Bem-Ti-Vi Core"
+                  title="Confirmar que esta detecção está correta e ensinar o Bem-Te-Vi Core"
                   className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-4 py-2.5 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/25 disabled:cursor-wait disabled:opacity-60"
                 >
                   {confirming ? (
@@ -508,6 +544,29 @@ export function VisitDeepDiveModal({
                 <Bot className="h-4 w-4" />
                 Perguntar à IA Externa
               </button>
+              {/* Download do recorte HD e curadoria da espécie. */}
+              <div className="flex flex-col gap-2 sm:flex-row">
+                {visit.metadata?.crop_path ? (
+                  <a
+                    href={visitCropDownloadUrl(visit.id)}
+                    download
+                    title="Baixar o recorte da ave em alta resolução (JPEG HD)"
+                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-sky-400/40 bg-sky-500/10 px-4 py-2.5 text-sm font-semibold text-sky-200 transition hover:bg-sky-500/20"
+                  >
+                    <ImageDown className="h-4 w-4" />
+                    Baixar Recorte HD (Crop)
+                  </a>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setReclassifyOpen(true)}
+                  title="A associação está errada? Escolha a espécie correta — o recorte é salvo para o retreinamento do Core"
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-4 py-2.5 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Associação Incorreta / Reclassificar
+                </button>
+              </div>
               {data.frame ? (
                 <a
                   href={data.frame}
@@ -529,6 +588,20 @@ export function VisitDeepDiveModal({
         <SpeciesAiConsultModal
           visit={visit}
           onClose={() => setConsultOpen(false)}
+        />
+      ) : null}
+
+      {/* Curadoria da espécie: "Associação Incorreta / Reclassificar". */}
+      {reclassifyOpen ? (
+        <ReclassifySpeciesModal
+          visit={visit}
+          species={catalogSpecies}
+          onClose={() => setReclassifyOpen(false)}
+          onReclassified={(updated) => {
+            setOverride(updated);
+            setReclassifyOpen(false);
+            onVisitUpdated?.();
+          }}
         />
       ) : null}
     </div>

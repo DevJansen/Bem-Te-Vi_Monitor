@@ -97,7 +97,7 @@ function FactorRow({ factor }: { factor: BehavioralFactor }) {
  * Card preditivo da **Memória Comportamental**.
  *
  * Cruza o histórico de visitas com horário do dia, temperatura/umidade e
- * sazonalidade — e devolve a frase pronta do Alaris Core, por exemplo:
+ * sazonalidade — e devolve a frase pronta do Bem-Te-Vi Core, por exemplo:
  * "Probabilidade de pico de Beija-Flores nas próximas 2 horas: 85% —
  * condizente com a umidade e histórico de temperatura".
  */

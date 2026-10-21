@@ -207,7 +207,7 @@ MIGRATIONS: list[tuple[int, str]] = [
         ALTER TABLE cameras ADD COLUMN country TEXT;
 
         -- Horário local da câmera no instante da visita: garante que os
-        -- histogramas/relatórios do Alaris Core reflitam o fuso do jardim, e
+        -- histogramas/relatórios do Bem-Te-Vi Core reflitam o fuso do jardim, e
         -- não o UTC. Nulos (câmeras sem fuso) caem para o UTC original.
         ALTER TABLE visits ADD COLUMN local_hour INTEGER;
         ALTER TABLE visits ADD COLUMN local_date TEXT;
@@ -217,7 +217,7 @@ MIGRATIONS: list[tuple[int, str]] = [
         9,
         """
         -- Visitantes Silvestres / Convidados Especiais ("Modo Esquilo").
-        -- O Alaris Core classifica o animal que aparece no comedouro: aves
+        -- O Bem-Te-Vi Core classifica o animal que aparece no comedouro: aves
         -- seguem o fluxo ornitológico normal; mamíferos e outros viram
         -- "Visitantes Especiais" (card próprio, galeria temática) e ficam
         -- FORA da Life List e das estatísticas de aves.
@@ -250,7 +250,7 @@ MIGRATIONS: list[tuple[int, str]] = [
     (
         11,
         """
-        -- Controles Operacionais em Tempo Real por Câmera (Alaris Core & Bioacústica BirdNET).
+        -- Controles Operacionais em Tempo Real por Câmera (Bem-Te-Vi Core & Bioacústica BirdNET).
         -- ai_enabled: liga/desliga o processamento de IA (YOLOv8) e gravação de visitas.
         -- audio_enabled: liga/desliga a captura e monitoramento contínuo de áudio com BirdNET.
         ALTER TABLE cameras ADD COLUMN ai_enabled INTEGER NOT NULL DEFAULT 1;
@@ -295,7 +295,7 @@ MIGRATIONS: list[tuple[int, str]] = [
         14,
         """
         -- Momentos Raros / Fotos de Postal: a nitidez (variância do Laplaciano)
-        -- de cada captura é calculada uma única vez pelo Alaris Core e cacheada
+        -- de cada captura é calculada uma única vez pelo Bem-Te-Vi Core e cacheada
         -- aqui. A curadoria semanal usa esse escore para escolher as fotos mais
         -- nítidas e combina com a raridade da espécie no histórico local.
         ALTER TABLE visits ADD COLUMN sharpness REAL;
@@ -402,7 +402,7 @@ MIGRATIONS: list[tuple[int, str]] = [
     (
         16,
         """
-        -- Feed da Rede Global Bem-Ti-Vi. Cada destaque (avistamento raro ou
+        -- Feed da Rede Global Bem-Te-Vi. Cada destaque (avistamento raro ou
         -- incomum) de uma instância local ou de um jardim parceiro vira uma
         -- linha. O external_id evita duplicatas quando o mesmo evento chega
         -- mais de uma vez por webhook.

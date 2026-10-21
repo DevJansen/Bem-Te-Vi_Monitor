@@ -22,7 +22,7 @@ type Props = {
 
 /**
  * Barra de ferramentas flutuante de controles operacionais em tempo real:
- * 1. Toggle Alaris Core (Ligar/Pausar IA de visão computacional e gravação)
+ * 1. Toggle Bem-Te-Vi Core (Ligar/Pausar IA de visão computacional e gravação)
  * 2. Player de Áudio Ao Vivo (Mute/Unmute e volume do som ambiente)
  * 3. Toggle Bioacústica BirdNET (Monitorar e identificar cantos de aves pelo áudio)
  */
@@ -65,7 +65,7 @@ export function CameraControlToolbar({
     audio.muted = !isPlayingAudio;
   }, [volume, isPlayingAudio]);
 
-  // 1. Toggle Alaris Core (IA Visual)
+  // 1. Toggle Bem-Te-Vi Core (IA Visual)
   const handleToggleAi = async () => {
     if (togglingAi) return;
     const nextState = !aiEnabled;
@@ -75,7 +75,7 @@ export function CameraControlToolbar({
       const updated = await toggleCameraAi(camera.id, nextState);
       if (onCameraUpdated) onCameraUpdated(updated);
     } catch (err) {
-      console.error("Falha ao alternar Alaris Core:", err);
+      console.error("Falha ao alternar Bem-Te-Vi Core:", err);
       setAiEnabled(!nextState); // Rollback
     } finally {
       setTogglingAi(false);
@@ -154,15 +154,15 @@ export function CameraControlToolbar({
         }}
       />
 
-      {/* 1. Toggle Switch Alaris Core (IA Visual) */}
+      {/* 1. Toggle Switch Bem-Te-Vi Core (IA Visual) */}
       <button
         type="button"
         onClick={handleToggleAi}
         disabled={togglingAi}
         title={
           aiEnabled
-            ? "Alaris Core Ativo — Clique para pausar o processamento de IA e gravações (economiza GPU/CPU)"
-            : "Alaris Core Pausado — Clique para ativar o monitoramento por IA (YOLOv8)"
+            ? "Bem-Te-Vi Core Ativo — Clique para pausar o processamento de IA e gravações (economiza GPU/CPU)"
+            : "Bem-Te-Vi Core Pausado — Clique para ativar o monitoramento por IA (YOLOv8)"
         }
         className={cn(
           "group relative inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all duration-200",
@@ -179,7 +179,7 @@ export function CameraControlToolbar({
           <EyeOff className="h-3.5 w-3.5 text-zinc-400" />
         )}
         <span className="hidden sm:inline">
-          {aiEnabled ? "Alaris IA" : "IA Pausada"}
+          {aiEnabled ? "Bem-Te-Vi Core" : "IA Pausada"}
         </span>
         {aiEnabled && (
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse-soft" />

@@ -38,7 +38,7 @@ export function Header({
             </h1>
             <span className="inline-flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-300">
               <Sparkles className="h-3 w-3" />
-              Potencializado por Alaris AI
+              Powered by Bem-Te-Vi Core
             </span>
           </div>
           {subtitle ? (

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permissões mínimas do Bem-Te-Vi Monitor: janela, eventos e recursos locais.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

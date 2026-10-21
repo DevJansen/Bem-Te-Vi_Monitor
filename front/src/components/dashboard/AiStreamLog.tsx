@@ -8,11 +8,11 @@ import { cn } from "@/utils/cn";
 const MAX_LINHAS = 200;
 
 /**
- * "Logs Cognitivos da Alaris" — os pensamentos do motor em tempo real.
+ * "Logs Cognitivos do Bem-Te-Vi Core" — os pensamentos do motor em tempo real.
  *
  * Terminal elegante que exibe as mensagens dinâmicas do pipeline (detecção,
  * nitidez do frame, identificação de espécie, auto-calibração por clima,
- * anomalias). Cada pensamento é assinado com `[Alaris]`. Faz *polling
+ * anomalias). Cada pensamento é assinado com `[Bem-Te-Vi Core]`. Faz *polling
  * incremental* via `since_id` para trafegar apenas os eventos novos.
  * Alimenta-se de `GET /api/ai/logs`.
  */
@@ -57,14 +57,14 @@ export function AiStreamLog() {
 
   return (
     <section
-      aria-label="Logs cognitivos da Alaris"
+      aria-label="Logs cognitivos do Bem-Te-Vi Core"
       className="relative overflow-hidden rounded-xl border border-cyan-500/20 bg-[#050a08]"
     >
       <div className="flex items-center justify-between gap-2 border-b border-cyan-500/15 bg-cyan-500/[0.04] px-4 py-2.5">
         <div className="flex items-center gap-2">
           <Terminal className="h-4 w-4 text-cyan-300" aria-hidden />
           <h2 className="font-display text-sm font-semibold text-[var(--color-text-primary)]">
-            Logs Cognitivos da Alaris
+            Logs Cognitivos do Bem-Te-Vi Core
           </h2>
           <span className="hidden items-center gap-1 text-[10px] text-[var(--color-text-muted)] sm:inline-flex">
             <BrainCircuit className="h-3 w-3" />
@@ -109,7 +109,7 @@ export function AiStreamLog() {
       >
         {entries.length === 0 ? (
           <p className="text-[var(--color-text-muted)]">
-            <span className="text-emerald-400">›</span> Aguardando a Alaris Core
+            <span className="text-emerald-400">›</span> Aguardando o Bem-Te-Vi Core
             processar o stream
             <span className="ml-0.5 inline-block h-3.5 w-1.5 translate-y-0.5 animate-blink bg-emerald-400 align-middle" />
           </p>
@@ -138,8 +138,8 @@ const LEVEL_STYLE: Record<
 
 function LogLine({ entry }: { entry: AiLogEntry }) {
   const style = LEVEL_STYLE[entry.level] ?? LEVEL_STYLE.info;
-  // Destaca a assinatura do motor: "[Alaris] restante da mensagem".
-  const prefixo = "[Alaris]";
+  // Destaca a assinatura do motor: "[Bem-Te-Vi Core] restante da mensagem".
+  const prefixo = "[Bem-Te-Vi Core]";
   const assinada = entry.message.startsWith(prefixo);
   const texto = assinada ? entry.message.slice(prefixo.length).trimStart() : entry.message;
   return (

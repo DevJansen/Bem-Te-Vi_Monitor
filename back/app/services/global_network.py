@@ -1,4 +1,4 @@
-"""Rede Global Bem-Ti-Vi: destaques de avistamentos entre jardins.
+"""Rede Global Bem-Te-Vi Monitor: destaques de avistamentos entre jardins.
 
 Cada instância pode compartilhar (e receber) avisos de **avistamentos raros ou
 incomuns**. O módulo é deliberadamente conservador:
@@ -109,7 +109,7 @@ def _peer_urls() -> list[str]:
 
 
 class GlobalNetworkService:
-    """Persistência e distribuição do Feed Global Bem-Ti-Vi."""
+    """Persistência e distribuição do Feed Global Bem-Te-Vi Monitor."""
 
     def __init__(self, db_path: Path | None = None) -> None:
         self.settings = get_settings()
@@ -454,7 +454,7 @@ class GlobalNetworkService:
             headers = {
                 "Content-Type": "application/json",
                 "X-Bem-Te-Vi-Token": settings.global_network_token,
-                "User-Agent": "Bem-Te-Vi-Global-Network/1.0",
+                "User-Agent": "Bem-Te-Vi-Monitor-Global-Network/1.0",
             }
             for url in peers:
                 try:
@@ -477,7 +477,7 @@ class GlobalNetworkService:
                         exc_info=True,
                     )
 
-        threading.Thread(target=_send, name="bem-te-vi-network", daemon=True).start()
+        threading.Thread(target=_send, name="bem-te-vi-monitor-network", daemon=True).start()
 
 
 def get_global_network_service() -> GlobalNetworkService:

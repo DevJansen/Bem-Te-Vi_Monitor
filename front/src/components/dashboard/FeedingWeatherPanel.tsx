@@ -65,11 +65,11 @@ function liftLabel(lift: number): string {
 }
 
 /**
- * Card "Insights Meteorológicos do Alaris Core".
+ * Card "Insights Meteorológicos do Bem-Te-Vi Core".
  *
  * Cruza a previsão das próximas horas de cada jardim com o histórico de
  * alimentação daquele jardim. Quando há chuva a caminho, mostra a estimativa de
- * intensificação (ou redução) da atividade e a ação tomada pelo Alaris Core.
+ * intensificação (ou redução) da atividade e a ação tomada pelo Bem-Te-Vi Core.
  */
 export function FeedingWeatherPanel() {
   const query = usePolling(() => fetchFeedingWeatherInsights(), 5 * 60_000);
@@ -142,7 +142,7 @@ export function FeedingWeatherPanel() {
           <div className="mt-4 rounded-xl border border-dashed border-dark-600 px-4 py-6 text-center">
             <MapPin className="mx-auto h-6 w-6 text-[var(--color-text-muted)]" />
             <p className="mt-2 text-sm text-[var(--color-text-muted)]">
-              Cadastre a localização de uma câmera para o Alaris Core cruzar a
+              Cadastre a localização de uma câmera para o Bem-Te-Vi Core cruzar a
               previsão do tempo com a atividade das aves.
             </p>
           </div>
@@ -301,7 +301,7 @@ function Header({
         </span>
         <div>
           <h2 className="font-display text-sm font-semibold text-[var(--color-text-primary)]">
-            Insights Meteorológicos do Alaris Core
+            Insights Meteorológicos do Bem-Te-Vi Core
           </h2>
           <p className="text-[11px] text-[var(--color-text-muted)]">
             Previsão de chuva × comportamento histórico de alimentação

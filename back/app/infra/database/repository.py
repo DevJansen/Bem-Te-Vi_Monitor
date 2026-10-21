@@ -495,7 +495,7 @@ class VisitRepository:
         species_id: str | None = None,
         image_source: str | None = None,
     ) -> dict[str, Any] | None:
-        # Taxonomia do Alaris Core: decide se o bicho é uma **ave** (fluxo
+        # Taxonomia do Bem-Te-Vi Core: decide se o bicho é uma **ave** (fluxo
         # ornitológico normal) ou um **Visitante Especial** (esquilo, gato…).
         # Não-aves nunca entram na Life List e ganham a prateleira da Galeria.
         visitante = descrever_visitante(common_name, scientific_name)
@@ -560,7 +560,7 @@ class VisitRepository:
         """Funde (merge raso) chaves no ``metadata_json`` da visita.
 
         Usado para cachear a ficha ornitológica da IA externa sem sobrescrever
-        os demais metadados gravados pelo Alaris Core. Devolve a visita
+        os demais metadados gravados pelo Bem-Te-Vi Core. Devolve a visita
         atualizada ou ``None`` quando o ``visit_id`` não existe.
         """
         with db_session(self.db_path) as conn:
@@ -927,7 +927,7 @@ class BirdSpeciesRepository:
     def set_reference_image(
         self, species_id: str, reference_image_path: str | None
     ) -> dict[str, Any] | None:
-        """Define/atualiza a foto de referência (arquivo tratado pelo Alaris)."""
+        """Define/atualiza a foto de referência (arquivo tratado pelo Bem-Te-Vi Core)."""
         with db_session(self.db_path) as conn:
             cursor = conn.execute(
                 "UPDATE bird_species SET reference_image_path = ? WHERE id = ?",

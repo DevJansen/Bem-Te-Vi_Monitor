@@ -48,7 +48,7 @@ export function LiveStreamView({
   const [streamVersion, setStreamVersion] = useState<number>(() => Date.now());
   const [streamConnection, setStreamConnection] =
     useState<StreamConnection>("reconnecting");
-  // Estado em tempo real do Alaris Core na câmera selecionada (aves ativas e
+  // Estado em tempo real do Bem-Te-Vi Core na câmera selecionada (aves ativas e
   // espécies rastreadas): alimenta o realce da borda e os cards flutuantes.
   const [streamStats, setStreamStats] = useState<StreamStats | null>(null);
 
@@ -77,7 +77,7 @@ export function LiveStreamView({
     ? `${videoFeedUrl(selected.id, showBoxes)}&v=${streamVersion}`
     : null;
 
-  // Polling do estado do Alaris Core para a câmera selecionada (a cada 3 s).
+  // Polling do estado do Bem-Te-Vi Core para a câmera selecionada (a cada 3 s).
   useEffect(() => {
     if (!selectedId) {
       setStreamStats(null);
@@ -103,7 +103,7 @@ export function LiveStreamView({
 
   const activeBirds = streamStats?.active_birds ?? 0;
   const activeSpecies = streamStats?.active_species ?? [];
-  // O Alaris está rastreando ativamente quando há ave(s) no comedouro agora.
+  // O Bem-Te-Vi Core está rastreando ativamente quando há ave(s) no comedouro agora.
   const tracking = activeBirds > 0;
   // Espécies ativas resumidas para o card (ex.: "Tangara sayaca +2").
   const speciesLabel =
@@ -379,7 +379,7 @@ export function LiveStreamView({
                 </span>
                 <Sparkles className="h-3.5 w-3.5 text-emerald-300" />
                 <span className="text-[11px] font-semibold text-emerald-200">
-                  Alaris rastreando
+                  Bem-Te-Vi Core rastreando
                 </span>
                 <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/20 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-emerald-200">
                   <Bird className="h-3 w-3" />
@@ -394,7 +394,7 @@ export function LiveStreamView({
             ) : null}
             {showBoxes ? (
               <div className="absolute bottom-3 left-3 rounded-md bg-emerald-500/90 px-2 py-1 text-[10px] font-semibold text-dark-900">
-                Alaris Core · overlays ativos
+                Bem-Te-Vi Core · overlays ativos
               </div>
             ) : null}
             {nightActive ? (

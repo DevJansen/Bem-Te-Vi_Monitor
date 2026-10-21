@@ -6,7 +6,7 @@ close-up exibido na Galeria) é copiado para a fila de treinamento:
 
     app-data/training_queue/{espécie}/...
 
-A partir dessa fila, o botão **“Otimizar Bem-Ti-Vi Core com Novas Amostras”**
+A partir dessa fila, o botão **“Otimizar Bem-Te-Vi Core com Novas Amostras”**
 (Configurações) dispara um *fine-tuning* leve de um modelo de classificação
 YOLOv8 (``yolov8n-cls.pt``). O treino roda em segundo plano, com poucas épocas,
 e o ``best.pt`` resultante passa a ser consumido pelo classificador de espécies
@@ -41,33 +41,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from app.ai.visit_media import resolve_visit_image
 from app.core.config import Settings, get_settings
+from app.domain.species_labels import is_generic_species as _rotulo_generico
 from app.infra.database.connection import db_session
 from app.infra.database.repository import VisitRepository
 
 logger = logging.getLogger(__name__)
-
-# Rótulos que não representam uma espécie real e, portanto, não viram classe.
-_GENERIC_SPECIES = {
-    "bird",
-    "passaro",
-    "passaros",
-    "passaro desconhecido",
-    "pássaro desconhecido",
-    "ave",
-    "aves",
-    "ave (genérica)",
-    "ave (generica)",
-    "ave nao identificada",
-    "ave não identificada",
-    "não identificada",
-    "nao identificada",
-    "unidentified",
-    "unknown",
-    "desconhecida",
-    "desconhecido",
-    "visitante especial",
-}
 
 # Caracteres proibidos pelo Windows (e separadores POSIX) em nomes de pasta.
 _INVALID_NAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
@@ -83,9 +63,12 @@ def utc_now() -> str:
 
 
 def is_generic_species(name: str | None) -> bool:
-    """Indica se o rótulo é genérico e não deve virar classe de treino."""
-    cleaned = (name or "").strip()
-    return not cleaned or cleaned.casefold() in _GENERIC_SPECIES
+    """Indica se o rótulo é genérico e não deve virar classe de treino.
+
+    Reexporta o vocabulário compartilhado do domínio
+    (:mod:`app.domain.species_labels`), evitando listas duplicadas.
+    """
+    return _rotulo_generico(name)
 
 
 def safe_species_folder(name: str) -> str:
@@ -175,39 +158,13 @@ class ActiveLearningService:
     # Fila de amostras
     # ------------------------------------------------------------------ #
     def _best_image_path(self, row: dict[str, Any]) -> Path | None:
-        """Recorte tratado > thumbnail oficial > recorte canônico da visita."""
-        settings = self.settings
-        metadata: dict[str, Any] = {}
-        try:
-            metadata = json.loads(row.get("metadata_json") or "{}")
-        except (TypeError, ValueError):
-            metadata = {}
+        """Recorte tratado > thumbnail oficial > recorte canônico da visita.
 
-        crop_relative = metadata.get("crop_path")
-        if isinstance(crop_relative, str) and crop_relative.strip():
-            candidate = (settings.app_data_dir / crop_relative).resolve()
-            try:
-                candidate.relative_to(settings.app_data_dir.resolve())
-            except ValueError:
-                candidate = None  # type: ignore[assignment]
-            if candidate is not None and candidate.is_file():
-                return candidate
-
-        canonical = settings.crops_dir / f"{row['id']}.jpg"
-        if canonical.is_file():
-            return canonical
-
-        thumbnail = row.get("thumbnail_path")
-        if thumbnail:
-            normalized = str(thumbnail).replace("\\", "/").lstrip("/")
-            candidate = (settings.captures_dir / normalized).resolve()
-            try:
-                candidate.relative_to(settings.captures_dir.resolve())
-            except ValueError:
-                return None
-            if candidate.is_file():
-                return candidate
-        return None
+        Delega ao resolvedor compartilhado (:mod:`app.ai.visit_media`), que
+        valida os caminhos contra as pastas de mídia do ``app-data`` (proteção
+        contra *path traversal*) e evita duplicar a regra nos módulos de IA.
+        """
+        return resolve_visit_image(row, self.settings)
 
     def _display_species(self, row: dict[str, Any]) -> tuple[str, str | None, str | None]:
         """Nome popular, id e nome científico da visita (catálogo > rótulo)."""
@@ -252,7 +209,7 @@ class ActiveLearningService:
         if is_generic_species(final_name):
             raise ActiveLearningError(
                 "Identifique a espécie desta visita antes de enviá-la ao "
-                "treinamento do Bem-Ti-Vi Core."
+                "treinamento do Bem-Te-Vi Core."
             )
 
         image_path = self._best_image_path(row)
@@ -489,7 +446,7 @@ class ActiveLearningService:
         if model_available:
             notes.append(
                 "Modelo treinado disponível: o pipeline já classifica espécies "
-                "com o Bem-Ti-Vi Core."
+                "com o Bem-Te-Vi Core."
             )
 
         return {
@@ -767,7 +724,7 @@ class ActiveLearningService:
                 classes,
             )
         except Exception as exc:
-            logger.exception("Fine-tuning do Bem-Ti-Vi Core falhou")
+            logger.exception("Fine-tuning do Bem-Te-Vi Core falhou")
             self._set_run(
                 run_id,
                 status="failed",
@@ -795,7 +752,7 @@ class ActiveLearningService:
         with self._lock:
             if self._active_run_id is not None:
                 raise ActiveLearningError(
-                    "Já existe uma otimização do Bem-Ti-Vi Core em andamento."
+                    "Já existe uma otimização do Bem-Te-Vi Core em andamento."
                 )
             # Reserva a vaga antes de tocar no banco (evita corrida entre cliques).
             self._active_run_id = "starting"
@@ -841,7 +798,7 @@ class ActiveLearningService:
             thread = threading.Thread(
                 target=self._train_worker,
                 args=(run_id,),
-                name="bem-te-vi-fine-tune",
+                name="bem-te-vi-core-fine-tune",
                 daemon=True,
             )
             self._thread = thread

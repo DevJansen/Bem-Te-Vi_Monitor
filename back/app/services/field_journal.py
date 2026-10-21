@@ -567,7 +567,7 @@ def _garden_name(row: dict[str, Any]) -> str:
     return (
         str(row.get("camera_location") or "").strip()
         or str(row.get("camera_name") or "").strip()
-        or "Jardim Bem-Te-Vi"
+        or "Jardim Bem-Te-Vi Monitor"
     )
 
 
@@ -605,7 +605,7 @@ def _journal_text(
     total_visits: int,
 ) -> str:
     lines: list[str] = [
-        "DIÁRIO DE CAMPO BEM-TE-VI",
+        "DIÁRIO DE CAMPO BEM-TE-VI MONITOR",
         _long_date(day).upper(),
         "",
     ]
@@ -973,7 +973,7 @@ class FieldJournalService:
                     species,
                     str(count),
                     " · ".join(comments),
-                    garden.get("name") or "Jardim Bem-Te-Vi",
+                    garden.get("name") or "Jardim Bem-Te-Vi Monitor",
                     f"{lat:.6f}" if lat is not None else "",
                     f"{lon:.6f}" if lon is not None else "",
                     _ebird_date(day_iso),

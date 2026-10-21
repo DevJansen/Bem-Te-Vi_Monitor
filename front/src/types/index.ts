@@ -79,7 +79,7 @@ export type Camera = {
   country?: string | null;
   has_credentials: boolean;
   is_active: boolean;
-  /** Alaris Core (IA visual - YOLOv8 + gravação) ativo nesta câmera. */
+  /** Bem-Te-Vi Core (IA visual - YOLOv8 + gravação) ativo nesta câmera. */
   ai_enabled?: boolean;
   /** Monitoramento contínuo de áudio com BirdNET ativo nesta câmera. */
   audio_enabled?: boolean;
@@ -160,7 +160,7 @@ export type GeoLocation = {
   label: string;
 };
 
-/** Estado em tempo real de um stream (Alaris Core distribuído). */
+/** Estado em tempo real de um stream (Bem-Te-Vi Core distribuído). */
 export type StreamStats = {
   camera_id: string;
   name: string;
@@ -171,7 +171,7 @@ export type StreamStats = {
   fps: number;
   backend: string | null;
   active_birds: number;
-  /** Espécies distintas rastreadas neste instante (cards de status do Alaris). */
+  /** Espécies distintas rastreadas neste instante (cards de status do Bem-Te-Vi Core). */
   active_species: string[];
   individuals_peak: number;
   inferences: number;
@@ -292,7 +292,7 @@ export type BirdVisit = {
     };
     /** Análise enriquecida gerada pela IA ("laudo" da visita + anotação). */
     ai_analysis?: {
-      /** Motor de IA que gerou a análise (assinatura Alaris). */
+      /** Motor de IA que gerou a análise (assinatura Bem-Te-Vi Core). */
       engine?: string;
       species?: string | null;
       scientific_name?: string | null;
@@ -311,6 +311,35 @@ export type BirdVisit = {
     };
     /** Ficha ornitológica profunda em cache (consulta da IA externa). */
     ai_consult?: SpeciesAiConsult;
+    /**
+     * Associação automática do Bem-Te-Vi Core (re-ID visual contra o Catálogo
+     * Local). Presente quando a similaridade de cosseno entre o recorte e as
+     * fotos de referência superou o limiar (65% por padrão).
+     */
+    auto_association?: {
+      applied: boolean;
+      /** Similaridade de cosseno entre o recorte e a foto de referência. */
+      score: number;
+      /** Limiar usado na decisão (0.65 = 65%). */
+      threshold?: number;
+      /** Espécie vencedora no catálogo local. */
+      common_name?: string;
+      scientific_name?: string | null;
+      species_id?: string;
+      /** Modelo que gerou o embedding (MobileNetV3-Small ou fallback OpenCV). */
+      model?: string;
+      identified_at?: string;
+    };
+    /** Correção manual registrada pelo observador (reclassificação). */
+    manual_reclassification?: {
+      previous_species?: string;
+      species_id?: string;
+      species_name?: string;
+      notes?: string | null;
+      created_at?: string;
+    };
+    /** Momento da confirmação manual do observador. */
+    confirmed_at?: string;
     [key: string]: unknown;
   };
 };
@@ -417,7 +446,7 @@ export type SpeciesSighting = {
   detected_at: string;
   confidence: number;
   thumbnail_url: string | null;
-  /** Recorte tratado pelo Alaris Core (close-up da ave). */
+  /** Recorte tratado pelo Bem-Te-Vi Core (close-up da ave). */
   crop_url: string | null;
   temperature: number | null;
   humidity: number | null;
@@ -1364,7 +1393,7 @@ export type FieldJournal = {
   species: FieldJournalSpecies[];
 };
 
-/* ——— Rede Global Bem-Ti-Vi ——— */
+/* ——— Rede Global Bem-Te-Vi ——— */
 
 export type NetworkFeedEvent = {
   id: string;

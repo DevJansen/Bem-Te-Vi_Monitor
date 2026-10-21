@@ -44,7 +44,7 @@ _cache_lock = threading.Lock()
 # A cadeia abaixo prefere, nesta ordem:
 #   1. formato combinado em HLS (tem áudio);
 #   2. a melhor faixa de VÍDEO em HLS — caso típico de live (basta para o
-#      Alaris Core, que analisa imagem);
+#      Bem-Te-Vi Core, que analisa imagem);
 #   3. a melhor faixa de vídeo disponível (fallback para vídeos comuns).
 _YDL_BASE_OPTS: dict = {
     "format": "best[protocol^=m3u8]/bestvideo[protocol^=m3u8]/bestvideo/best",

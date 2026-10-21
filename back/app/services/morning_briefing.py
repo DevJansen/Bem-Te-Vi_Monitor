@@ -3,7 +3,7 @@
 Compila diariamente, no horário configurado (padrão 07:00), um briefing
 inteligente com:
 - previsão do tempo atualizada (Open-Meteo) para cada jardim cadastrado;
-- predição de visitas do dia gerada pelo Alaris Core (memória de hábitos);
+- predição de visitas do dia gerada pelo Bem-Te-Vi Core (memória de hábitos);
 - a foto de destaque ("Momento Raro / Postal") capturada no dia anterior.
 
 O briefing é enviado diretamente via Telegram e/ou Discord configurados.
@@ -86,7 +86,7 @@ class MorningBriefingScheduler(threading.Thread):
             else:
                 weather_lines.append(f"🌤 {name}: sem coordenadas")
 
-        # Predição de visitas do dia via Alaris Core (behavioral memory).
+        # Predição de visitas do dia via Bem-Te-Vi Core (behavioral memory).
         try:
             from app.ai.behavioral_memory import get_behavioral_memory_service
             svc = get_behavioral_memory_service()
@@ -135,7 +135,7 @@ class MorningBriefingScheduler(threading.Thread):
 
         # Monta o texto do briefing.
         lines = [
-            "🌅 *Resumo Matinal — Bem-Ti-Vi*",
+            "🌅 *Resumo Matinal — Bem-Te-Vi Monitor*",
             f"📅 {datetime.now().strftime('%d/%m/%Y')}",
             "",
             "🌤 *Clima nos jardins:*",

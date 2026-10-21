@@ -34,30 +34,11 @@ import cv2
 import numpy as np
 
 from app.core.config import get_settings
+from app.domain.species_labels import is_generic_species as _rotulo_generico
 from app.infra.database.connection import db_session
 from app.infra.database.repository import VisitRepository
 
 logger = logging.getLogger(__name__)
-
-_GENERIC_SPECIES = {
-    "bird",
-    "passaro",
-    "passaros",
-    "passaro desconhecido",
-    "pássaro desconhecido",
-    "ave",
-    "aves",
-    "ave (genérica)",
-    "ave (generica)",
-    "ave nao identificada",
-    "ave não identificada",
-    "não identificada",
-    "nao identificada",
-    "unidentified",
-    "unknown",
-    "desconhecida",
-    "desconhecido",
-}
 
 # Dimensões de entrada da MobileNetV3 (padrão ImageNet).
 _INPUT_SIZE = 224
@@ -70,8 +51,8 @@ def utc_now() -> str:
 
 
 def _is_generic(name: str | None) -> bool:
-    cleaned = (name or "").strip()
-    return not cleaned or cleaned.casefold() in _GENERIC_SPECIES
+    """Indica se o rótulo é genérico (reutiliza o vocabulário compartilhado)."""
+    return _rotulo_generico(name)
 
 
 def _l2_normalize(vector: np.ndarray) -> np.ndarray:
@@ -93,6 +74,26 @@ def _read_image(path: Path) -> np.ndarray | None:
     except Exception:
         logger.debug("Imagem ilegível para embedding: %s", path, exc_info=True)
         return None
+
+
+def read_image_bgr(path: Path | str) -> np.ndarray | None:
+    """Leitura pública de imagem BGR (compatível com caminhos Unicode).
+
+    Exposta para os módulos de associação de espécie e exportação HD, que
+    precisam da mesma leitura robusta usada pelos embeddings — sem duplicar a
+    lógica de ``np.fromfile`` + ``cv2.imdecode``.
+    """
+    return _read_image(Path(path))
+
+
+def is_generic_species(name: str | None) -> bool:
+    """Indica se o rótulo é genérico (ex.: ``bird``/``Pássaro Desconhecido``).
+
+    Reexporta o vocabulário compartilhado do domínio
+    (:mod:`app.domain.species_labels`), evitando listas duplicadas entre os
+    módulos de IA.
+    """
+    return _rotulo_generico(name)
 
 
 def image_sharpness(image: np.ndarray) -> float | None:

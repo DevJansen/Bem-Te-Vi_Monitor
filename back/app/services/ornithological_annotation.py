@@ -160,7 +160,7 @@ def montar_analise_ia(
     status = eco.get("status")
     rotulo = eco.get("label")
     return {
-        "engine": "Alaris Core v1.0",
+        "engine": "Bem-Te-Vi Core v1.0",
         "species": species,
         "scientific_name": scientific_name,
         "individuals_peak": individuals_peak,

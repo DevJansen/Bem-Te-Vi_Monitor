@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Bird,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Clock3,
@@ -20,7 +21,9 @@ import { VisitDeepDiveModal } from "@/components/dashboard/VisitDeepDiveModal";
 import {
   formatRelativeTime,
   isFreshVisit,
+  isEcologicalUnknown,
   resolveEcological,
+  resolveIdentificationBadge,
   resolveVisitNames,
   resolveVisitSpeciesLabel,
 } from "@/utils/visits";
@@ -71,7 +74,7 @@ type Props = {
  * Painel "Visitas de Hoje": as 5 capturas mais recentes do dia em cards
  * clicáveis, com paginação limpa para as demais. Cada card abre um modal
  * imersivo (deep-dive) com a foto tratada em alta definição e a telemetria do
- * Alaris Core.
+ * Bem-Te-Vi Core.
  */
 export function TodayVisitsPanel({ species = [], onOpenInGallery }: Props) {
   const [view, setView] = useState<"birds" | "visitors">("birds");
@@ -146,7 +149,7 @@ export function TodayVisitsPanel({ species = [], onOpenInGallery }: Props) {
               Visitas de Hoje
             </h2>
             <p className="text-xs text-[var(--color-text-muted)]">
-              Últimas capturas tratadas pelo Alaris Core
+              Últimas capturas tratadas pelo Bem-Te-Vi Core
             </p>
           </div>
         </div>
@@ -322,6 +325,7 @@ export function TodayVisitsPanel({ species = [], onOpenInGallery }: Props) {
         catalogSpecies={species}
         onClose={() => setSelectedVisit(null)}
         onOpenInGallery={handleOpenInGallery}
+        onVisitUpdated={() => void activeQuery.refresh()}
       />
     </section>
   );
@@ -343,7 +347,7 @@ function VisitRow({
 }) {
   const frame = resolveMediaUrl(visit.thumbnail_url ?? visit.thumbnail_path);
   // A miniatura circular usa o **recorte (close-up) da ave** tratado pelo
-  // Alaris — bem mais nítido que o quadro inteiro. Se o recorte não existir ou
+  // Bem-Te-Vi Core — bem mais nítido que o quadro inteiro. Se o recorte não existir ou
   // falhar ao carregar, cai de volta para a thumbnail do quadro completo.
   const crop = visit.metadata?.crop_path ? visitCropUrl(visit.id) : null;
   const [cropFailed, setCropFailed] = useState(false);
@@ -354,6 +358,11 @@ function VisitRow({
     ? catalogSpecies.find((item) => item.id === visit.species_id)
     : undefined;
   const ecological = resolveEcological(visit, catalogEntry);
+  // O selo ecológico "desconhecido" é omitido: a identificação já é
+  // comunicada pelo badge elegante abaixo do nome da ave.
+  const showEcological = Boolean(ecological?.badge) && !isEcologicalUnknown(ecological);
+  // Selo de identificação (substitui a antiga tag estática "Desconhecido").
+  const identificationBadge = resolveIdentificationBadge(visit);
   const fresh = isFreshVisit(visit.detected_at, now);
   const confidencePct = Math.round(
     Math.min(1, Math.max(0, visit.confidence)) * 100,
@@ -427,7 +436,19 @@ function VisitRow({
             </span>
           ) : null}
           <span className="mt-1 flex flex-wrap items-center gap-1.5">
-            {ecological?.badge ? (
+            {identificationBadge ? (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold",
+                  identificationBadge.className,
+                )}
+                title={identificationBadge.title}
+              >
+                <CheckCircle2 className="h-2.5 w-2.5" />
+                {identificationBadge.label}
+              </span>
+            ) : null}
+            {showEcological && ecological?.badge ? (
               <span
                 className={cn(
                   "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold",
@@ -492,7 +513,7 @@ function EmptyState() {
         </span>
       </span>
       <h3 className="mt-4 font-display text-sm font-semibold text-[var(--color-text-primary)]">
-        Alaris Core em vigilância ativa
+        Bem-Te-Vi Core em vigilância ativa
       </h3>
       <p className="mx-auto mt-1 max-w-sm text-sm text-[var(--color-text-muted)]">
         Aguardando os primeiros visitantes do dia…

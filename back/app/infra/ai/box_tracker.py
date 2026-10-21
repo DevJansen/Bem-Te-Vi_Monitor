@@ -206,7 +206,7 @@ class BoxTracker:
     def clear(self) -> None:
         """Descarta todas as faixas ativas e o quadro-base do fluxo óptico.
 
-        Usado quando o Alaris Core é **pausado** para a câmera: ao retomar, o
+        Usado quando o Bem-Te-Vi Core é **pausado** para a câmera: ao retomar, o
         rastreio começa limpo, sem "fantasmas" de aves que já saíram de cena.
         Os identificadores já vistos (``seen_ids``) são preservados para não
         inflar a contagem de indivíduos do mesmo bando.

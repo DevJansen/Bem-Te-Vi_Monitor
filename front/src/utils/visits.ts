@@ -1,7 +1,7 @@
 /**
  * Utilitários de apresentação das visitas (Painel · Visitas de Hoje).
  *
- * Concentra a leitura "defensiva" dos metadados que o Alaris Core grava na
+ * Concentra a leitura "defensiva" dos metadados que o Bem-Te-Vi Core grava na
  * visita (identificação, status ecológico, nitidez do quadro, clima) para que os
  * componentes fiquem limpos e não repitam regras de negócio.
  */
@@ -61,6 +61,103 @@ export function resolveVisitSpeciesLabel(visit: BirdVisit): string {
   return resolveVisitNames(visit).commonName || formatSpeciesLabel(visit.species);
 }
 
+/**
+ * Badge de identificação da visita (substitui a antiga tag "Desconhecido").
+ *
+ * O Painel Principal deixou de exibir o status estático "Desconhecido" para
+ * aves que já possuem correspondência no catálogo local. Agora a visita mostra
+ * um selo elegante que explica **como** a espécie foi resolvida:
+ *
+ * * **Identificado pelo Bem-Te-Vi Core** — associação automática por re-ID visual
+ *   (similaridade de cosseno acima de 65% com as fotos de referência);
+ * * **Espécie Confirmada** — curadoria humana (confirmação, reclassificação ou
+ *   identificação pela IA externa).
+ */
+export type IdentificationBadge = {
+  /** Texto exibido no selo. */
+  label: string;
+  /** Texto explicativo (tooltip). */
+  title: string;
+  /** Tom visual do selo. */
+  tone: "core" | "confirmada";
+  /** Classes Tailwind prontas para uso. */
+  className: string;
+};
+
+/** Classes Tailwind do selo de identificação. */
+export const IDENTIFICATION_BADGE_CLASS: Record<
+  IdentificationBadge["tone"],
+  string
+> = {
+  core: "border-cyan-400/30 bg-cyan-500/15 text-cyan-200",
+  confirmada: "border-emerald-400/30 bg-emerald-500/15 text-emerald-200",
+};
+
+/**
+ * Resolve o selo de identificação da visita (ou ``null`` quando a ave segue
+ * sem espécie — nesse caso não mostramos nenhum "status" genérico).
+ */
+export function resolveIdentificationBadge(
+  visit: BirdVisit,
+): IdentificationBadge | null {
+  // Visitantes Especiais (esquilos, gatos…) não são aves: o painel usa o
+  // grupo do visitante, não um status de identificação de espécie.
+  if (visit.visitor_kind && visit.visitor_kind !== "bird") return null;
+
+  const metadata = visit.metadata ?? {};
+  const status = metadata.identification_status ?? "";
+  const auto = metadata.auto_association;
+
+  if (status === "Espécie Confirmada" || status === "Confirmado pelo usuário") {
+    return {
+      label: "Espécie Confirmada",
+      title: "Identificação confirmada por você (curadoria do observador).",
+      tone: "confirmada",
+      className: IDENTIFICATION_BADGE_CLASS.confirmada,
+    };
+  }
+
+  if (status === "Reclassificado pelo usuário") {
+    return {
+      label: "Espécie Confirmada",
+      title:
+        "Associação corrigida por você — o recorte foi salvo para o retreinamento.",
+      tone: "confirmada",
+      className: IDENTIFICATION_BADGE_CLASS.confirmada,
+    };
+  }
+
+  if (status === "Identificado por IA Externa") {
+    return {
+      label: "Espécie Confirmada",
+      title: "Espécie resolvida pela consulta à IA externa (ficha ornitológica).",
+      tone: "confirmada",
+      className: IDENTIFICATION_BADGE_CLASS.confirmada,
+    };
+  }
+
+  // Compatibilidade: visitas gravadas antes do rebranding carregam o rótulo
+  // antigo ("Alaris Core") e continuam exibindo o mesmo selo.
+  const statusCore =
+    status === "Identificado pelo Bem-Te-Vi Core" ||
+    status === "Identificado pelo Alaris Core";
+
+  if (statusCore || auto?.applied) {
+    const score =
+      typeof auto?.score === "number" ? Math.round(auto.score * 100) : null;
+    return {
+      label: "Identificado pelo Bem-Te-Vi Core",
+      title: score
+        ? `Associação automática por similaridade visual (${score}%) com as fotos de "Minhas Aves".`
+        : 'Associação automática por similaridade visual com as fotos de "Minhas Aves".',
+      tone: "core",
+      className: IDENTIFICATION_BADGE_CLASS.core,
+    };
+  }
+
+  return null;
+}
+
 /** Status ecológico regional pronto para exibição (selo + rótulo). */
 export type EcologicalInfo = {
   /** Selo completo com emoji (ex.: "🟢 Nativa"). */
@@ -75,7 +172,12 @@ export type EcologicalInfo = {
 
 /**
  * Resolve o status ecológico da visita: prioriza os metadados gravados pelo
- * Alaris na captura, cai para a análise de IA e, por fim, para o Catálogo Local.
+ * Bem-Te-Vi Core na captura, cai para a análise de IA e, por fim, para o Catálogo Local.
+ *
+ * Exceção importante: quando o status da captura é **"desconhecida"** (a ave
+ * ainda não era identificada no momento do registro) e o Catálogo Local já
+ * conhece a espécie, o status do catálogo tem prioridade — evita exibir o
+ * selo estático "⚪ Status desconhecido" em uma ave já identificada.
  */
 export function resolveEcological(
   visit: BirdVisit,
@@ -83,21 +185,29 @@ export function resolveEcological(
 ): EcologicalInfo | null {
   const eco = visit.metadata?.ecological;
   const analysis = visit.metadata?.ai_analysis;
-  const badge =
+  let badge =
     eco?.badge ??
     analysis?.ecological_badge ??
     catalogEntry?.ecological_badge ??
     null;
-  const status =
+  let status =
     eco?.status ??
     analysis?.ecological_status ??
     catalogEntry?.ecological_status ??
     "";
-  const label =
+  let label =
     eco?.label ??
     analysis?.ecological_label ??
     catalogEntry?.ecological_status_label ??
     "";
+
+  // Status da captura inconclusivo → o catálogo local (que já conhece a
+  // espécie) tem a informação mais precisa.
+  if (status === "desconhecida" && catalogEntry?.ecological_status) {
+    badge = catalogEntry.ecological_badge ?? badge;
+    status = catalogEntry.ecological_status;
+    label = catalogEntry.ecological_status_label ?? label;
+  }
   if (!badge && !status) return null;
   return {
     badge: badge ?? null,
@@ -107,7 +217,25 @@ export function resolveEcological(
   };
 }
 
-/** Qualidade do quadro escolhido pelo Alaris (índice de nitidez / Laplacian). */
+/**
+ * Indica se o status ecológico é o placeholder "desconhecido".
+ *
+ * Nesse caso o selo **não** deve ser exibido: o painel já comunica o estado da
+ * identificação pelo badge elegante ("Identificado pelo Bem-Te-Vi Core" ou
+ * "Espécie Confirmada"), e a tag estática "Status desconhecido" só poluiria a
+ * interface.
+ */
+export function isEcologicalUnknown(
+  ecological: EcologicalInfo | null | undefined,
+): boolean {
+  if (!ecological) return false;
+  return (
+    ecological.status === "desconhecida" ||
+    ecological.badge?.includes("desconhecido") === true
+  );
+}
+
+/** Qualidade do quadro escolhido pelo Bem-Te-Vi Core (índice de nitidez / Laplacian). */
 export type SharpnessInfo = {
   /** Variância do Laplaciano do quadro (quanto maior, mais nítido). */
   value: number | null;

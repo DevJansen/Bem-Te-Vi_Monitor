@@ -19,6 +19,9 @@ from app.ai.active_learning import (
     ActiveLearningError,
     get_active_learning_service,
 )
+from app.ai.fine_tuning import save_correction_sample
+from app.ai.species_association import get_species_association_service
+from app.ai.visit_media import resolve_visit_image_with_source
 from app.ai.visual_embeddings import get_visual_embeddings_service
 from app.core.config import get_settings
 from app.domain.avifauna_sul import info_especie
@@ -28,8 +31,10 @@ from app.domain.models import (
     VisitConfirmationOut,
     VisitConfirmationRequest,
     VisitOut,
+    VisitReclassificationRequest,
     VisitSpeciesAssignment,
 )
+from app.domain.species_labels import is_generic_species
 from app.infra.database.repository import VisitRepository
 from app.services.anomaly_log import registrar_retorno_especie
 from app.services.external_species_identifier import (
@@ -37,33 +42,11 @@ from app.services.external_species_identifier import (
     consult_species_profile,
     identify_bird_image_file,
 )
+from app.services.hd_crop import export_hd_crop, friendly_crop_filename
 from app.services.species_catalog import EspecieNaoAveError, match_or_create_species
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/visits", tags=["visits"])
-
-# Rótulos genéricos do detector que NÃO são um nome de espécie de verdade.
-# A comparação é por texto literal em minúsculas; por isso listamos as variantes
-# com e sem acento (a nomenclatura oficial exibida é "Pássaro Desconhecido").
-_GENERIC_SPECIES = {
-    "bird",
-    "passaro",
-    "passaros",
-    "passaro desconhecido",
-    "pássaro desconhecido",
-    "ave",
-    "aves",
-    "ave (genérica)",
-    "ave (generica)",
-    "ave nao identificada",
-    "ave não identificada",
-    "não identificada",
-    "nao identificada",
-    "unidentified",
-    "unknown",
-    "desconhecida",
-    "desconhecido",
-}
 
 
 def _repo() -> VisitRepository:
@@ -136,6 +119,12 @@ def _alimentar_inteligencia_adaptativa(
 def assign_visit_species(
     visit_id: str, payload: VisitSpeciesAssignment
 ) -> VisitOut:
+    """Associa (ou desassocia) uma visita a uma espécie do Catálogo Local.
+
+    A associação manual é um ato de curadoria: a visita passa a exibir o selo
+    **“Espécie Confirmada”** no painel e fica protegida contra sobrescritas da
+    auto-associação visual.
+    """
     try:
         row = _repo().assign_species(visit_id, payload.species_id)
     except LookupError as exc:
@@ -152,6 +141,17 @@ def assign_visit_species(
                 visit_id=visit_id,
                 exclude_visit_id=visit_id,
             )
+            # Selo de curadoria: a ave ganhou uma espécie real no catálogo.
+            row = (
+                _repo().update_metadata(
+                    visit_id,
+                    {
+                        "identification_status": "Espécie Confirmada",
+                        "assigned_at": datetime.now(timezone.utc).isoformat(),
+                    },
+                )
+                or row
+            )
             # A confirmação manual do usuário é o sinal mais valioso de
             # aprendizado: vira amostra de treino e assinatura visual.
             _alimentar_inteligencia_adaptativa(
@@ -164,6 +164,123 @@ def assign_visit_species(
     return VisitRepository.to_out(row)
 
 
+@router.post("/{visit_id}/reclassify", response_model=VisitOut)
+def reclassify_visit(
+    visit_id: str, payload: VisitReclassificationRequest
+) -> VisitOut:
+    """Corrige uma associação de espécie e ensina o Bem-Te-Vi Core.
+
+    Fluxo (o mesmo do botão **“Associação Incorreta / Reclassificar”**):
+
+    1. aplica a espécie correta à visita (o rótulo ``species`` também passa a
+       exibir o nome do catálogo);
+    2. grava o recorte tratado em ``app-data/fine_tuning/{espécie}/`` com a
+       proveniência no ``index.jsonl`` (material local de retreinamento);
+    3. enfileira a amostra no aprendizado ativo e recalcula a assinatura visual
+       do indivíduo em segundo plano;
+    4. registra o retorno da espécie no log de anomalias.
+    """
+    repository = _repo()
+    previous = repository.get(visit_id)
+    if previous is None:
+        raise HTTPException(status_code=404, detail="Visita não encontrada.")
+
+    try:
+        row = repository.assign_species(visit_id, payload.species_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="Espécie não encontrada.") from exc
+    if row is None:
+        raise HTTPException(status_code=404, detail="Visita não encontrada.")
+
+    nome = row.get("assigned_species_common_name") or row.get("species")
+    if not nome:
+        raise HTTPException(
+            status_code=422,
+            detail="A espécie informada não possui nome popular no catálogo.",
+        )
+    nome = str(nome)
+    anterior = (
+        previous.get("assigned_species_common_name")
+        or previous.get("species")
+        or ""
+    )
+
+    # Selo de curadoria: a auto-associação não sobrescreve mais esta visita.
+    updated = repository.update_metadata(
+        visit_id,
+        {
+            "identification_status": "Reclassificado pelo usuário",
+            "manual_reclassification": {
+                "previous_species": str(anterior),
+                "species_id": payload.species_id,
+                "species_name": nome,
+                "notes": (payload.notes or "").strip() or None,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            },
+        },
+    ) or row
+
+    amostra = save_correction_sample(
+        visit_id,
+        species_name=nome,
+        species_id=payload.species_id,
+        source="manual_reclassification",
+        notes=payload.notes,
+    )
+    if not amostra.get("saved"):
+        logger.warning(
+            "Reclassificação de %s não gerou amostra local de fine-tuning (%s)",
+            visit_id,
+            amostra.get("reason"),
+        )
+
+    registrar_retorno_especie(
+        species=nome,
+        scientific_name=row.get("assigned_species_scientific_name"),
+        visit_id=visit_id,
+        exclude_visit_id=visit_id,
+    )
+    _alimentar_inteligencia_adaptativa(
+        visit_id,
+        species_name=nome,
+        species_id=payload.species_id,
+        source="manual_reclassification",
+        wait_for_embedding=False,
+    )
+    logger.info(
+        "Visita %s reclassificada: '%s' → '%s' (amostra=%s)",
+        visit_id,
+        anterior,
+        nome,
+        amostra.get("path") or "não salva",
+    )
+    return VisitRepository.to_out(updated)
+
+
+@router.post("/{visit_id}/auto-identify", response_model=VisitOut)
+def auto_identify_visit(visit_id: str) -> VisitOut:
+    """Reexecuta a auto-associação visual de uma visita sob demanda.
+
+    Útil quando o catálogo ganhou novas fotos de referência depois da captura.
+    A curadoria humana (confirmação, IA externa ou reclassificação) é sempre
+    preservada — o serviço devolve a visita sem alterações nesses casos.
+    """
+    repository = _repo()
+    row = repository.get(visit_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Visita não encontrada.")
+
+    resultado = get_species_association_service().associate_visit(visit_id)
+    if not resultado.get("applied"):
+        logger.info(
+            "Auto-associação manual sem alteração em %s: %s",
+            visit_id,
+            resultado.get("reason"),
+        )
+    refreshed = repository.get(visit_id) or row
+    return VisitRepository.to_out(refreshed)
+
+
 @router.post("/{visit_id}/confirm", response_model=VisitConfirmationOut)
 def confirm_visit(
     visit_id: str, payload: VisitConfirmationRequest
@@ -172,7 +289,7 @@ def confirm_visit(
 
     Diferente do `assign-species` (que reescreve o rótulo), este endpoint
     registra a **confirmação** do usuário: a detecção atual passa a ser uma
-    amostra rotulada de alta qualidade para o fine-tuning do Bem-Ti-Vi Core e
+    amostra rotulada de alta qualidade para o fine-tuning do Bem-Te-Vi Core e
     também recebe a assinatura visual para a re-identificação individual.
     """
     repository = _repo()
@@ -195,6 +312,18 @@ def confirm_visit(
             species_name = especie.get("common_name") or especie.get("name")
     if not species_name:
         species_name = row.get("assigned_species_common_name") or row.get("species")
+
+    # Selo de curadoria: a confirmação do observador é a evidência mais forte
+    # que temos. A visita passa a exibir "Espécie Confirmada" no painel e fica
+    # protegida contra sobrescritas da auto-associação visual.
+    if species_name and not is_generic_species(species_name):
+        repository.update_metadata(
+            visit_id,
+            {
+                "identification_status": "Espécie Confirmada",
+                "confirmed_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
 
     resultado = _alimentar_inteligencia_adaptativa(
         visit_id,
@@ -332,33 +461,51 @@ async def get_visit_crop(visit_id: str) -> FileResponse:
     return FileResponse(crop_path, media_type="image/jpeg")
 
 
+@router.get("/{visit_id}/crop/hd")
+async def download_visit_crop_hd(visit_id: str) -> FileResponse:
+    """Baixa o **recorte HD** da ave (JPEG otimizado em alta resolução).
+
+    Diferente de ``GET /{visit_id}/crop`` (que serve o recorte exibido no
+    painel), esta rota força a geração de uma versão ampliada e realçada do
+    close-up — pronta para compartilhar, imprimir ou usar como material de
+    retreinamento. O arquivo é devolvido como anexo (``Content-Disposition``),
+    com nome amigável carregando a espécie e a data da visita.
+    """
+    row = _repo().get(visit_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Visita não encontrada.")
+
+    crop_path = export_hd_crop(visit_id)
+    if crop_path is None or not crop_path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="Recorte em alta definição não disponível para esta visita.",
+        )
+
+    especie = (
+        row.get("assigned_species_common_name")
+        or row.get("species")
+        or "ave"
+    )
+    filename = friendly_crop_filename(str(especie), visit_id)
+    return FileResponse(
+        crop_path,
+        media_type="image/jpeg",
+        filename=filename,
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
+
+
 def _resolve_visit_image(row: dict) -> tuple[Path, str] | None:
     """Escolhe a melhor imagem tratada disponível para a identificação externa.
 
     Prefere o **recorte da ave** (close-up, já passou pelo enhancement) e, na
     falta, a **thumbnail oficial** em alta definição. Os caminhos são validados
-    contra as pastas de mídia (proteção contra *path traversal*). Devolve o
-    caminho e um rótulo da origem (``recorte`` ou ``thumbnail``).
+    contra as pastas de mídia (proteção contra *path traversal*) pelo
+    resolvedor compartilhado :mod:`app.ai.visit_media`. Devolve o caminho e um
+    rótulo da origem (``recorte`` ou ``thumbnail``).
     """
-    settings = get_settings()
-    visit_id = row["id"]
-
-    crops_dir = settings.crops_dir.resolve()
-    crop_path = (settings.crops_dir / f"{visit_id}.jpg").resolve()
-    if crop_path.parent == crops_dir and crop_path.is_file():
-        return crop_path, "recorte"
-
-    thumb_relative = row.get("thumbnail_path")
-    if thumb_relative:
-        candidate = (settings.captures_dir / thumb_relative).resolve()
-        thumbs_dir = settings.thumbs_dir.resolve()
-        try:
-            candidate.relative_to(thumbs_dir)
-        except ValueError:
-            return None
-        if candidate.is_file():
-            return candidate, "thumbnail"
-    return None
+    return resolve_visit_image_with_source(row)
 
 
 @router.post("/{visit_id}/identify-external", response_model=VisitOut)
@@ -413,7 +560,7 @@ def identify_visit_external(
 
     species = f"{identification.common_name} ({identification.scientific_name})"
 
-    # Taxonomia do Alaris Core (o "anti-esquilo"): decide se é ave ou Visitante
+    # Taxonomia do Bem-Te-Vi Core (o "anti-esquilo"): decide se é ave ou Visitante
     # Especial. Esquilos/gatos NÃO entram na Life List nem geram anomalia de ave.
     visitante = descrever_visitante(
         identification.common_name, identification.scientific_name
@@ -424,7 +571,7 @@ def identify_visit_external(
     catalog_species_id: str | None = None
     if add_to_catalog and visitante.eh_ave:
         try:
-            # Alaris Core Smart Match: se a espécie já está na Life List, o card
+            # Bem-Te-Vi Core Smart Match: se a espécie já está na Life List, o card
             # existente é reaproveitado (sem duplicar); se é nova, nasce um card
             # estruturado no Álbum de Conquistas com a foto tratada.
             match = match_or_create_species(
@@ -506,7 +653,7 @@ def _resolver_nomes_ia(visit: VisitOut) -> tuple[str, str]:
         for candidato in candidatos:
             if isinstance(candidato, str):
                 limpo = candidato.strip()
-                if limpo and limpo.casefold() not in _GENERIC_SPECIES:
+                if limpo and not is_generic_species(limpo):
                     return limpo
         return ""
 

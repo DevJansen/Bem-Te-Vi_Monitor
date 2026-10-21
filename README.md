@@ -1,6 +1,19 @@
-# Bem-Te-Vi — Guia do Usuário
+# Bem-Te-Vi Monitor — Guia do Usuário
 
-> **Para quem quer entender e usar o Bem-Te-Vi no dia a dia.**
+> **Bem-Te-Vi Monitor** é o seu vigia de pássaros automático: um painel de
+> monitoramento de vida silvestre que roda **100% na sua máquina**, sem nuvem e
+> sem mensalidade.
+>
+> Por trás dele, o **Bem-Te-Vi Core** — o motor de inteligência artificial —
+> reconhece aves, identifica espécies, organiza a sua coleção e aprende com
+> cada visita. Você acompanha tudo por uma interface clara, em português.
+
+| | |
+|---|---|
+| 🖥️ **Bem-Te-Vi Monitor** | A aplicação: painel, galeria, diário de campo, estatísticas e configurações. |
+| 🧠 **Bem-Te-Vi Core** | O motor: visão computacional (YOLOv8), re-identificação de espécies e indivíduos, aprendizado ativo, bioacústica (BirdNET) e leitura do clima. |
+
+> **Para quem quer entender e usar o Bem-Te-Vi Monitor no dia a dia.**
 >
 > (Se você é desenvolvedor e quer detalhes técnicos de instalação e configuração, veja o [`README-DEV.md`](README-DEV.md).)
 
@@ -8,12 +21,20 @@
 
 ## Índice
 
-- [O que é o Bem-Te-Vi?](#o-que-é-o-bem-te-vi)
+- [O que é o Bem-Te-Vi Monitor?](#o-que-é-o-bem-te-vi-monitor)
 - [O que ele faz?](#o-que-ele-faz-um-resumo-rápido)
 - [Como instalar e abrir](#como-instalar-e-abrir-o-jeito-mais-simples)
-- [As telas do Bem-Te-Vi](#as-telas-do-bem-te-vi)
+- [As telas do Bem-Te-Vi Monitor](#as-telas-do-bem-te-vi-monitor)
   - Painel · Câmeras · Galeria · Diário de Campo · Detecção Sonora · Minhas Aves · Estatísticas e Conquistas · Configurações
 - [Detalhes das funções mais importantes](#detalhes-das-funções-mais-importantes)
+  - [Identificação automática de espécie](#-identificação-automática-de-espécie-bem-te-vi-core)
+  - [Deep-Dive da visita](#-deep-dive-da-visita-o-raio-x-de-cada-visita)
+  - [Recorte HD (Crop)](#-recorte-hd-crop)
+  - [Resumo Matinal](#-resumo-matinal-bom-dia-das-aves)
+  - [Laudo Ornitológico em PDF](#-laudo-ornitológico-em-pdf)
+  - [Visitantes Especiais](#-visitantes-especiais-o-modo-esquilo)
+  - [Conhecidos do Jardim](#-conhecidos-do-jardim-re-identificação-individual)
+  - [Ensinar o Bem-Te-Vi Core](#-ensinar-o-bem-te-vi-core-aprendizado-ativo)
 - [Calibração: o "tempero" da IA](#calibração-o-tempero-da-ia)
 - [Perguntas frequentes (FAQ)](#perguntas-frequentes-faq)
 - [Dicas de ouro](#dicas-de-ouro)
@@ -22,16 +43,18 @@
 
 ---
 
-## O que é o Bem-Te-Vi?
+## O que é o Bem-Te-Vi Monitor?
 
-O Bem-Te-Vi é um **vigia de pássaros automático** para o seu computador. Você aponta uma
-câmera (uma webcam ou uma câmera IP) para um comedouro, bebedouro ou cantinho onde os
-passarinhos costumam aparecer, e o sistema **sozinho**:
+O **Bem-Te-Vi Monitor** é um **vigia de pássaros automático** para o seu computador.
+Você aponta uma câmera (uma webcam ou uma câmera IP) para um comedouro, bebedouro
+ou cantinho onde os passarinhos costumam aparecer, e o sistema **sozinho**:
 
 - **percebe** quando um pássaro entra na imagem;
 - **tira uma foto** e **grava um vídeo** da visita;
 - **anota a hora** e guarda tudo no seu computador;
-- e, se você quiser, **descobre o nome** do pássaro (pela imagem ou pelo canto).
+- **descobre o nome** da ave sozinho, comparando a foto com o seu catálogo;
+- e, se quiser, **confirma o nome** pelo canto (bioacústica) ou por uma
+  inteligência artificial externa.
 
 Tudo acontece **na sua própria máquina**. Nada vai para a internet ou para a nuvem, exceto
 quando você pede especificamente para uma inteligência artificial adivinhar o nome da ave.
@@ -45,14 +68,22 @@ quando você pede especificamente para uma inteligência artificial adivinhar o 
 | Função | O que acontece |
 |--------|----------------|
 | 📷 **Detecção de pássaros** | Reconhece um passarinho na câmera e inicia uma "visita" |
+| 🧠 **Identificação automática (Bem-Te-Vi Core)** | Compara a foto com as fotos de "Minhas Aves" e **nomeia a ave sozinho** (≥ 65% de similaridade) |
+| 🏷️ **Reclassificação com aprendizado** | Se a associação errar, um clique corrige a espécie e a foto vai para a pasta de retreinamento |
 | 🌙 **Visão noturna** | Realça imagens escuras/infravermelho e monitora 24 horas |
 | 🖼️ **Fotos e vídeos** | Guarda uma foto e um clipe curto de cada visita |
+| 📥 **Recorte HD (Crop)** | Baixa o close-up da ave em alta resolução, pronto para compartilhar |
+| 🔍 **Deep-Dive da visita** | Abre o "Raio-X" de uma visita: nitidez, confiança, clima, bando e comportamento |
+| 🐦 **Conhecidos do Jardim** | Reconhece o **indivíduo** que voltou (assinatura visual) e mostra o histórico dele |
+| 🧾 **Laudo Ornitológico (PDF)** | Gera um relatório em PDF com fotos, clima, coordenadas e espécies |
+| 🌅 **Resumo Matinal** | De manhã, manda no Telegram/Discord o resumo do dia anterior com a foto de destaque |
 | 🎞️ **Resumo do dia** | Junta os clipes do dia em um vídeo acelerado (time-lapse) |
 | 🔊 **Reconhecimento de canto** | Identifica o pássaro pelo som e organiza os cantos numa aba própria (opcional) |
 | 🎼 **Espectrograma do canto** | Mostra o gráfico de frequência do canto ao lado do player e permite comparar as ondas sonoras |
 | 🌙 **Viajantes Noturnos (NFC)** | Escuta noturna de migração (22:00–05:00): reduz o limiar do BirdNET para captar chamados de voo curtos de aves migrantes; aba dedicada com selo NFC |
 | 📔 **Diário de Campo** | Monta o relatório do dia com clima, coordenadas, fotos e clipes — e exporta para o eBird ou CSV |
-| 🌐 **Feed Global Bem-Ti-Vi** | Mostra em tempo real os avistamentos raros das outras câmeras e jardins conectados |
+| 🐿️ **Visitantes Especiais** | Detecta esquilos, gatos e companhia e registra separado, sem contaminar a contagem de aves |
+| 🌐 **Feed Global Bem-Te-Vi Monitor** | Mostra em tempo real os avistamentos raros das outras câmeras e jardins conectados |
 | 🤖 **Identificação por IA** | Adivinha o nome da ave na foto (opcional, sob seu comando) |
 | 📊 **Estatísticas** | Mostra horários de pico, ranking e gráficos |
 | 🏆 **Lista de Vida e conquistas** | Você "desbloqueia" espécies como num jogo |
@@ -60,11 +91,18 @@ quando você pede especificamente para uma inteligência artificial adivinhar o 
 | 🔮 **Previsão de alimentação** | Antecipa a chuva no seu jardim e estima se a atividade das aves vai aumentar ou diminuir |
 | 🌍 **Radar Global de Jardins** | Mapa-múndi com todos os jardins; um clique abre o clima, o vídeo ao vivo e as espécies daquele lugar |
 | 🏅 **Momentos Raros** | Curadoria automática das fotos mais nítidas e das espécies raras, com download em "foto de postal" |
-| 🎬 **Gerador de Reels** | Cria vídeos verticais (9:16, 1080×1920) com marca d'água Bem-Ti-Vi, espécie e temperatura — prontos para Instagram Reels, TikTok e YouTube Shorts |
+| 🎬 **Gerador de Reels** | Cria vídeos verticais (9:16, 1080×1920) com marca d'água, espécie e temperatura — prontos para Instagram Reels, TikTok e YouTube Shorts |
 | 🔔 **Alertas** | Avisa no Telegram ou no Discord (opcional) |
 | 📁 **Importar vídeos** | Analisa gravações antigas do cartão de memória |
 | 📖 **Catálogo** | Cadastra as aves que você conhece |
 | 📤 **Exportar dados** | Baixa uma planilha (CSV) com todas as visitas |
+| 🖥️ **Aplicação desktop** | O mesmo painel empacotado em janela nativa (Tauri), com ícone próprio no Windows |
+
+> **Detalhe honesto:** a identificação automática funciona **localmente**, com
+> redes neurais embarcadas (MobileNetV3-Small) e, se não houver GPU nem
+> internet, um descritor de cor/textura (OpenCV). Você não precisa pagar
+> nada nem enviar foto nenhuma para que o sistema aprenda a reconhecer as
+> aves do seu jardim.
 
 ---
 
@@ -85,11 +123,31 @@ quando você pede especificamente para uma inteligência artificial adivinhar o 
 
 > **Importante:** o painel funciona apenas no seu próprio computador. Não é preciso internet para vigiar os pássaros — só para algumas funções opcionais (clima, IA externa e alertas).
 
+### 🖥️ Preferir uma janela de aplicativo?
+
+O mesmo painel pode ser empacotado como **aplicativo desktop** (Tauri), com
+ícone próprio no Windows e janela nativa:
+
+```bat
+cd Bem-Te-Vi\front
+cargo tauri dev      :: janela de desenvolvimento
+cargo tauri build    :: instalador pronto em front\src-tauri\target\release\bundle
+```
+
+Detalhes (Rust, toolchain e variáveis de ambiente) no
+[`README-DEV.md`](README-DEV.md#aplicação-desktop-tauri--bem-te-vi-monitor).
+
+### 🔗 Links diretos para cada tela
+
+Cada tela tem um endereço próprio — é só acrescentar `#galeria`, `#cameras`,
+`#species`… no fim da URL. Serve para favoritar uma aba específica e para
+abrir links direto para a tela desejada.
+
 ---
 
-## As telas do Bem-Te-Vi
+## As telas do Bem-Te-Vi Monitor
 
-O menu lateral tem sete telas. Vamos explicar cada uma como se estivéssemos juntos:
+O menu lateral tem **oito telas**. Vamos explicar cada uma como se estivéssemos juntos:
 
 ---
 
@@ -109,6 +167,9 @@ O menu lateral tem sete telas. Vamos explicar cada uma como se estivéssemos jun
 - **Visitas de hoje** — uma linha do tempo do dia; ao abrir um registro, o botão
   **🤖 Perguntar à IA Externa** dispara a análise **daquele pássaro específico**.
 - **Gráfico de visitas** — a evolução ao longo dos dias.
+- **Motor do Bem-Te-Vi Core** — FPS, latência, modelo em uso e memória da máquina.
+- **Logs cognitivos** — o que a IA "pensou" em cada ciclo (auto-calibração,
+  bando, comportamento, species identificada).
 
 **Para que serve:** ver "como está o movimento" sem precisar abrir nada.
 
@@ -120,11 +181,14 @@ O menu lateral tem sete telas. Vamos explicar cada uma como se estivéssemos jun
 
 Onde você **cadastra e cuida** das câmeras.
 
-- **Adicionar câmera:** escolha o tipo (webcam `USB`, ou câmera IP `RTSP`/`ONVIF`) e preencha o endereço e, se houver, usuário e senha.
+- **Adicionar câmera:** escolha o tipo — webcam `USB`, câmera IP `RTSP`/`ONVIF`,
+  stream `HLS`/`HTTP`/`WebRTC` ou **live do YouTube** (basta colar o link) — e
+  preencha o endereço e, se houver, usuário e senha. As credenciais ficam
+  **criptografadas** no seu computador (nunca em texto puro).
 - **Localização global (opcional):** para câmeras em outros países (lives do YouTube, streams externos), abra **Localização & fuso horário**, informe a **cidade/país** e toque em **Buscar**. O Bem-Te-Vi descobre as coordenadas e o fuso sozinho — e o card da câmera passa a mostrar o **clima e o horário locais do jardim**.
 - **Ligar/desligar** cada câmera com um toque.
 - **Radar Global de Jardins:** no topo da aba, alterne entre **Grade** e **Radar Global** para ver todas as câmeras com localização em um mapa-múndi. Clique em um marcador para abrir, ali mesmo, o **clima local**, o **vídeo ao vivo**, as **estatísticas de hoje** e as **espécies** daquele jardim. Câmeras sem latitude/longitude não aparecem no mapa (o painel avisa quantas ficaram de fora).
-- **Controles no cartão (ao vivo):** ligar/desligar a **IA (Alaris)**, ouvir o **áudio
+- **Controles no cartão (ao vivo):** ligar/desligar a **IA (Bem-Te-Vi Core)**, ouvir o **áudio
   ao vivo** da câmera e ativar/desativar a **Bioacústica (BirdNET)** — em cartões
   translúcidos, sem sair do Painel.
 - **Desenhar zonas** (veja abaixo).
@@ -162,16 +226,30 @@ O **álbum de fotos** dos seus pássaros. Aqui você:
   mostrado como miniatura **Recorte · IA** no canto do cartão — e **um clique nele
   já abre a Ficha Ornitológica (IA)** daquela ave, sem passo extra;
 - **assiste ao clipe** gravado (clique na imagem ou em "Reproduzir clipe");
+- **baixa o recorte em alta definição** com **📥 Baixar Recorte HD (Crop)** — o
+  close-up é reescalado, realçado e salvo em JPEG, pronto para compartilhar;
+- **confirma a identificação** com um clique em **Confirmar detecção** (o
+  Bem-Te-Vi Core passa a tratar aquela ave como exemplo bom do nome);
+- **corrige a associação** com **↻ Associação Incorreta / Reclassificar**: um
+  modal lista as espécies do seu catálogo, você escolhe a certa e o recorte é
+  guardado na pasta de **retreinamento** (``app-data/fine_tuning/``) para o
+  modelo ficar ainda melhor;
 - **pergunta o nome** da ave clicando em **🤖 Perguntar à IA Externa** (se estiver configurada);
 - abre a **🔎 Ficha ornitológica (IA)** de uma ave já identificada para uma consulta
   profunda (família, conservação, dieta, habitat, curiosidades e biogeografia);
 - **associa a visita** a uma espécie do seu catálogo;
+- **filtra** o histórico por **período** e por **espécie**;
+- **gera um Reel vertical** (9:16) da visita, pronto para redes sociais;
 - **exporta tudo** numa planilha (CSV);
 - **apaga** visitas que não quer mais.
 
+Cada cartão traz um selo de identificação que explica **como** a ave foi
+reconhecida: **Identificado pelo Bem-Te-Vi Core** (associação automática por
+similaridade visual) ou **Espécie Confirmada** (você mesmo confirmou).
+
 **Para que serve:** rever, organizar e "etiquetar" os visitantes.
 
-![Tela Galeria — cartões de visitas com foto, clipe, associação ao catálogo e IA](docs/images/galeria.png)
+![Tela Galeria — cartões de visitas com foto, recorte HD, reclassificação, associação ao catálogo e IA](docs/images/galeria.png)
 
 #### 🎞️ Abas da Galeria
 
@@ -188,7 +266,7 @@ No topo da Galeria há **cinco abas**, separando cada tipo de mídia:
 #### 🏅 Momentos Raros · Fotos de Postal
 
 Uma sub-aba dedicada a **descobrir as melhores fotos** do seu jardim, sem você
-precisar procurar. O **Alaris Core** mede a **nitidez** de cada captura
+precisar procurar. O **Bem-Te-Vi Core** mede a **nitidez** de cada captura
 (variância do Laplaciano, o mesmo critério usado para escolher o melhor quadro) e
 combina com a **raridade da espécie** no seu histórico — 1 ou 2 avistagens já
 valem um selo **Rara**.
@@ -219,7 +297,25 @@ Na aba **Resumos do Dia (Time-Lapse)**, o Bem-Te-Vi junta os clipes de cada dia 
 
 ---
 
-### 🔊 4. Detecção Sonora
+### 📔 4. Diário de Campo
+
+A aba **Diário de Campo** escreve o "caderninho de campo" do dia para você:
+
+- escolha a **data** e, se quiser, um **jardim** específico;
+- veja o **clima** (Open-Meteo), as **coordenadas** da câmera, os horários de
+  primeira e última observação e as **fotos/clipes** de cada espécie;
+- clique em **Ler o diário completo em texto** para copiar ou imprimir;
+- use **Exportar checklist eBird** para baixar o arquivo no **eBird Record
+  Format** (Cornell Lab of Ornithology), sem cabeçalho e com data mês/dia/ano —
+  pronto para enviar à ciência cidadã;
+- use **Baixar CSV limpo** para uma planilha simples em português.
+
+**Para que serve:** transformar o histórico do jardim em um relatório bonito e
+em dados que biólogos e observadores podem compartilhar com o mundo.
+
+![Tela Diário de Campo — relatório do dia com clima, coordenadas, espécies e exportação](docs/images/diario-de-campo.png)
+
+### 🔊 5. Detecção Sonora
 
 A aba de **destaque** para quem gosta de "ouvir" o jardim. Aqui ficam os cantos
 identificados pelo **BirdNET**, mostrados em **blocos de 5**, que você carrega aos
@@ -256,33 +352,21 @@ registro aparece rotulado como **"Pássaro Desconhecido"**, com uma **silhueta p
 no lugar da foto. É o mesmo rótulo em todo o aplicativo (Painel, Galeria, Álbum e
 Estatísticas).
 
+Já quando ele **tem certeza** (associação automática pelo Bem-Te-Vi Core ou
+confirmação sua), o rótulo vira o **nome da espécie** e a visita ganha o selo
+correspondente — **Identificado pelo Bem-Te-Vi Core** ou **Espécie Confirmada**.
+
 Os bichos que **não são pássaros** — esquilos, gatos, gambás — ficam **separados** na
 aba **Visitantes Especiais** (no Painel) e em **Convidados do Jardim** (na Galeria), e
 **não** entram na contagem de aves.
 
 ---
 
-### 📔 Diário de Campo
-
-A aba **Diário de Campo** escreve o "caderninho de campo" do dia para você:
-
-- escolha a **data** e, se quiser, um **jardim** específico;
-- veja o **clima** (Open-Meteo), as **coordenadas** da câmera, os horários de
-  primeira e última observação e as **fotos/clipes** de cada espécie;
-- clique em **Ler o diário completo em texto** para copiar ou imprimir;
-- use **Exportar checklist eBird** para baixar o arquivo no **eBird Record
-  Format** (Cornell Lab of Ornithology), sem cabeçalho e com data mês/dia/ano —
-  pronto para enviar à ciência cidadã;
-- use **Baixar CSV limpo** para uma planilha simples em português.
-
-**Para que serve:** transformar o histórico do jardim em um relatório bonito e
-em dados que biólogos e observadores podem compartilhar com o mundo.
-
 ---
 
-### 🌐 Feed Global Bem-Ti-Vi
+#### 🌐 Feed Global Bem-Te-Vi Monitor (cartão do Painel)
 
-O card **Feed Global Bem-Ti-Vi**, no Painel, mostra os **avistamentos raros e
+O card **Feed Global Bem-Te-Vi Monitor**, no Painel, mostra os **avistamentos raros e
 incomuns** das suas câmeras e dos **jardins conectados** — por exemplo:
 *“🦜 Rara Tangará avistada no Jardim de Paris há 5 minutos”*.
 
@@ -299,7 +383,7 @@ observadores — e não perder a chance de ver o que apareceu no jardim do vizin
 
 ---
 
-### 📖 5. Minhas Aves
+### 📖 6. Minhas Aves
 
 O seu **catálogo pessoal de espécies**. Cadastre:
 
@@ -309,6 +393,10 @@ O seu **catálogo pessoal de espécies**. Cadastre:
 
 Depois, na Galeria, você **associa** cada visita à espécie cadastrada. É isso que alimenta
 sua Lista de Vida e suas estatísticas.
+
+> **Dica:** quanto mais completa está a sua lista (com **foto de referência**),
+> melhor fica a **identificação automática** do Bem-Te-Vi Core — é a foto de
+> referência que ele compara com as capturas novas.
 
 Clique em qualquer card (aqui ou no **Álbum de Conquistas**) para abrir a **ficha técnica**
 da espécie: histórico de avistagens, **horários de pico** no comedouro, **temperatura média**
@@ -322,7 +410,7 @@ quando ainda não há foto, aparece a **silhueta padrão** — nunca um ícone d
 
 ---
 
-### 📊 6. Estatísticas & Conquistas
+### 📊 7. Estatísticas & Conquistas
 
 O "modo jogador". Um **seletor no topo** alterna o escopo entre **cada jardim** e a
 **Visão Total Consolidada** (todos juntos). Aqui você encontra:
@@ -340,7 +428,7 @@ O "modo jogador". Um **seletor no topo** alterna o escopo entre **cada jardim** 
 
 ---
 
-### ⚙️ 7. Configurações
+### ⚙️ 8. Configurações
 
 Onde você ajusta o comportamento. Tem cinco blocos:
 
@@ -383,6 +471,63 @@ essas fotos ganham um selo **HD** e passam a ser a foto de destaque no seu
 
 **Para que serve:** conseguir aquela foto bonita e nítida do pássaro, sem ter de
 procurar o melhor instante manualmente.
+
+### 🧠 Identificação automática de espécie (Bem-Te-Vi Core)
+
+O maior avanço do motor: ele **descobre sozinho o nome da ave**, sem você
+clicar em nada e sem enviar a foto para a internet.
+
+**Como funciona, em quatro passos:**
+
+1. quando o detector encontra só "um bicho na imagem" (o rótulo genérico
+   `bird`), o Core recorta a ave e calcula a **assinatura visual** dela (um
+   vetor de características com redes neurais embarcadas — MobileNetV3-Small,
+   com um descritor de cor/textura como reserva offline);
+2. ele compara essa assinatura com as **fotos de referência** das espécies do
+   seu catálogo (Minhas Aves) usando **similaridade de cosseno**;
+3. se o melhor escore passar de **65%**, a visita passa a exibir o nome real da
+   espécie e ganha o selo **“Identificado pelo Bem-Te-Vi Core”**;
+4. a comparação é instantânea depois da primeira vez — as fotos de referência
+   ficam em cache e são recalculadas só quando você troca uma delas.
+
+**Se ele errar?** Você tem o botão **↻ Associação Incorreta / Reclassificar**
+no card da visita. O modal mostra as espécies do seu catálogo com as fotos de
+referência; você escolhe a certa, o recorte é guardado na pasta de
+**retreinamento** (``app-data/fine_tuning/{espécie}/``) e entra na fila de
+aprendizado. Cada correção deixa o modelo melhor para a próxima ave.
+
+> **Sua curadoria sempre ganha.** Visitas que você já confirmou (ou que foram
+> identificadas pela IA externa) nunca são sobrescritas pela associação
+> automática.
+
+**Para que serve:** um catálogo que se preenche sozinho — ideal para quem tem
+muitas espécies no jardim e não quer parar para nomear cada visita.
+
+### 🔍 Deep-Dive da visita (o "Raio-X" de cada visita)
+
+Clicar em uma visita do **Painel** abre o painel imersivo com tudo o que o Core
+sabe sobre ela:
+
+- a **foto tratada** e o **recorte da ave** lado a lado (alterne com um clique);
+- **nitidez** do quadro escolhido (Laplaciano), **confiança** da IA, **permanência**
+  e **bando** no pico;
+- **clima** do momento exato da visita (temperatura, umidade, vento);
+- a **anotação ornitológica** escrita pela IA;
+- e as ações: **confirmar**, **baixar o recorte HD**, **reclassificar**,
+  **perguntar à IA externa** e abrir o clipe completo.
+
+**Para que serve:** entender *por que* o sistema gravou aquilo — antes de
+confiar na identificação.
+
+### 📥 Recorte HD (Crop)
+
+O botão **📥 Baixar Recorte HD (Crop)** (na Galeria e no Deep-Dive) entrega o
+close-up da ave em **alta resolução**: a imagem é reescalada, realçada
+(unsharp mask + contraste local) e salva em JPEG de alta qualidade, com nome
+amigável (`bem-te-vi-core-{espécie}-{id}-hd.jpg`).
+
+**Para que serve:** ter a melhor foto da ave pronta para imprimir, usar na
+social ou como material de retreinamento.
 
 ### 🧠 A IA que conta bando, entende comportamento e conhece as espécies
 
@@ -503,11 +648,11 @@ de forma automática, em cards e gráficos fáceis de ler:
 
 Quanto mais dias de observação você tiver, mais espertos ficam os insights.
 
-### 🔮 Previsão de alimentação (Insights Meteorológicos do Alaris Core)
+### 🔮 Previsão de alimentação (Insights Meteorológicos do Bem-Te-Vi Core)
 
-No **Painel**, o card **Insights Meteorológicos do Alaris Core** dá um passo além
+No **Painel**, o card **Insights Meteorológicos do Bem-Te-Vi Core** dá um passo além
 do histórico: ele olha para **frente**. Para cada jardim com localização
-cadastrada, o Alaris Core consulta a **previsão das próximas horas** (Open-Meteo)
+cadastrada, o Bem-Te-Vi Core consulta a **previsão das próximas horas** (Open-Meteo)
 e cruza com o **comportamento daquele jardim** — quantas visitas por dia costumam
 acontecer em dias de chuva versus dias secos. Se nenhuma câmera tiver localização
 cadastrada, ele usa a **localização principal do alimentador** (a mesma do clima
@@ -515,7 +660,7 @@ global) como *Jardim Principal*, então funciona já na instalação padrão.
 
 - se **vem chuva**, o card avisa quando (ex.: *"🌧️ Chuva leve prevista para o
   Jardim Principal em ~3 horas. Atividade de pássaros tende a intensificar 35%
-  antes da chuva. O Alaris Core otimizou o buffer de captura e a sensibilidade
+  antes da chuva. O Bem-Te-Vi Core otimizou o buffer de captura e a sensibilidade
   para luz baixa."*);
 - se o **tempo segue firme**, mostra que é um bom momento para observar e lembra o
   **horário de pico histórico** daquele jardim;
@@ -555,14 +700,14 @@ recorrentes. Clique em um card para ver o **histórico individual completo**:
 fotos, datas, similaridade e em qual jardim cada apavistamento aconteceu. Tudo é
 calculado e guardado **localmente**; as imagens não saem do computador.
 
-### 🎓 Ensinar o Bem-Ti-Vi Core (aprendizado ativo)
+### 🎓 Ensinar o Bem-Te-Vi Core (aprendizado ativo)
 
 Sempre que você **associa uma espécie** na Galeria ou clica em **Confirmar
 detecção**, o recorte daquela ave entra numa fila de treino organizada por
 espécie. Quando houver amostras suficientes, abra **Configurações →
-Bem-Ti-Vi Core adaptativo** e clique em:
+Bem-Te-Vi Core adaptativo** e clique em:
 
-> **Otimizar Bem-Ti-Vi Core com Novas Amostras**
+> **Otimizar Bem-Te-Vi Core com Novas Amostras**
 
 O fine-tuning roda em segundo plano (a captura continua normalmente) e, ao
 terminar, o modelo passa a ser usado automaticamente — sem reiniciar o programa.
@@ -604,6 +749,43 @@ No **Discord**, em vez do bot, você cria um "webhook" no seu servidor e cola o 
 
 Há também um **limiar de confiança** para notificar: você escolhe só receber alertas quando a
 IA estiver bem certa (ou avisa até as duvidosas).
+
+### 🌅 Resumo Matinal (Bom dia das aves)
+
+Todo dia, no horário que você definir (por padrão, cedo), o sistema manda no
+**Telegram** ou no **Discord** um resumo do dia anterior:
+
+- quantas visitas, quantas espécies e as mais frequentes;
+- o **clima** e a **previsão** dos próximos dias;
+- a **previsão de pico** de atividade das aves no seu jardim;
+- e a **foto de destaque** do dia (a melhor foto do período, em formato postcard).
+
+**Para que serve:** acordar sabendo o que aconteceu no jardim enquanto você
+estava fora — sem precisar abrir o painel.
+
+### 🧾 Laudo Ornitológico em PDF
+
+Na aba **Estatísticas & Conquistas**, o botão **🗒️ Gerar Laudo (PDF)** monta um
+relatório pronto para guardar ou enviar: capa com o nome do jardim, resumo
+numérico, tabela de espécies com nome popular e científico, dados de
+localização e as melhores fotos da período.
+
+**Para que serve:** ter um documento bonito do seu jardim — para si, para um
+colega ou para um relatório de observação.
+
+### 🐿️ Visitantes Especiais (o "modo esquilo")
+
+Nem tudo que aparece no comedouro é ave. O Core separa automaticamente
+**aves**, **mamíferos** e **outros** pela taxonomia (o "anti-esquilo"):
+
+- esquilos, gatos e companhia ficam em **Convidados do Jardim** (Galeria) e na
+  aba **Visitantes Especiais** (Painel);
+- eles **não** entram na contagem de aves, na Lista de Vida nem nas estatísticas
+  ornitológicas;
+- e ainda assim são registrados, com foto e horário.
+
+**Para que serve:** estatística de aves limpa — você sabe quantas aves realmente
+visitaram o seu jardim.
 
 ### 📁 Importar vídeos antigos (cartão de memória)
 
@@ -658,7 +840,26 @@ Não. A detecção e a gravação funcionam totalmente offline. Só o clima, a i
 Não. Tudo fica na pasta do programa no seu computador. Só a foto que você pedir para identificar é enviada ao provedor de IA, e somente nesse momento.
 
 **O sistema sabe o nome dos pássaros sozinho?**
-Não automaticamente. Ele detecta e registra. Para saber o nome, você pode (a) associar manualmente no catálogo, ou (b) clicar em "Perguntar à IA Externa" (se configurada), ou (c) ativar o reconhecimento de canto.
+Sim, **quando o seu catálogo tem fotos de referência**. O Bem-Te-Vi Core compara
+a foto da visita com as fotos de "Minhas Aves" e, com 65% ou mais de
+similaridade, nomeia a ave automaticamente (selo *Identificado pelo Bem-Te-Vi
+Core*). Se ele errar ou não tiver material para comparar, você pode (a)
+associar manualmente no catálogo, (b) usar o botão *Associação Incorreta /
+Reclassificar*, (c) clicar em "Perguntar à IA Externa" (se configurada) ou
+(d) ativar o reconhecimento de canto.
+
+**Preciso de GPU para isso?**
+Não. O sistema roda em CPU; a GPU só deixa tudo mais fluido. E a
+identificação automática tem um descritor de cor/textura (OpenCV) como
+reserva quando as redes neurais não estão disponíveis — o recurso continua
+funcionando offline.
+
+**O que é a pasta `app-data/fine_tuning/`?**
+É onde ficam as **correções** que você faz: cada reclassificação guarda ali o
+recorte com o nome correto e um registro (`index.jsonl`) com a proveniência.
+É o material de retreinamento do modelo local — você pode inspecionar,
+exportar ou versionar essa pasta. A fila do treino automático é outra
+(`app-data/training_queue/`).
 
 **Posso usar uma câmera IP / câmera de segurança?**
 Sim, via RTSP ou ONVIF. Basta informar o endereço e as credenciais.
@@ -688,12 +889,16 @@ Se o arquivo estiver na Lixeira do computador, você pode restaurá-lo. Se exclu
 
 ## Segurança e privacidade
 
-- O Bem-Te-Vi foi feito para rodar **só no seu computador**.
+- O Bem-Te-Vi Monitor foi feito para rodar **só no seu computador**.
 - As chaves (Telegram, Discord, IA) são guardadas num arquivo local e **nunca são mostradas** na tela — a tela exibe apenas um começo mascarado, como `AIza...****`.
+- As **credenciais das câmeras** (usuário/senha) são gravadas **criptografadas**
+  (Fernet) e nunca aparecem em texto puro.
 - O painel de configuração só aceita acesso do próprio computador (não funciona pela internet).
 - Por padrão, **toda** a API só responde ao seu computador. Para acessar de outro aparelho seria preciso mudar uma opção avançada (`ALLOW_REMOTE_ACCESS`) — e o recomendado, nesse caso, é usar uma VPN.
 - Não há telemetria: o programa não "espiona" você.
-- A **Rede Global Bem-Ti-Vi** é opcional: só compartilha nome da espécie, jardim,
+- A **identificação automática** acontece **100% no seu computador**: a foto da
+  ave **nunca** é enviada a nenhum serviço para ser comparada com o catálogo.
+- A **Rede Global Bem-Te-Vi Monitor** é opcional: só compartilha nome da espécie, jardim,
   raridade e horário — **nunca fotos, áudios ou credenciais**. Sem
   `GLOBAL_NETWORK_TOKEN` e parceiros configurados, nada sai do computador.
 - O **Diário de Campo** e os espectrogramas são gerados localmente; o eBird/CSV

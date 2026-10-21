@@ -93,7 +93,7 @@ export function AudioAiConsultModal({ detection, onClose }: Props) {
           <div className="min-w-0 flex-1">
             <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-violet-300/90">
               <Sparkles className="h-3 w-3" />
-              Alaris Core · Consulta Bioacústica
+              Bem-Te-Vi Core · Consulta Bioacústica
             </p>
             <h2 className="truncate font-display text-base font-semibold text-[var(--color-text-primary)] sm:text-lg">
               {label}

@@ -400,7 +400,7 @@ async def test_notification(payload: NotificationTestRequest) -> NotificationTes
         try:
             future = _test_pool.submit(
                 telegram.send_message,
-                "Bem-Te-Vi — teste de notificação Telegram\nCanal local OK.",
+                "Bem-Te-Vi Monitor — teste de notificação Telegram\nCanal local OK.",
             )
             future.result(timeout=20)
             return NotificationTestResponse(
@@ -423,7 +423,7 @@ async def test_notification(payload: NotificationTestRequest) -> NotificationTes
         try:
             future = _test_pool.submit(
                 notifier._send_discord,
-                "Bem-Te-Vi — teste de notificação Discord\nCanal local OK.",
+                "Bem-Te-Vi Monitor — teste de notificação Discord\nCanal local OK.",
                 None,
             )
             future.result(timeout=20)

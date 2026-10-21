@@ -174,7 +174,7 @@ export function CameraGrid({
                     {camera.is_active ? "Ativa" : "Desativada"}
                   </Badge>
                   <Badge tone={camera.ai_enabled !== false ? "ok" : "muted"}>
-                    {camera.ai_enabled !== false ? "Alaris IA Ativo" : "Alaris IA Pausado"}
+                    {camera.ai_enabled !== false ? "Bem-Te-Vi Core Ativo" : "Bem-Te-Vi Core Pausado"}
                   </Badge>
                   {camera.audio_enabled ? (
                     <Badge tone="ok">BirdNET Ativo</Badge>

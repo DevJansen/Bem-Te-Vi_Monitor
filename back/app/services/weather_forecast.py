@@ -3,7 +3,7 @@
 O ``weather_service`` (alimentador local) e o ``camera_weather`` (câmeras
 globais) cuidam do **agora**. Este módulo olha para frente: devolve as próximas
 horas de cada jardim — chuva, probabilidade, vento e temperatura — para o
-Alaris Core antecipar a atividade das aves.
+Bem-Te-Vi Core antecipar a atividade das aves.
 
 Como as demais integrações meteorológicas do projeto:
 

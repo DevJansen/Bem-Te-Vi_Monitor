@@ -53,7 +53,7 @@ def _species_badges(sightings: int, rarity: str) -> list[str]:
 
 
 def _crop_url(visit_id: str | None) -> str | None:
-    """URL do recorte tratado da ave (close-up do Alaris Core), se o arquivo existir.
+    """URL do recorte tratado da ave (close-up do Bem-Te-Vi Core), se o arquivo existir.
 
     Os recortes ficam em ``app-data/crops`` (irmã da pasta estática ``captures``)
     e são servidos pelo endpoint dedicado ``/api/visits/{id}/crop``.
@@ -78,7 +78,7 @@ def _parse_ai_consult(raw: str | None) -> dict[str, Any] | None:
 def _visit_image_url(visit_id: str | None, thumbnail_path: str | None) -> str | None:
     """Melhor imagem **tratada** de uma visita, validada em disco.
 
-    Prefere o recorte da ave (close-up já tratado pelo Alaris Core) e, na falta,
+    Prefere o recorte da ave (close-up já tratado pelo Bem-Te-Vi Core) e, na falta,
     a thumbnail oficial — conferindo que o arquivo realmente existe para nunca
     entregar uma imagem quebrada ao front-end.
     """

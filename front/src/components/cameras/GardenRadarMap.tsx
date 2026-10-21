@@ -302,7 +302,7 @@ export function GardenRadarMap() {
 
           <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full border border-emerald-400/20 bg-black/40 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300 backdrop-blur">
             <Radio className="h-3 w-3 animate-pulse" />
-            Radar Alaris
+            Radar Bem-Te-Vi Core
           </div>
           <div className="absolute bottom-3 left-3 flex flex-wrap items-center gap-3 rounded-lg border border-dark-700/80 bg-black/45 px-3 py-1.5 text-[10px] text-[var(--color-text-muted)] backdrop-blur">
             <span className="inline-flex items-center gap-1.5">

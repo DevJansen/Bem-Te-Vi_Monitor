@@ -1,4 +1,4 @@
-"""Endpoints de streams multi-câmera (Central de Câmeras / Alaris Core).
+"""Endpoints de streams multi-câmera (Central de Câmeras / Bem-Te-Vi Core).
 
 Dois recursos principais:
 
@@ -71,7 +71,7 @@ def _placeholder_jpeg() -> bytes:
 
 @router.get("", response_model=list[StreamStatsOut])
 def list_streams() -> list[StreamStatsOut]:
-    """Estado em tempo real de cada stream (Alaris Core distribuído)."""
+    """Estado em tempo real de cada stream (Bem-Te-Vi Core distribuído)."""
     try:
         repo = CameraRepository(get_settings().db_path)
         rows = {row["id"]: row for row in repo.list_all()}

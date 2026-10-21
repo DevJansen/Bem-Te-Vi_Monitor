@@ -2,7 +2,7 @@
 
 Compila um relatório profissional (para biólogos e pesquisadores) com:
 sumário executivo, estatísticas de visitas, cruzamento com clima e as melhores
-fotos tratadas em alta definição obtidas pelo Alaris Core.
+fotos tratadas em alta definição obtidas pelo Bem-Te-Vi Core.
 
 Usa fpdf2 para o PDF e matplotlib para os gráficos embutidos.
 """
@@ -82,7 +82,7 @@ class LaudoOrnithologico:
         pdf.set_text_color(255, 255, 255)
         pdf.set_font("Arial", "B", 18)
         pdf.set_xy(10, 8)
-        pdf.cell(0, 8, "Laudo Ornitológico Bem-Te-Vi", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 8, "Laudo Ornitológico Bem-Te-Vi Monitor", new_x="LMARGIN", new_y="NEXT")
         pdf.set_font("Arial", "", 10)
         pdf.cell(
             0,
@@ -209,7 +209,7 @@ class LaudoOrnithologico:
         pdf.ln(2)
 
     def _melhores_fotos(self, pdf: Any) -> None:
-        self._titulo_secao(pdf, "5. Melhores Fotos Tratadas (Alaris Core)")
+        self._titulo_secao(pdf, "5. Melhores Fotos Tratadas (Bem-Te-Vi Core)")
         melhores = self._buscar_melhores_fotos(limite=6)
         if not melhores:
             pdf.set_font("Arial", "I", 9)
@@ -285,7 +285,7 @@ class LaudoOrnithologico:
         pdf.cell(
             0,
             10,
-            "Bem-Te-Vi - Plataforma de Observação de Aves | Laudo gerado automaticamente",
+            "Bem-Te-Vi Monitor - Plataforma de Observação de Aves | Laudo gerado automaticamente",
             align="C",
         )
 

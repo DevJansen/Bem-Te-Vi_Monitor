@@ -204,7 +204,10 @@ export function SpeciesCatalog({
                 <p className="text-sm italic text-emerald-300">
                   {item.scientific_name}
                 </p>
-                {item.ecological_badge ? (
+                {/* Selo ecológico regional — omitido quando o status é
+                    inconclusivo ("desconhecida"): nesse caso ele só poluiria
+                    o card com uma tag estática sem informação. */}
+                {item.ecological_badge && item.ecological_status !== "desconhecida" ? (
                   <span
                     className={
                       "inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold " +

@@ -3,7 +3,7 @@
 Módulo que intensifica a escuta do BirdNET durante a janela noturna configurada
 (padrão 22:00–05:00 no horário local da câmera). À noite, aves migrantes que
 cruzam o céu emitem **chamados de voo curtos** (*flight calls*) — muitas vezes
-fracos, rápidos e distantes. Para capturá-los o Bem-Ti-Vi:
+fracos, rápidos e distantes. Para capturá-los o Bem-Te-Vi:
 
 * reduz o limiar de confiança do BirdNET dentro da janela;
 * marca cada detecção feita à noite com ``is_nfc = 1``, a pontuação ``nfc_score``

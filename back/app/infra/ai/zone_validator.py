@@ -188,7 +188,7 @@ class ZoneValidator:
         return any(state.inside_since is not None for state in self._states.values())
 
     def active_presence_zones(self) -> list[str]:
-        """Nomes das zonas com presença ativa agora (para o log do Alaris)."""
+        """Nomes das zonas com presença ativa agora (para o log do Bem-Te-Vi Core)."""
         return [
             state.zone.name
             for state in self._states.values()

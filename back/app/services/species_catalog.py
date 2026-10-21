@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 class EspecieNaoAveError(ValueError):
     """Levantado quando o nome **não é de uma ave** (ex.: um esquilo).
 
-    É o "guarda anti-esquilo" do Alaris Core: impede que mamíferos entrem na
+    É o "guarda anti-esquilo" do Bem-Te-Vi Core: impede que mamíferos entrem na
     Life List ("Minhas Aves") como se fossem novas espécies de ave. Os
     visitantes silvestres são registrados à parte, em "Convidados do Jardim".
     """
@@ -67,7 +67,7 @@ def _copiar_referencia(
 ) -> str | None:
     """Copia a imagem tratada para ``reference_birds`` e devolve o caminho relativo.
 
-    A foto de referência é o *melhor arquivo tratado* pelo Alaris Core (recorte
+    A foto de referência é o *melhor arquivo tratado* pelo Bem-Te-Vi Core (recorte
     ou thumbnail oficial). Falhas ao copiar não impedem o cadastro — apenas
     deixam a espécie sem foto de referência.
     """
@@ -91,7 +91,7 @@ def _copiar_referencia(
 
 @dataclass(frozen=True)
 class SpeciesMatch:
-    """Resultado do *Smart Match* do Alaris Core.
+    """Resultado do *Smart Match* do Bem-Te-Vi Core.
 
     - ``created`` indica se a espécie é **nova** (novo card no Álbum de
       Conquistas) ou se já existia no catálogo (apenas incrementa o contador de
@@ -114,7 +114,7 @@ def match_or_create_species(
 ) -> SpeciesMatch:
     """Compara a identificação com a Life List e devolve a espécie correspondente.
 
-    Regra do **Alaris Core Smart Match**:
+    Regra do **Bem-Te-Vi Core Smart Match**:
 
     - Se a espécie **já estiver cadastrada** (mesmo nome científico ou popular),
       devolve o card existente **sem duplicar** — o contador de visitas é

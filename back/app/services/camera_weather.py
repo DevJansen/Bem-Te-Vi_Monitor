@@ -13,7 +13,7 @@ Três responsabilidades, todas baseadas em APIs públicas e gratuitas da Open-Me
   se é dia/noite e a **hora local exata** do jardim, com cache por localização e
   tolerância total a falhas de internet;
 * :func:`local_time_fields` — converte um instante UTC para (hora, data) no fuso
-  da câmera. É o que permite ao **Alaris Core** corrigir os gráficos de horário
+  da câmera. É o que permite ao **Bem-Te-Vi Core** corrigir os gráficos de horário
   de pico de câmeras em fusos diferentes (evita "visitas de madrugada" no Brasil
   quando, na verdade, eram 10h da manhã no jardim remoto).
 """
@@ -281,7 +281,7 @@ def local_time_fields(
 ) -> tuple[int | None, str | None]:
     """Converte um instante UTC em (hora local, data local) no fuso da câmera.
 
-    Usado pelo Alaris Core para gravar ``local_hour``/``local_date`` em cada
+    Usado pelo Bem-Te-Vi Core para gravar ``local_hour``/``local_date`` em cada
     visita. Devolve ``(None, None)`` quando não há fuso válido — nesse caso a
     análise cai para o UTC (comportamento anterior), sem quebrar nada.
     """

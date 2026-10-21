@@ -147,7 +147,7 @@ export function SpeciesAiConsultModal({ visit, species, onClose }: Props) {
           <div className="min-w-0 flex-1">
             <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-violet-300/90">
               <Sparkles className="h-3 w-3" />
-              Alaris Core · Consulta Ornitológica
+              Bem-Te-Vi Core · Consulta Ornitológica
             </p>
             <h2 className="truncate font-display text-base font-semibold text-[var(--color-text-primary)] sm:text-lg">
               {label}
@@ -183,7 +183,7 @@ export function SpeciesAiConsultModal({ visit, species, onClose }: Props) {
             <div className="min-w-0 flex-1">
               <p className="text-xs text-[var(--color-text-muted)]">
                 Ficha técnica gerada pela IA externa a partir da imagem tratada
-                pelo Alaris Core.
+                pelo Bem-Te-Vi Core.
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {consult?.provider ? (

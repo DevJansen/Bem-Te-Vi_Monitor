@@ -1,7 +1,7 @@
 """Módulo de Bioacústica Global.
 
 Cruza as detecções sonoras do BirdNET (áudio do stream da câmera) com as
-detecções visuais do Alaris Core, produzindo uma visão unificada de "quem
+detecções visuais do Bem-Te-Vi Core, produzindo uma visão unificada de "quem
 está no jardim" — visto e ouvido. Também expõe o stream de áudio ao vivo
 para o player do painel (som ambiente do jardim remoto).
 """

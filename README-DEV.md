@@ -1,12 +1,15 @@
-# Bem-Te-Vi — Guia Técnico
+# Bem-Te-Vi Monitor — Guia Técnico
 
-Sistema **local** de monitoramento de avifauna por IA.
+Aplicação **local** de monitoramento de vida silvestre, operada pelo motor de
+IA **Bem-Te-Vi Core**.
 
-> **Sobre o nome:** o projeto nasceu como *AviaWatch* e hoje se chama
+> **Sobre o nome:** o projeto nasceu como *AviaWatch* e hoje vive no ecossistema
 > **Bem-Te-Vi** — em homenagem ao pássaro que "avisa" quando chega visita ao
-> jardim. O **motor de IA** segue assinando como **Alaris Core**.
+> jardim. A **aplicação** (interface web/desktop) chama-se **Bem-Te-Vi Monitor**
+> e o **motor de IA** (backend FastAPI, visão computacional e aprendizado)
+> assina como **Bem-Te-Vi Core**.
 
-O Bem-Te-Vi recebe vídeo de câmeras USB, RTSP, ONVIF, HLS, HTTP ou WebRTC —
+O Bem-Te-Vi Monitor recebe vídeo de câmeras USB, RTSP, ONVIF, HLS, HTTP ou WebRTC —
 inclusive streams externos ao vivo (de outras casas/locais remotos) —, detecta
 aves com YOLOv8 e registra visitas em SQLite. O painel web permite desenhar zonas
 de inclusão e exclusão por câmera, consultar snapshots e clipes e, opcionalmente,
@@ -155,7 +158,7 @@ O arquivo `back\.env.example` contém os nomes e os valores padrão. Copie-o par
 | `ENHANCEMENT_MAX_WIDTH` | Largura máxima (px) da foto tratada (limita o custo do denoise) | Padrão: `1280`; faixa: `320` a `4096` |
 | `ENHANCEMENT_MIN_WIDTH` | Largura mínima (px) da foto tratada (garante "alta definição") | Padrão: `720`; faixa: `0` a `4096` |
 | `ENHANCEMENT_JPEG_QUALITY` | Qualidade JPEG da foto tratada | Padrão: `95`; faixa: `50` a `100` |
-| `CLIP_OVERLAY_ENABLED` | Grava a tarja de identificação (Alaris + espécie + confiança) nos clipes salvos | Padrão: `true` (`false` salva o vídeo sem a tarja) |
+| `CLIP_OVERLAY_ENABLED` | Grava a tarja de identificação (Bem-Te-Vi Core + espécie + confiança) nos clipes salvos | Padrão: `true` (`false` salva o vídeo sem a tarja) |
 | `SMART_CROP_MARGIN` | Margem de contexto ao redor da ave no recorte (fração da caixa) | Padrão: `0.25` |
 | `SMART_CROP_MIN_DIMENSION` | Dimensão mínima (px) do recorte da ave (amplia se menor) | Padrão: `640` |
 | `SMART_CROP_MAX_DIMENSION` | Dimensão máxima (px) do recorte da ave (reduz se maior) | Padrão: `1024` |
@@ -174,6 +177,12 @@ O arquivo `back\.env.example` contém os nomes e os valores padrão. Copie-o par
 | `GLOBAL_NETWORK_FEED_DAYS` | Janela (dias) do card Feed Global | Padrão: `7`; faixa: `1` a `90` |
 | `GLOBAL_NETWORK_FEED_LIMIT` | Máximo de eventos exibidos no card | Padrão: `20`; faixa: `1` a `100` |
 | `GLOBAL_NETWORK_TIMEOUT_SECONDS` | Timeout (s) da publicação em cada parceiro | Padrão: `5.0`; faixa: `1` a `30` |
+| `SPECIES_AUTO_ASSOCIATION_ENABLED` | Auto-associação de espécie por re-ID visual contra o Catálogo Local | Padrão: `true` |
+| `SPECIES_MATCH_THRESHOLD` | Similaridade de cosseno mínima para aceitar a associação automática | Padrão: `0.65` (65%); faixa: `0.0` a `1.0` |
+| `SPECIES_MATCH_MIN_SHARPNESS` | Nitidez mínima (Laplaciano) do recorte para tentar a associação | Padrão: `15`; `0` desativa o corte |
+| `SPECIES_MATCH_MAX_REFERENCES` | Teto de fotos de referência avaliadas por consulta | Padrão: `500`; faixa: `10` a `5000` |
+| `HD_CROP_MIN_SIDE` | Menor lado (px) do recorte HD exportado | Padrão: `1080`; faixa: `480` a `4096` |
+| `HD_CROP_JPEG_QUALITY` | Qualidade JPEG do recorte HD | Padrão: `94`; faixa: `60` a `100` |
 
 O painel administra a integração de IA Externa por completo (chave do Gemini e
 modelo), os segredos do Telegram e do Discord, e as preferências de
@@ -190,7 +199,7 @@ backend.
   correspondente em `TELEGRAM_CHAT_ID`.
 - **Discord:** nas configurações do servidor/canal, crie um webhook em
   **Integrações → Webhooks** e guarde a URL completa em `DISCORD_WEBHOOK_URL`.
-- **IA externa (Google Gemini):** o Bem-Ti-Vi usa **exclusivamente** o Google
+- **IA externa (Google Gemini):** o Bem-Te-Vi usa **exclusivamente** o Google
   Gemini, via a biblioteca oficial `google-genai`. A chave é gratuita e sai de
   [aistudio.google.com](https://aistudio.google.com) — informe em
   `GEMINI_API_KEY` (ou no painel, em **Configurações → Inteligência Artificial
@@ -334,6 +343,52 @@ Assim o Axios (`baseURL: "/api"`) fala com o FastAPI **sem erros de CORS** no de
 
 ---
 
+## Aplicação desktop (Tauri) — Bem-Te-Vi Monitor
+
+Além do navegador, o **Bem-Te-Vi Monitor** pode rodar como aplicativo desktop
+nativo. A casca Tauri fica em `front/src-tauri/` e usa a marca oficial:
+
+| Item | Valor |
+|------|-------|
+| `productName` | `Bem-Te-Vi Monitor` |
+| Título da janela | `Bem-Te-Vi Monitor` |
+| Identificador do pacote | `com.bemtevimonitor.app` |
+| Ícones | `front/src-tauri/icons/` (gerados por `icons/generate_icons.py`) |
+
+### Pré-requisitos
+
+- [Rust](https://rustup.rs/) (toolchain estável) e as dependências de sistema do
+  Tauri 2 para a sua plataforma;
+- o **Bem-Te-Vi Core** (backend) rodando em `http://127.0.0.1:8000` — a janela
+  desktop é a interface; a inteligência continua no backend local.
+
+### Executar
+
+```bat
+cd Bem-Te-Vi\front
+cargo install tauri-cli --version "^2"   :: uma única vez
+cargo tauri dev                          :: janela de desenvolvimento
+cargo tauri build                        :: instalador em front\src-tauri\target\release\bundle
+```
+
+> A interface empacotada não passa pelo proxy do Vite, então as URLs precisam
+> apontar para o backend local. O frontend aceita as variáveis abaixo (vazio =
+> comportamento atual, URLs relativas):
+>
+> | Variável | Exemplo | Efeito |
+> |----------|---------|--------|
+> | `VITE_API_BASE` | `http://127.0.0.1:8000/api` | Base do cliente Axios |
+> | `VITE_API_ORIGIN` | `http://127.0.0.1:8000` | Prefixo das URLs de API e mídia |
+>
+> Exemplo (PowerShell) antes de `cargo tauri build`:
+>
+> ```powershell
+> $env:VITE_API_BASE   = "http://127.0.0.1:8000/api"
+> $env:VITE_API_ORIGIN = "http://127.0.0.1:8000"
+> ```
+
+---
+
 ## Verificação rápida da conexão Front ↔ Back
 
 Com o backend no ar, teste no navegador ou no PowerShell:
@@ -392,14 +447,14 @@ seguro** (`GET /api/streams/proxy/{id}`). A URL exibida na interface tem a
 userInfo mascarada (`****:****@host`). O estado aparece no painel como conectado,
 reconectando ou offline.
 
-### Mural multi-câmera (Alaris Core distribuído)
+### Mural multi-câmera (Bem-Te-Vi Core distribuído)
 
 No painel principal, o **Mural de Câmeras** exibe 1, 2 ou 4 câmeras simultâneas
 (lado a lado) ou uma em foco. Cada fluxo roda em seu **próprio worker** (thread de
-captura + IA), com **Alaris Core independente** por câmera: buffer temporal de
+captura + IA), com **Bem-Te-Vi Core independente** por câmera: buffer temporal de
 ~6 s (3 s antes + 3 s depois), cálculo de nitidez (variância do Laplaciano) e
 gravação dos melhores quadros no bebedouro/comedouro. Cada feed traz selos em
-tempo real do Alaris: status de conexão (Online 🟢 / Reconectando 🟡), FPS e a
+tempo real do Bem-Te-Vi Core: status de conexão (Online 🟢 / Reconectando 🟡), FPS e a
 contagem de aves ativas no bebedouro/comedouro. Se um stream externo cair, o
 worker se reconecta sozinho com **backoff exponencial** (sem derrubar o servidor).
 O estado por stream é exposto em `GET /api/streams`.
@@ -411,7 +466,7 @@ Além de câmeras IP, você pode cadastrar o link de uma **live do YouTube**
 `https://www.youtube.com/@canal/live`). O OpenCV/FFmpeg **não** abre a página web
 do YouTube, então o backend usa o **`yt-dlp`** para traduzir o link para o
 **stream HLS direto** (`m3u8`) antes de abrir a captura. O link direto é então
-consumido pelo worker da câmera normalmente — com Alaris Core, selos de status,
+consumido pelo worker da câmera normalmente — com Bem-Te-Vi Core, selos de status,
 FPS e contagem de aves.
 
 - A tradução fica em `app/services/stream_resolver.py` (`resolver_url_direta`).
@@ -595,15 +650,15 @@ Agendador diário (`MorningBriefingScheduler`) que dispara no horário configura
 (padrão 07:00). Compila e envia via Telegram/Discord:
 
 - **Clima:** previsão Open-Meteo para cada jardim cadastrado.
-- **Predição:** visitas prováveis do dia via Alaris Core (memória comportamental).
+- **Predição:** visitas prováveis do dia via Bem-Te-Vi Core (memória comportamental).
 - **Foto de destaque:** postal do Momento Raro do dia anterior.
 
 Configuração: `MORNING_BRIEFING_ENABLED`, `MORNING_BRIEFING_HOUR`,
 `MORNING_BRIEFING_MINUTE` (env) ou via painel de configurações.
 
-### Feed Global Bem-Ti-Vi (jardins conectados)
+### Feed Global Bem-Te-Vi (jardins conectados)
 
-O Painel Principal ganhou o card **Feed Global Bem-Ti-Vi**: um mural em tempo
+O Painel Principal ganhou o card **Feed Global Bem-Te-Vi**: um mural em tempo
 real com os destaques **raros e incomuns** deste jardim e das instâncias
 parceiras (ex.: *“🦜 Rara Tangará avistada no Jardim de Paris há 5 minutos”*).
 
@@ -657,14 +712,14 @@ sistema segue normal.
 
 ### Reels verticais (9:16) para redes sociais
 
-O Bem-Ti-Vi gera vídeos verticais **1080×1920** prontos para Instagram Reels,
+O Bem-Te-Vi gera vídeos verticais **1080×1920** prontos para Instagram Reels,
 TikTok e YouTube Shorts a partir do clipe de ~6 segundos de cada visita.
 
 - **Corte inteligente:** o `crop` do FFmpeg é centrado na **bounding box** da ave
   (ou no centro do quadro, sem bbox), mantendo a proporção 9:16.
 - **Moldura translúcida:** faixas escuras no topo e na base (`drawbox`) garantem a
   legibilidade da sobreposição.
-- **Sobreposição oficial:** marca d'água **Bem-Ti-Vi**, nome popular e científico
+- **Sobreposição oficial:** marca d'água **Bem-Te-Vi**, nome popular e científico
   da espécie, temperatura do momento e data, com `drawtext`.
 - **Geração preguiçosa:** o MP4 é criado uma única vez por visita (cache em
   `app-data/captures/reels/{visit_id}.mp4`) e reaproveitado nas próximas chamadas.
@@ -751,7 +806,41 @@ acima do que o usuário configurou.
 movimento**) e **log de anomalias**: se uma espécie que não era registrada há
 mais de 6 meses reaparecer, um alerta é criado no painel (`GET /api/anomalies`).
 
-**7. Alaris Core Smart Match.** Toda identificação é comparada com a Life List
+**9. Auto-associação de espécie (re-ID visual).** Quando o detector devolve
+apenas o rótulo genérico (`bird`), o módulo `app/ai/species_association.py`
+compara a **assinatura visual** do recorte tratado com as fotos de referência do
+Catálogo Local (`bird_species.reference_image_path`) por **similaridade de
+cosseno**:
+
+- acima de `SPECIES_MATCH_THRESHOLD` (**0.65 = 65%**), a visita recebe o nome
+  popular da espécie, o vínculo com o catálogo e o selo
+  `Identificado pelo Bem-Te-Vi Core`;
+- as referências ficam em **cache**, invalidado pela assinatura
+  `(id, caminho, mtime)` — trocar uma foto de referência recalcula só o que
+  mudou;
+- visitas com curadoria humana (`Espécie Confirmada`, `Reclassificado pelo
+  usuário`, `Identificado por IA Externa`) **nunca** são sobrescritas;
+- o extrator é o mesmo da re-identificação individual: **MobileNetV3-Small**
+  (576 dims) com fallback **OpenCV** (180 dims) para instalações offline.
+
+Variáveis: `SPECIES_AUTO_ASSOCIATION_ENABLED`, `SPECIES_MATCH_THRESHOLD`,
+`SPECIES_MATCH_MIN_SHARPNESS`, `SPECIES_MATCH_MAX_REFERENCES`.
+
+**10. Reclassificação e pasta de retreinamento.** O botão **“Associação
+Incorreta / Reclassificar”** (`POST /api/visits/{id}/reclassify`) aplica a
+espécie correta, grava o recorte em
+`app-data/fine_tuning/{espécie}/{visit_id}.jpg` e registra a proveniência em
+`app-data/fine_tuning/index.jsonl` (visita, espécie, origem, observação,
+confiança e data). Reclassificar a mesma visita **move** a amostra, evitando
+que o mesmo recorte ensine duas classes contraditórias. A fila operacional do
+fine-tuning automático continua em `app-data/training_queue/`.
+
+**11. Recorte HD sob demanda.** `GET /api/visits/{id}/crop/hd` gera
+`app-data/crops/{id}_hd.jpg` (reescala Lanczos até `HD_CROP_MIN_SIDE`,
+*unsharp mask* + CLAHE na luminância) e devolve o arquivo como anexo, pronto
+para compartilhar ou servir de material de retreinamento.
+
+**7. Bem-Te-Vi Core Smart Match.** Toda identificação é comparada com a Life List
 antes de virar cadastro: espécies repetidas apenas **incrementam o contador de
 visitas** e agregam a nova mídia ao card existente (sem duplicatas); espécies
 **novas** ganham automaticamente um card no Álbum de Conquistas, com a melhor
@@ -760,21 +849,21 @@ foto tratada e o status ecológico regional.
 **8. Horário local por câmera (fuso global).** Cada visita guarda a **hora e a
 data locais do jardim** (fuso IANA cadastrado na câmera — migração 8). Com isso,
 os histogramas de horário de pico, o "pico do dia" e as medalhas de
-madrugada/noite do Alaris Core são calculados pelo **relógio do jardim**, e não
+madrugada/noite do Bem-Te-Vi Core são calculados pelo **relógio do jardim**, e não
 pelo UTC: uma visita às 10h na Costa Rica não aparece mais como "madrugada" no
 Brasil. Câmeras sem fuso cadastrado continuam usando o UTC (comportamento
 anterior, sem quebrar o histórico).
 
-**6. IA visível — Alaris Core.** O motor de IA do Bem-Te-Vi assina como
-**Alaris Core v1.0** (a assinatura aparece em `GET /api/ai/status` e nos metadados
+**6. IA visível — Bem-Te-Vi Core.** O motor de IA do Bem-Te-Vi assina como
+**Bem-Te-Vi Core v1.0** (a assinatura aparece em `GET /api/ai/status` e nos metadados
 de cada visita). O painel ganha um **Núcleo de IA** (widget futurista em Dark Mode
-com pulsos neon, selo "Potencializado por Alaris AI") que mostra em tempo real o
+com pulsos neon, selo "Potencializado por Bem-Te-Vi Core") que mostra em tempo real o
 estado do modelo, o FPS do stream, a latência da inferência, o número de
 inferências/detecções (hoje e total), o uso de CPU/RAM, o backend em uso
 (TensorRT/ONNX/PyTorch) e o tempo de atividade. Ao lado, um **terminal de logs
-cognitivos** lista os "pensamentos" da Alaris conforme acontecem (detecção,
+cognitivos** lista os "pensamentos" do Bem-Te-Vi Core conforme acontecem (detecção,
 nitidez do quadro escolhido, identificação da espécie, auto-calibração por clima,
-bandos e anomalias), cada linha assinada com `[Alaris]`. A **Galeria** passa a
+bandos e anomalias), cada linha assinada com `[Bem-Te-Vi Core]`. A **Galeria** passa a
 exibir, em cada card, um **Índice de Certeza da IA** (barra 0–100%) e a
 **anotação ornitológica** gerada automaticamente (ex.: "Espécie identificada:
 Tangara sayaca (Nativa) — alimentando-se em grupo de 3 indivíduos, sob
@@ -782,7 +871,7 @@ temperatura de 24°C e céu limpo."). Os endpoints `GET /api/ai/status` e
 `GET /api/ai/logs` expõem essa telemetria para integração externa. O comportamento
 pode ser desligado com `AI_INSIGHTS_ENABLED=false`.
 
-**7. Alta sensibilidade e anti-spam (Alaris Core).** Para não perder aves
+**7. Alta sensibilidade e anti-spam (Bem-Te-Vi Core).** Para não perder aves
 pequenas ou paradas no comedouro **e** evitar alertas/gravações repetidos da
 mesma visita, o motor já inicia com:
 
@@ -790,7 +879,7 @@ mesma visita, o motor já inicia com:
   da inferência para destacar a plumagem contra o fundo do comedouro;
 - **Retenção de rastreio de `10 s`** e **sensibilidade de movimento `0.80`**,
   mantendo a ave na mesma visita mesmo quando o YOLO a perde por instantes;
-- **Regra de permanência:** enquanto a ave estiver no comedouro, o Alaris mantém
+- **Regra de permanência:** enquanto a ave estiver no comedouro, o Bem-Te-Vi Core mantém
   o rastreio e o buffer ativos, mas **não cria novos alertas/registros** — o
   movimento contínuo é tratado como o **mesmo evento em andamento**;
 - **Encerramento por ausência:** um novo alerta só ocorre se a ave **sair
@@ -803,21 +892,21 @@ inicialização. Os valores podem ser afinados no `back\.env` (`YOLO_CONFIDENCE`
 `OBJECT_PERSISTENCE_TIME`, `MOTION_SENSITIVITY`, `PRESENCE_GRACE_SECONDS`,
 `ALERT_COOLDOWN_SECONDS`) ou, no caso do cooldown, por zona no painel.
 
-**8. Overlays visuais e identificação nos vídeos (Alaris Core).** O Alaris deixa
+**8. Overlays visuais e identificação nos vídeos (Bem-Te-Vi Core).** O Bem-Te-Vi Core deixa
 de ser "invisível": ele passa a **desenhar a própria atuação** sobre o vídeo.
 
 - **No stream ao vivo** (câmeras locais e remotas), cada ave detectada recebe uma
   **caixa delimitadora arredondada** e um **selo flutuante** com a marca
-  `✨ Alaris AI`, o **nome da espécie** e a **confiança** (ex.: `Tangara sayaca
+  `✨ Bem-Te-Vi Core`, o **nome da espécie** e a **confiança** (ex.: `Tangara sayaca
   96%`). Aves aparecem em esmeralda e a fauna noturna em âmbar. O desenho é feito
   com poucas operações por caixa (sem cópias extras de quadro), então **não
   introduz atraso** no stream.
 - **No painel**, o feed da câmera se **ilumina** (borda e brilho esmeralda)
-  enquanto o Alaris está rastreando uma ave, com um **card flutuante**
-  *"Alaris rastreando"* mostrando a contagem e as **espécies ativas naquele
+  enquanto o Bem-Te-Vi Core está rastreando uma ave, com um **card flutuante**
+  *"Bem-Te-Vi Core rastreando"* mostrando a contagem e as **espécies ativas naquele
   instante**. O Mural multi-câmera recebe o mesmo realce e o selo de espécies.
 - **Nos clipes gravados (6 s)**, o vídeo é salvo **já com uma tarja fosca de
-  identificação** no rodapé (marca `Alaris AI`, espécie, confiança, câmera e
+  identificação** no rodapé (marca `Bem-Te-Vi Core`, espécie, confiança, câmera e
   horário). Assim a espécie é inconfundível mesmo se o arquivo for baixado,
   compartilhado ou aberto fora do painel. A tarja é pré-renderizada **uma única
   vez por clipe** e apenas mesclada em cada quadro — a gravação continua barata.
@@ -844,7 +933,7 @@ de ser "invisível": ele passa a **desenhar a própria atuação** sobre o víde
    científicas e status ecológico regional (`GET /api/species/{id}/profile`).
    A miniatura do card usa o **recorte tratado** da melhor visita (close-up).
 
-O **Alaris Core Smart Match** compara automaticamente cada identificação com a
+O **Bem-Te-Vi Core Smart Match** compara automaticamente cada identificação com a
 Life List antes de virar cadastro: se a espécie **já existe**, a visita é
 vinculada ao card existente (sem duplicar registros) — o contador de visitas sobe
 e a nova foto/vídeo passam a integrar a galeria daquela espécie; se é **nova**,
@@ -859,7 +948,7 @@ associar manualmente as detecções com as espécies conhecidas.
 
 ### Visitantes Silvestres / Convidados do Jardim (Modo Esquilo)
 
-O Alaris Core classifica o animal que aparece no comedouro com uma camada de
+O Bem-Te-Vi Core classifica o animal que aparece no comedouro com uma camada de
 **taxonomia pos-deteccao** (`app/domain/fauna_taxonomy.py`): aves seguem o fluxo
 ornitologico normal; mamiferos (esquilos, gatos, gambas, morcegos...) viram
 **Visitantes Especiais** -- nao entram na Life List ("Minhas Aves") nem nas
@@ -957,7 +1046,7 @@ vivo no validador de zonas, sem reiniciar as câmeras. O perfil recomendado já 
 **ativo por padrão** (confiança `0.22`, permanência `10 s`, movimento `0.80`),
 entregando alta sensibilidade sem ajustes manuais. A **regra anti-spam** (mesma
 ave = mesmo evento) atua de forma transparente: enquanto a ave permanece no
-comedouro, o Alaris segue rastreando, mas não cria novos alertas/registros; um
+comedouro, o Bem-Te-Vi Core segue rastreando, mas não cria novos alertas/registros; um
 novo evento só nasce após a ave sair por completo da zona e outra pousar. A mesma
 tela traz a **Visão Noturna (Infravermelho)**: modo automático/sempre/desligado, o
 limiar de luminosidade e a opção de monitorar a fauna noturna além de aves. Em
@@ -1003,6 +1092,7 @@ Bem-Te-Vi/
 │   └── .env.example
 ├── front/                # React 19 + Vite + TypeScript + Tailwind
 │   ├── src/
+│   ├── src-tauri/        # Casca desktop do Bem-Te-Vi Monitor (Tauri 2)
 │   └── package.json
 ├── start.bat             # Sobe uvicorn + vite juntos (Windows)
 ├── README.md             # Guia do Usuário (uso no dia a dia)
@@ -1026,7 +1116,11 @@ Bem-Te-Vi/
 | GET | `/api/visits` | Eventos de aves |
 | GET | `/api/visits/today` | Visitas de hoje (mais recentes primeiro) |
 | GET | `/api/visits/{id}` | Detalhe de uma visita |
+| GET | `/api/visits/{id}/crop` | Recorte tratado (close-up) da ave, servido de `app-data/crops/` |
+| GET | `/api/visits/{id}/crop/hd` | **Download do recorte HD**: JPEG reescalado/realçado em alta resolução (`Content-Disposition: attachment`) |
 | PUT | `/api/visits/{visit_id}/assign-species` | Associar ou desassociar visita a uma espécie (`{"species_id":"..."}`) |
+| POST | `/api/visits/{id}/reclassify` | **Reclassificação** (correção humana): aplica a espécie correta, grava o recorte em `app-data/fine_tuning/{espécie}/` + `index.jsonl` e alimenta o aprendizado ativo |
+| POST | `/api/visits/{id}/auto-identify` | Reexecutar a auto-associação visual (re-ID contra o Catálogo Local); preserva a curadoria humana |
 | POST | `/api/visits/{id}/identify-external` | Identificar sob demanda usando o recorte local da visita |
 | POST | `/api/visits/{id}/ask-ai` | Consulta ornitológica profunda na IA externa (ficha formatada; `refresh=true` reconsulta) |
 | GET | `/api/species` | Listar o catálogo local de aves |
@@ -1058,10 +1152,10 @@ Bem-Te-Vi/
 | GET | `/api/anomalies` | Log de anomalias acústico-visuais (ex.: espécie que reaparece após meses); aceita `limit` e `only_pending` |
 | GET | `/api/anomalies/pending-count` | Quantidade de anomalias ainda não reconhecidas (badge do painel) |
 | POST | `/api/anomalies/{id}/acknowledge` | Marca uma anomalia como reconhecida |
-| GET | `/api/ai/status` | **Alaris Core**: estado do motor (`signature: "Alaris Core v1.0"`), FPS, latência da inferência, inferências hoje/total, detecções, recursos (CPU/RAM), modelo/backend/dispositivo e tempo de atividade |
-| GET | `/api/ai/logs?limit=&since_id=` | **Logs cognitivos da Alaris**: "pensamentos" em tempo real assinados com `[Alaris]` (detecção, nitidez do frame, espécie identificada, auto-calibração por clima, anomalias); `since_id` habilita polling incremental |
+| GET | `/api/ai/status` | **Bem-Te-Vi Core**: estado do motor (`signature: "Bem-Te-Vi Core v1.0"`), FPS, latência da inferência, inferências hoje/total, detecções, recursos (CPU/RAM), modelo/backend/dispositivo e tempo de atividade |
+| GET | `/api/ai/logs?limit=&since_id=` | **Logs cognitivos do Bem-Te-Vi Core**: "pensamentos" em tempo real assinados com `[Bem-Te-Vi Core]` (detecção, nitidez do frame, espécie identificada, auto-calibração por clima, anomalias); `since_id` habilita polling incremental |
 | GET | `/api/ai/learning/status` | **Aprendizado ativo**: fila de amostras por espécie, elegibilidade para o fine-tuning, modelo adaptado e última execução |
-| POST | `/api/ai/learning/optimize` | Dispara o fine-tuning incremental do Bem-Ti-Vi Core com as amostras da fila (roda em segundo plano) |
+| POST | `/api/ai/learning/optimize` | Dispara o fine-tuning incremental do Bem-Te-Vi Core com as amostras da fila (roda em segundo plano) |
 | GET | `/api/ai/behavioral-prediction?species=&horizon_hours=&limit=` | **Memória comportamental**: probabilidade de pico por espécie nas próximas horas, cruzando horário, temperatura/umidade, clima e sazonalidade. Devolve `highlight` com a frase pronta do card |
 | GET | `/api/ai/behavioral-memory` | Resumo dos perfis comportamentais persistidos (dias de histórico, espécies e visitas) |
 | POST | `/api/ai/behavioral-memory/refresh` | Reconstrói os perfis comportamentais agora (fora do ciclo automático) |
@@ -1095,7 +1189,7 @@ Bem-Te-Vi/
 | GET | `/api/journal?date=AAAA-MM-DD&camera_id=` | **Diário de Campo** do dia: clima, coordenadas, espécies, fotos, clipes e texto em pt-BR |
 | GET | `/api/journal/export/ebird?date=&camera_id=` | Checklist CSV no **eBird Record Format** (19 colunas, sem cabeçalho, data mês/dia/ano) |
 | GET | `/api/journal/export/csv?date=&camera_id=` | Planilha CSV limpa em pt-BR (uma linha por espécie/jardim) |
-| GET | `/api/network/feed?days=&limit=` | **Feed Global Bem-Ti-Vi**: destaques raros/incomuns locais e de jardins parceiros |
+| GET | `/api/network/feed?days=&limit=` | **Feed Global Bem-Te-Vi**: destaques raros/incomuns locais e de jardins parceiros |
 | GET | `/api/network/status` | Estado da rede global (webhook, parceiros e contadores; sem expor token/URLs) |
 | POST | `/api/network/webhook` | Recebe um destaque de outra instância; exige `X-Bem-Te-Vi-Token` e `GLOBAL_NETWORK_TOKEN` |
 | POST | `/api/media/generate-reel/{visit_id}` | Gera o **Reel vertical (9:16)** da visita (`force` regera) |
@@ -1198,7 +1292,7 @@ espécie, confirma uma detecção ou usa a identificação externa, o recorte tr
 da visita é copiado para `back/app-data/training_queue/{espécie}/` e registrado na
 tabela `training_samples` (idempotente por `visit_id`). Rótulos genéricos
 (`bird`, `Pássaro Desconhecido`, …) são recusados. Em **Configurações →
-Bem-Ti-Vi Core adaptativo**, o botão *"Otimizar Bem-Ti-Vi Core com Novas
+Bem-Te-Vi Core adaptativo**, o botão *"Otimizar Bem-Te-Vi Core com Novas
 Amostras"* monta um dataset `train/val` determinístico e roda um fine-tuning
 YOLOv8-cls em segundo plano (`fine_tune_runs`). O `best.pt` é copiado para
 `back/app-data/models/bem_te_vi_core.pt` e o classificador do pipeline passa a
@@ -1222,6 +1316,40 @@ comparada aos centróides por espécie em `bird_individuals`; acima de
 atualizado incrementalmente. Cada ave recorrente vira um **"Conhecido do
 Jardim"**, com histórico individual no painel do Dashboard. Os vetores ficam em
 `bird_embedding_samples` como BLOBs `float32` (100% local).
+
+**Associação de espécie (`species_association.py`)** — re-ID **no nível da
+espécie**: o mesmo extrator de embeddings é comparado com as fotos de
+referência do Catálogo Local (`bird_species.reference_image_path`). A
+similaridade de cosseno decide (limiar de 65% por padrão) se a visita recebe o
+nome popular da espécie; acima do limiar, o serviço grava o vínculo, o selo
+`Identificado pelo Bem-Te-Vi Core` e o status ecológico no metadado da visita.
+As referências ficam em cache (invalidado por `(id, caminho, mtime)`) e a
+curadoria humana tem sempre prioridade.
+
+**Reclassificação (`fine_tuning.py`)** — a correção feita pelo observador
+(“Associação Incorreta / Reclassificar”) grava o recorte tratado em
+`app-data/fine_tuning/{espécie}/{visit_id}.jpg` e registra a proveniência em
+`app-data/fine_tuning/index.jsonl`. Reclassificar a mesma visita move a
+amostra (o arquivo anterior é removido), evitando classes contraditórias. A
+fila operacional do fine-tuning automático continua em
+`app-data/training_queue/`.
+
+### Capas da documentação (`docs/`)
+
+As imagens do [`README.md`](README.md) são geradas automaticamente em modo
+headless (Chrome/Edge), usando o **deep-link por hash** do painel:
+
+```powershell
+python docs\capturar-telas.py
+```
+
+O script renderiza cada aba (`#dashboard`, `#cameras`, `#gallery`,
+`#journal`, `#audio`, `#species`, `#analytics`, `#settings`) e salva o PNG em
+`docs/images/`. Para refazer os ícones do aplicativo desktop:
+
+```powershell
+python front\src-tauri\icons\generate_icons.py
+```
 
 ### Bioacústica com BirdNET
 

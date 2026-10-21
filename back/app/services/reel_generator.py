@@ -2,7 +2,7 @@
 
 Pega o clipe original de ~6 segundos da visita, aplica um corte vertical focado
 na ave (bounding box), sobrepõe uma moldura elegante translúcida com a marca
-d'água oficial do Bem-Ti-Vi, o nome popular/científico da espécie e a
+d'água oficial do Bem-Te-Vi, o nome popular/científico da espécie e a
 temperatura do momento, e entrega um MP4 vertical 1080x1920 pronto para
 Instagram, TikTok e YouTube Shorts.
 
@@ -256,7 +256,7 @@ def generate_reel(
     scientific_name = visit.get("assigned_species_scientific_name") or visit.get("scientific_name") or ""
     temperature = visit.get("temperature")
     detected_at = visit.get("detectado_em") or visit.get("detected_at") or ""
-    brand = "Bem-Ti-Vi"
+    brand = "Bem-Te-Vi Monitor"
 
     vf = _build_filter(
         src_w,

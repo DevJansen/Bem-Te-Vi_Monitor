@@ -370,7 +370,7 @@ export function FieldJournalPanel({ cameras }: Props) {
                 Nenhuma ave registrada neste dia
               </p>
               <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                Escolha outra data ou deixe o Alaris Core capturar as visitas do jardim.
+                Escolha outra data ou deixe o Bem-Te-Vi Core capturar as visitas do jardim.
               </p>
             </div>
           ) : (

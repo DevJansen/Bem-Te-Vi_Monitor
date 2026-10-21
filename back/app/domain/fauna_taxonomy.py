@@ -1,8 +1,8 @@
-"""Taxonomia leve da fauna do jardim — o "anti-esquilo" do Alaris Core.
+"""Taxonomia leve da fauna do jardim — o "anti-esquilo" do Bem-Te-Vi Core.
 
 O detector de aves do Bem-Te-Vi é um YOLOv8 afinado para aves, mas o mundo real
 não coopera: esquilos, gatos, gambás e outros bichos invadem o comedouro. Sem uma
-camada de taxonomia, o Alaris Core acabaria cadastrando um **esquilo como nova
+camada de taxonomia, o Bem-Te-Vi Core acabaria cadastrando um **esquilo como nova
 espécie de ave** na Life List ("Minhas Aves"), poluindo o Álbum e disparando
 alertas de "ave nova".
 

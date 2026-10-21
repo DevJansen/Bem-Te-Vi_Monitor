@@ -1,4 +1,4 @@
-"""Curadoria de "Momentos Raros / Fotos de Postal" do Alaris Core.
+"""Curadoria de "Momentos Raros / Fotos de Postal" do Bem-Te-Vi Core.
 
 A rotina faz três coisas, sempre **localmente**:
 
@@ -433,7 +433,7 @@ class RareMomentsService:
         overlay = Image.new("RGBA", photo.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
         mark_font = self._font(22, bold=True)
-        mark = "Bem-Te-Vi"
+        mark = "Bem-Te-Vi Monitor"
         box = draw.textbbox((0, 0), mark, font=mark_font)
         text_w, text_h = box[2] - box[0], box[3] - box[1]
         pad = 10
@@ -477,7 +477,7 @@ class RareMomentsService:
             visit.get("location_label")
             or visit.get("camera_location")
             or visit.get("camera_name")
-            or "Jardim Bem-Te-Vi"
+            or "Jardim Bem-Te-Vi Monitor"
         )
         try:
             when = self._format_when(visit)
@@ -508,11 +508,11 @@ class RareMomentsService:
         )
 
         # Assinatura oficial no canto direito da legenda.
-        brand = "Bem-Te-Vi"
+        brand = "Bem-Te-Vi Monitor"
         brand_box = draw.textbbox((0, 0), brand, font=brand_font)
         brand_x = canvas_w - pad - (brand_box[2] - brand_box[0])
         draw.text((brand_x, top + 6), brand, font=brand_font, fill=(16, 122, 87))
-        subtitle = "Alaris Core · observação de avifauna"
+        subtitle = "Bem-Te-Vi Core · observação de avifauna"
         sub_box = draw.textbbox((0, 0), subtitle, font=small_font)
         sub_x = canvas_w - pad - (sub_box[2] - sub_box[0])
         draw.text((sub_x, top + 38), subtitle, font=small_font, fill=(140, 150, 142))
@@ -563,7 +563,7 @@ class RareMomentsWorker(threading.Thread):
                 scanned = get_rare_moments_service().score_pending(limit=160)
                 if scanned:
                     logger.info(
-                        "Momentos Raros: %s captura(s) avaliada(s) pelo Alaris Core",
+                        "Momentos Raros: %s captura(s) avaliada(s) pelo Bem-Te-Vi Core",
                         scanned,
                     )
             except Exception:

@@ -1,7 +1,7 @@
 """Visitantes Silvestres / Convidados Especiais (o "Modo Esquilo").
 
 Expõe o painel dos bichos que **não são aves** e visitam o comedouro — esquilos,
-gatos, gambás e companhia. O Alaris Core registra essas aparições à parte: elas
+gatos, gambás e companhia. O Bem-Te-Vi Core registra essas aparições à parte: elas
 não entram na Life List ("Minhas Aves") nem nas estatísticas ornitológicas, mas
 ganham contadores divertidos, prateleira própria na Galeria ("Convidados do
 Jardim") e uma medalha secreta no Álbum de Conquistas.

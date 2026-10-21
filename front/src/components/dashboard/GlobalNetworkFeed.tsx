@@ -72,7 +72,7 @@ function FeedRow({ event }: { event: NetworkFeedEvent }) {
 }
 
 /**
- * Card **Feed Global Bem-Ti-Vi** do Painel Principal.
+ * Card **Feed Global Bem-Te-Vi Monitor** do Painel Principal.
  *
  * Reúne os destaques raros/incomuns das câmeras deste jardim e das instâncias
  * conectadas por webhook. O polling é leve (30 s) e o componente tolera falhas
@@ -85,7 +85,7 @@ export function GlobalNetworkFeed() {
 
   return (
     <section
-      aria-label="Feed Global Bem-Ti-Vi"
+      aria-label="Feed Global Bem-Te-Vi Monitor"
       className="rounded-2xl border border-dark-700 bg-dark-800/80 p-4 shadow-[0_10px_40px_-28px_rgba(16,185,129,0.65)] backdrop-blur"
     >
       <header className="flex flex-wrap items-center justify-between gap-2">
@@ -95,7 +95,7 @@ export function GlobalNetworkFeed() {
           </span>
           <div>
             <h2 className="font-display text-base font-semibold text-[var(--color-text-primary)]">
-              Feed Global Bem-Ti-Vi
+              Feed Global Bem-Te-Vi Monitor
             </h2>
             <p className="text-xs text-[var(--color-text-muted)]">
               Destaques dos jardins conectados · {feed?.instance_name ?? "seu jardim"}
