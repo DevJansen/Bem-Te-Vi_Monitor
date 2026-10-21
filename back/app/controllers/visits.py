@@ -391,7 +391,10 @@ def identify_visit_external(
     if not settings.ai_external_api_key:
         raise HTTPException(
             status_code=503,
-            detail="Configure AI_EXTERNAL_API_KEY para habilitar a identificação externa",
+            detail=(
+                "Configure a chave GEMINI_API_KEY (Configurações › "
+                "Inteligência Artificial) para habilitar a identificação externa"
+            ),
         )
 
     resolved = _resolve_visit_image(row)
@@ -549,7 +552,10 @@ def ask_ai_about_visit(
     if not settings.ai_external_api_key:
         raise HTTPException(
             status_code=503,
-            detail="Configure AI_EXTERNAL_API_KEY para habilitar a consulta externa",
+            detail=(
+                "Configure a chave GEMINI_API_KEY (Configurações › "
+                "Inteligência Artificial) para habilitar a consulta externa"
+            ),
         )
 
     popular, cientifico = _resolver_nomes_ia(visit)

@@ -9,6 +9,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.core.gemini import GEMINI_DEFAULT_MODEL
+
 
 class SourceType(str, Enum):
     USB = "usb"
@@ -811,7 +813,7 @@ class EnvironmentSettingsOut(BaseModel):
     # Chave do Google Gemini (mascarada na leitura).
     ai_external_api_key: str | None = None
     # Modelo Gemini em uso (sanitizado, sem o prefixo "models/").
-    ai_external_model: str = "gemini-1.5-flash"
+    ai_external_model: str = GEMINI_DEFAULT_MODEL
     telegram_bot_token_configured: bool
     telegram_chat_id_configured: bool
     discord_webhook_url_configured: bool
@@ -845,7 +847,8 @@ class GeminiConnectionTestRequest(BaseModel):
     """Payload do teste de conexão dedicado ao Google Gemini."""
 
     api_key: str | None = Field(default=None, max_length=512)
-    model_name: str = Field(default="gemini-1.5-flash", max_length=128)
+    # Vazio/omitido = modelo padrão validado do projeto.
+    model_name: str = Field(default=GEMINI_DEFAULT_MODEL, max_length=128)
 
 
 class GeminiConnectionTestResponse(BaseModel):

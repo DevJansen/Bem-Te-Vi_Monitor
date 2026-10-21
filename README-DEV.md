@@ -203,6 +203,14 @@ backend.
   mínimo, faz *backoff exponencial* (3 tentativas) em 429/503 e, se o modelo
   responder 404, tenta automaticamente o próximo modelo validado (`gemini-3.5-flash` → `gemini-3.7-flash` → …).
 
+  A **ficha ornitológica** é pedida em JSON com ~15 campos. Como os modelos
+  Gemini 3.x descontam os *tokens de raciocínio* do mesmo `max_output_tokens`,
+  a ficha usa um orçamento de **4096 tokens**; se a resposta ainda vier
+  truncada (`finish_reason=MAX_TOKENS`), o backend **dobra o orçamento
+  automaticamente** (até 8192) antes de trocar de modelo. O JSON é lido de
+  forma tolerante (cercas Markdown, texto ao redor e vírgulas finais), o que
+  elimina o erro *"ficha ornitológica em formato inválido"*.
+
   Provedores legados removidos: OpenAI, Anthropic, OpenRouter, Groq e Ollama.
 
 
@@ -255,6 +263,24 @@ Feche as janelas `Bem-Te-Vi Backend` e `Bem-Te-Vi Frontend`, ou pressione `Ctrl+
 > e do `package-lock.json`: depois de um `git pull`, o `start.bat` reinstala sozinho
 > o que faltar, sem precisar apagar `back\venv` nem `front\node_modules`.
 
+### Movi/copiei a pasta do projeto — e agora?
+
+Pode mover a pasta inteira sem medo. O `start.bat` foi feito para isso:
+
+- Ele chama **sempre** `back\venv\Scripts\python.exe -m <módulo>` pelo caminho
+  absoluto e **nunca** usa `activate.bat`, `pip.exe`, `uvicorn.exe` ou `yolo.exe`.
+  Esses arquivos gravam o caminho absoluto da pasta onde o venv nasceu, então
+  continuam apontando para a pasta antiga depois de mover — era exatamente essa
+  a causa do erro na inicialização.
+- Se o `python.exe` do venv não executar, o `start.bat` **recria** o ambiente
+  automaticamente (`back\venv`) e reinstala o `requirements.txt`.
+- Os caminhos absolutos da fila de aprendizado ativo
+  (`training_samples.image_path`) são corrigidos na subida da API, pelo método
+  `ActiveLearningService.repair_sample_paths()`.
+
+Se for usar o terminal manualmente, rode `back\venv\Scripts\python.exe -m pip …`
+em vez de `pip …` — assim você não depende dos `.exe` antigos do venv.
+
 ---
 
 ## Instalação manual (alternativa)
@@ -266,13 +292,13 @@ Use estes passos se preferir não usar o `start.bat`.
 ```bat
 cd Bem-Te-Vi\back
 python -m venv venv
-venv\Scripts\activate
-python -m pip install --upgrade pip
-pip install -r requirements.txt
+REM Prefira o python.exe do venv a "activate": funciona mesmo se a pasta mudar.
+venv\Scripts\python.exe -m pip install --upgrade pip
+venv\Scripts\python.exe -m pip install -r requirements.txt
 
 copy .env.example .env
 
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 A API fica em http://127.0.0.1:8000 — docs em http://127.0.0.1:8000/docs

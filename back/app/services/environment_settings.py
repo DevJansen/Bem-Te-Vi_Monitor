@@ -29,13 +29,34 @@ from app.services.notifier import TelegramNotifier
 
 logger = logging.getLogger(__name__)
 _env_lock = threading.RLock()
+
+# Nome canônico da chave do Google Gemini (documentado no .env.example e no
+# painel). `AI_EXTERNAL_API_KEY` é o nome legado, mantido apenas como fallback
+# para não quebrar instalações antigas.
+GEMINI_ENV_KEY = "GEMINI_API_KEY"
+AI_LEGACY_ENV_KEY = "AI_EXTERNAL_API_KEY"
+
 _ENV_KEYS = {
     "telegram_bot_token": "TELEGRAM_BOT_TOKEN",
     "telegram_chat_id": "TELEGRAM_CHAT_ID",
     "discord_webhook_url": "DISCORD_WEBHOOK_URL",
-    "ai_external_api_key": "AI_EXTERNAL_API_KEY",
+    # Toda gravação passa a usar o nome canônico.
+    "ai_external_api_key": GEMINI_ENV_KEY,
     "ai_external_model": "AI_EXTERNAL_MODEL",
 }
+
+
+def gemini_key_from(values: dict[str, str]) -> str:
+    """Devolve a chave do Gemini configurada, aceitando o nome legado.
+
+    Precedência: ``GEMINI_API_KEY`` → ``AI_EXTERNAL_API_KEY``. A mesma regra é
+    usada em ``app/core/config.py``, garantindo que painel, testes de conexão e
+    chamadas reais enxerguem sempre a mesma chave.
+    """
+    return (
+        (values.get(GEMINI_ENV_KEY) or "").strip()
+        or (values.get(AI_LEGACY_ENV_KEY) or "").strip()
+    )
 
 
 def _read_env_file() -> dict[str, str]:
@@ -66,6 +87,9 @@ def _is_unchanged_mask(
     if is_masked(cleaned):
         return True
     stored = current.get(env_name)
+    if env_name == GEMINI_ENV_KEY:
+        # A chave pode estar salva com o nome legado; compara com a resolvida.
+        stored = gemini_key_from(current)
     if not stored:
         return False
     return cleaned == _masked_display(field_name, stored)
@@ -73,16 +97,17 @@ def _is_unchanged_mask(
 
 def read_environment_settings() -> EnvironmentSettingsOut:
     values = _read_env_file()
+    ai_key = gemini_key_from(values)
     telegram_configured = bool(
         values.get("TELEGRAM_BOT_TOKEN") and values.get("TELEGRAM_CHAT_ID")
     )
     discord_configured = bool(values.get("DISCORD_WEBHOOK_URL"))
-    ai_external_configured = bool(values.get("AI_EXTERNAL_API_KEY"))
+    ai_external_configured = bool(ai_key)
     return EnvironmentSettingsOut(
         telegram_bot_token=mask_secret(values.get("TELEGRAM_BOT_TOKEN")),
         telegram_chat_id=mask_secret(values.get("TELEGRAM_CHAT_ID")),
         discord_webhook_url=mask_url_secret(values.get("DISCORD_WEBHOOK_URL")),
-        ai_external_api_key=mask_secret(values.get("AI_EXTERNAL_API_KEY")),
+        ai_external_api_key=mask_secret(ai_key),
         ai_external_model=(
             sanitize_model_name(values.get("AI_EXTERNAL_MODEL"))
             or GEMINI_DEFAULT_MODEL
@@ -90,7 +115,7 @@ def read_environment_settings() -> EnvironmentSettingsOut:
         telegram_bot_token_configured=bool(values.get("TELEGRAM_BOT_TOKEN")),
         telegram_chat_id_configured=bool(values.get("TELEGRAM_CHAT_ID")),
         discord_webhook_url_configured=bool(values.get("DISCORD_WEBHOOK_URL")),
-        ai_external_api_key_configured=bool(values.get("AI_EXTERNAL_API_KEY")),
+        ai_external_api_key_configured=bool(ai_key),
         telegram_configured=telegram_configured,
         discord_configured=discord_configured,
         ai_external_configured=ai_external_configured,
@@ -122,7 +147,7 @@ def save_environment_settings(
             if "\n" in cleaned or "\r" in cleaned or "\x00" in cleaned:
                 raise ValueError(f"Valor inválido para {env_name}")
             # O Google Gemini é o único provedor: normalizamos o nome do modelo
-            # removendo prefixos inválidos (ex.: "models/gemini-1.5-flash"),
+            # removendo prefixos inválidos (ex.: "models/gemini-3.5-flash"),
             # que causariam HTTP 404 na API oficial.
             if field_name == "ai_external_model":
                 cleaned = sanitize_model_name(cleaned)
@@ -131,7 +156,8 @@ def save_environment_settings(
     clear_by_integration = {
         "clear_telegram": ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"),
         "clear_discord": ("DISCORD_WEBHOOK_URL",),
-        "clear_ai_external": ("AI_EXTERNAL_API_KEY",),
+        # Limpa o nome canônico e o legado, para não sobrar chave "fantasma".
+        "clear_ai_external": (GEMINI_ENV_KEY, AI_LEGACY_ENV_KEY),
     }
     cleared_keys = {
         env_name
@@ -139,6 +165,10 @@ def save_environment_settings(
         if getattr(payload, field_name)
         for env_name in env_names
     }
+    if GEMINI_ENV_KEY in values_to_save:
+        # Ao gravar a chave canônica, descarta a cópia legada (se existir):
+        # duas chaves diferentes no .env confundem o usuário e os testes.
+        cleared_keys.add(AI_LEGACY_ENV_KEY)
     for env_name in cleared_keys:
         values_to_save.pop(env_name, None)
 
@@ -271,7 +301,7 @@ def test_environment_connection(
         )
 
     # =================== IA EXTERNA (Google Gemini) ====================== #
-    api_key = payload.ai_external_api_key or current.get("AI_EXTERNAL_API_KEY", "")
+    api_key = payload.ai_external_api_key or gemini_key_from(current)
     if not api_key:
         raise ValueError("Informe a chave da API do Google Gemini para testar")
     # O nome do modelo é sanitizado (remove "models/") para evitar HTTP 404.

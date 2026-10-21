@@ -272,11 +272,9 @@ def test_gemini(
     """
     _require_local_environment_request(request)
     from app.services.ai_service import test_gemini_connection
-    from app.services.environment_settings import _read_env_file
+    from app.services.environment_settings import _read_env_file, gemini_key_from
 
-    chave = (payload.api_key or "").strip() or _read_env_file().get(
-        "AI_EXTERNAL_API_KEY", ""
-    )
+    chave = (payload.api_key or "").strip() or gemini_key_from(_read_env_file())
     if not chave:
         return GeminiConnectionTestResponse(
             status="error",
@@ -316,9 +314,9 @@ def list_gemini_models(request: Request) -> dict:
     """
     _require_local_environment_request(request)
     from app.services.ai_service import list_available_models
-    from app.services.environment_settings import _read_env_file
+    from app.services.environment_settings import _read_env_file, gemini_key_from
 
-    chave = _read_env_file().get("AI_EXTERNAL_API_KEY", "").strip()
+    chave = gemini_key_from(_read_env_file())
     if not chave:
         return {"models": [], "source": "none"}
     modelos = list_available_models(chave)

@@ -11,11 +11,11 @@ Destaques:
 * **Sanitização do nome do modelo** (:func:`sanitize_model_name`): remove o
   prefixo ``models/`` (e afins) que o painel ou uma configuração antiga possa
   ter gravado. Sem isso, a API oficial responde **404 NOT_FOUND**, pois espera
-  apenas ``gemini-1.5-flash``.
+  apenas o nome curto (``gemini-3.5-flash``).
 * **Backoff exponencial** nas falhas temporárias (429/503) do serviço do Google.
 * **Fallback automático**: se o modelo configurado responder 404, o serviço
-  tenta o ``gemini-2.5-flash`` (o modelo de maior disponibilidade) antes de
-  desistir.
+  percorre :data:`app.core.gemini.GEMINI_MODELS` (começando pelos modelos
+  validados) antes de desistir.
 * **Mensagens amigáveis** em português do Brasil, sem vazar a chave da API.
 """
 
@@ -31,6 +31,13 @@ from pathlib import Path
 from typing import Any
 
 from app.core.config import get_settings
+from app.core.gemini import (
+    GEMINI_DEFAULT_MODEL,
+    GEMINI_FALLBACK_MODEL,
+    GEMINI_MODEL_PRESETS,
+    GEMINI_MODELS,
+    MODELOS_DESCONTINUADOS,
+)
 from app.core.redaction import redact_secrets
 
 try:  # pragma: no cover - dependência do SDK oficial do Google
@@ -46,46 +53,10 @@ logger = logging.getLogger(__name__)
 # --------------------------------------------------------------------------- #
 # Modelos suportados
 # --------------------------------------------------------------------------- #
-
-#: Modelo padrão do Bem-Ti-Vi (rápido, leve e estável).
-GEMINI_DEFAULT_MODEL = "gemini-1.5-flash"
-
-#: Presets exibidos no dropdown de Configurações — nomes oficiais da API do
-#: Google Gemini. Servem de semente/fallback da interface; a lista real de
-#: modelos disponíveis para a chave é descoberta em tempo de execução pela
-#: API (:func:`list_available_models`), porque o Google **descontinua**
-#: modelos com frequência (vários deles respondem ``404 NOT_FOUND``).
-GEMINI_MODEL_PRESETS: tuple[tuple[str, str], ...] = (
-    ("gemini-1.5-flash", "gemini-1.5-flash (Padrão — Rápido, leve e estável)"),
-    ("gemini-2.5-flash", "gemini-2.5-flash (Nova geração Flash)"),
-    ("gemini-1.5-pro", "gemini-1.5-pro (Modo Pro — Análise densa)"),
-)
-
-#: Cadeia de fallback usada quando o modelo configurado não está disponível.
-#: O Google descontinua modelos com frequência (ex.: ``gemini-1.5-flash`` e
-#: ``gemini-2.5-flash`` deixou de existir para novos usuários, causando
-#: ``404 NOT_FOUND``), então o serviço percorre esta cadeia automaticamente.
-GEMINI_MODELS: tuple[str, ...] = (
-    "gemini-1.5-flash",
-    "gemini-2.5-flash",
-    "gemini-1.5-pro",
-    "gemini-3.5-flash",
-    "gemini-3.7-flash",
-    "gemini-3.8-flash",
-)
-
-#: Modelos que o Google já descontinuou — mantidos apenas para migração
-#: transparente (o serviço troca sozinho e avisa no log).
-_MODELOS_DESCONTINUADOS = {
-    "gemini-1.5-flash",
-    "gemini-1.5-pro",
-    "gemini-2.0-flash",
-    "gemini-2.5-flash",
-    "gemini-2.5-pro",
-}
-
-#: Modelo usado como fallback quando o configurado responde 404.
-GEMINI_FALLBACK_MODEL = GEMINI_DEFAULT_MODEL
+# As constantes de modelo vivem em :mod:`app.core.gemini` para serem
+# compartilhadas com o domínio (schemas da API) sem duplicar literais.
+# Elas continuam acessíveis como ``ai_service.GEMINI_*`` (re-export), o que
+# preserva a compatibilidade com imports existentes.
 
 #: Pausa (segundos) entre as tentativas automáticas — evita sobrecarregar a
 #: chave e o AI Studio durante o teste de conexão.
@@ -120,6 +91,20 @@ SPECTROGRAM_PROMPT = (
 
 #: Prompt leve usado pelo botão "Testar Conexão com Gemini".
 CONNECTION_TEST_PROMPT = "Responda apenas: OK"
+
+#: Orçamento de saída padrão das chamadas ao Gemini.
+#:
+#: Atenção: nos modelos Gemini 3.x os **tokens de raciocínio** ("thinking")
+#: são descontados do mesmo ``max_output_tokens`` da resposta. Com 1024 o
+#: modelo gastava ~979 tokens pensando e sobravam ~41 para o JSON, que era
+#: truncado (``finish_reason=MAX_TOKENS``) — origem do erro "formato inválido".
+DEFAULT_MAX_OUTPUT_TOKENS = 2048
+
+#: Ficha ornitológica: raciocínio (~1.100 tokens) + JSON completo (~750).
+CONSULT_MAX_OUTPUT_TOKENS = 4096
+
+#: Teto da expansão automática quando o modelo ainda truncar a resposta.
+MAX_OUTPUT_TOKENS_CEILING = 8192
 
 #: Campos textuais esperados no JSON devolvido pelo Gemini.
 _CONSULT_TEXT_FIELDS = (
@@ -175,8 +160,8 @@ class SpeciesConsult:
 def sanitize_model_name(model_name: str | None) -> str:
     """Normaliza o nome do modelo Gemini, removendo prefixos inválidos.
 
-    O painel (ou uma configuração antiga) pode gravar ``models/gemini-1.5-flash``.
-    A API oficial do Google espera **apenas** ``gemini-1.5-flash``; enviar o
+    O painel (ou uma configuração antiga) pode gravar ``models/gemini-3.5-flash``.
+    A API oficial do Google espera **apenas** ``gemini-3.5-flash``; enviar o
     prefixo provoca ``404 NOT_FOUND``. Esta função resolve o caso de forma
     determinística, sem I/O.
 
@@ -185,12 +170,12 @@ def sanitize_model_name(model_name: str | None) -> str:
     instalações antigas) é substituído pelo modelo padrão — evitando o
     ``404 NOT_FOUND`` logo após a migração.
 
-    >>> sanitize_model_name("models/gemini-1.5-flash")
-    'gemini-1.5-flash'
+    >>> sanitize_model_name("models/gemini-3.5-flash")
+    'gemini-3.5-flash'
     >>> sanitize_model_name("  GEMINI-2.5-FLASH  ")
     'GEMINI-2.5-FLASH'
     >>> sanitize_model_name("gpt-4o-mini")
-    'gemini-1.5-flash'
+    'gemini-3.5-flash'
     """
     cleaned = (model_name or "").strip()
     if not cleaned:
@@ -218,6 +203,15 @@ def sanitize_model_name(model_name: str | None) -> str:
             GEMINI_DEFAULT_MODEL,
         )
         return GEMINI_DEFAULT_MODEL
+
+    # Aviso informativo (não bloqueia): a cadeia de fallback cuidará do 404.
+    if cleaned.lower() in MODELOS_DESCONTINUADOS:
+        logger.info(
+            "O modelo %s foi descontinuado pelo Google; a cadeia de fallback "
+            "vai migrar automaticamente para %s.",
+            cleaned,
+            GEMINI_DEFAULT_MODEL,
+        )
     return cleaned
 
 
@@ -378,13 +372,24 @@ def _model_candidates(model_name: str | None) -> list[str]:
     return cadeia
 
 
+def _response_finish_reason(response: Any) -> str:
+    """Devolve o motivo de término da resposta (``STOP``/``MAX_TOKENS``/…)."""
+    candidates = getattr(response, "candidates", None) or []
+    if not candidates:
+        return ""
+    motivo = getattr(candidates[0], "finish_reason", None)
+    if motivo is None:
+        return ""
+    return str(getattr(motivo, "name", motivo)).upper()
+
+
 def _generate(
     *,
     api_key: str,
     model_name: str,
     prompt: str,
     image_base64: str | None = None,
-    max_output_tokens: int = 1024,
+    max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
     temperature: float = 0.0,
     json_response: bool = True,
 ) -> str:
@@ -398,7 +403,10 @@ def _generate(
        o serviço tenta o próximo modelo validado em :data:`GEMINI_MODELS`;
     3. **Sugestão do Google:** se a mensagem indicar outro modelo
        (``Please update your code to use models/gemini-X``), ele entra na
-       frente da cadeia.
+       frente da cadeia;
+    4. **Resposta truncada:** se vier ``finish_reason=MAX_TOKENS`` (o Gemini
+       3.x "pensa" dentro do mesmo orçamento), o orçamento é dobrado e a
+       chamada repetida até :data:`MAX_OUTPUT_TOKENS_CEILING`.
     """
     from google.genai import types as genai_types
 
@@ -408,26 +416,50 @@ def _generate(
     last_error: BaseException | None = None
 
     def _call(target_model: str) -> str:
-        config_kwargs: dict[str, Any] = {
-            "max_output_tokens": max_output_tokens,
-            "temperature": temperature,
-        }
-        if json_response:
-            config_kwargs["response_mime_type"] = "application/json"
-        parts: list[Any] = [genai_types.Part.from_text(text=prompt)]
-        if image_base64:
-            parts.append(
-                genai_types.Part.from_bytes(
-                    data=base64.b64decode(image_base64),
-                    mime_type="image/jpeg",
+        orcamento = max_output_tokens
+        while True:
+            config_kwargs: dict[str, Any] = {
+                "max_output_tokens": orcamento,
+                "temperature": temperature,
+            }
+            if json_response:
+                config_kwargs["response_mime_type"] = "application/json"
+            parts: list[Any] = [genai_types.Part.from_text(text=prompt)]
+            if image_base64:
+                parts.append(
+                    genai_types.Part.from_bytes(
+                        data=base64.b64decode(image_base64),
+                        mime_type="image/jpeg",
+                    )
                 )
+            response = client.models.generate_content(
+                model=target_model,
+                contents=genai_types.Content(role="user", parts=parts),
+                config=genai_types.GenerateContentConfig(**config_kwargs),
             )
-        response = client.models.generate_content(
-            model=target_model,
-            contents=genai_types.Content(role="user", parts=parts),
-            config=genai_types.GenerateContentConfig(**config_kwargs),
-        )
-        return (response.text or "").strip()
+            texto = (response.text or "").strip()
+            if _response_finish_reason(response) == "MAX_TOKENS":
+                if orcamento < MAX_OUTPUT_TOKENS_CEILING:
+                    novo = min(orcamento * 2, MAX_OUTPUT_TOKENS_CEILING)
+                    logger.warning(
+                        "Resposta do Gemini truncada (MAX_TOKENS) no modelo %s; "
+                        "ampliando max_output_tokens de %s para %s.",
+                        target_model,
+                        orcamento,
+                        novo,
+                    )
+                    orcamento = novo
+                    continue
+                raise ExternalIdentificationError(
+                    "A resposta da IA ficou incompleta (limite de tokens). "
+                    "Tente novamente em instantes."
+                )
+            if not texto:
+                raise ExternalIdentificationError(
+                    "O Google Gemini devolveu uma resposta vazia. "
+                    "Tente novamente em instantes."
+                )
+            return texto
 
     while cadeia:
         modelo = cadeia.pop(0)
@@ -460,6 +492,10 @@ def _generate(
                 break
             except Exception as exc:
                 last_error = exc
+                # Mensagens já amigáveis e específicas (ex.: resposta truncada,
+                # resposta vazia) sobem sem serem reembaladas.
+                if isinstance(exc, ExternalIdentificationError):
+                    raise
                 if _is_auth_error(exc):
                     raise ExternalIdentificationError(
                         "Chave de API inválida. Verifique se copiou corretamente."
@@ -505,16 +541,88 @@ def _generate(
     ) from last_error
 
 
+def _extract_json_object(text: str) -> str | None:
+    """Extrai o primeiro objeto JSON **balanceado** de um texto.
+
+    Tolera texto antes/depois do JSON (comum quando o modelo "pensa em voz
+    alta") e chaves dentro de strings, sem depender de regex frágil.
+    """
+    inicio = text.find("{")
+    if inicio < 0:
+        return None
+    profundidade = 0
+    dentro_string = False
+    escape = False
+    for posicao in range(inicio, len(text)):
+        caractere = text[posicao]
+        if dentro_string:
+            if escape:
+                escape = False
+            elif caractere == "\\":
+                escape = True
+            elif caractere == '"':
+                dentro_string = False
+            continue
+        if caractere == '"':
+            dentro_string = True
+        elif caractere == "{":
+            profundidade += 1
+        elif caractere == "}":
+            profundidade -= 1
+            if profundidade == 0:
+                return text[inicio : posicao + 1]
+    return None
+
+
+def _repair_json(text: str) -> str:
+    """Corrige vírgulas sobrando antes de ``}``/``]`` (erro comum dos LLMs)."""
+    return re.sub(r",\s*([}\]])", r"\1", text)
+
+
 def _parse_json(content: str) -> dict[str, Any]:
-    """Interpreta o JSON devolvido, tolerando cercas de código Markdown."""
+    """Interpreta o JSON devolvido pelo Gemini de forma tolerante.
+
+    Camadas de tolerância (da mais estrita para a mais permissiva):
+
+    1. JSON puro;
+    2. JSON dentro de cerca de código Markdown (```` ```json ````);
+    3. primeiro objeto balanceado dentro de texto explicativo;
+    4. correção de vírgulas finais;
+    5. ``json.loads(..., strict=False)`` (aceita caracteres de controle).
+
+    Levanta :class:`ValueError` com o motivo real quando nada funciona — o
+    chamador transforma isso em uma mensagem amigável.
+    """
     text = (content or "").strip()
+    if not text:
+        raise ValueError("Resposta vazia")
+
     fence = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
     if fence:
         text = fence.group(1).strip()
-    data = json.loads(text)
-    if not isinstance(data, dict):
-        raise ValueError("A resposta não é um objeto JSON")
-    return data
+
+    candidatos: list[str] = [text]
+    extraido = _extract_json_object(text)
+    if extraido and extraido != text:
+        candidatos.append(extraido)
+
+    ultimo_erro: Exception | None = None
+    for candidato in candidatos:
+        for tentativa in (candidato, _repair_json(candidato)):
+            try:
+                data = json.loads(tentativa, strict=False)
+            except (TypeError, ValueError) as exc:
+                ultimo_erro = exc
+                continue
+            # Alguns modelos embrulham o objeto em uma lista de um item.
+            if isinstance(data, list) and len(data) == 1 and isinstance(data[0], dict):
+                return data[0]
+            if not isinstance(data, dict):
+                ultimo_erro = ValueError("A resposta não é um objeto JSON")
+                continue
+            return data
+
+    raise ValueError(f"JSON inválido: {ultimo_erro}")
 
 
 # --------------------------------------------------------------------------- #
@@ -553,6 +661,11 @@ def identify_bird_image(
         scientific_name = str(data["scientific_name"]).strip()
         common_name = str(data["common_name"]).strip()
     except (KeyError, TypeError, ValueError, AttributeError) as exc:
+        logger.error(
+            "Identificação inválida (%s). Prévia da resposta: %s",
+            exc,
+            redact_secrets(content[:400], [api_key]) or "<vazia>",
+        )
         raise ExternalIdentificationError(
             "O Google Gemini retornou uma identificação em formato inválido"
         ) from exc
@@ -686,14 +799,23 @@ def consult_species_profile(
         image_base64=(
             base64.b64encode(image_bytes).decode("ascii") if image_bytes else None
         ),
+        # A ficha tem ~15 campos + raciocínio do modelo: 4096 é o mínimo
+        # validado. Orçamentos menores truncavam o JSON (MAX_TOKENS).
+        max_output_tokens=CONSULT_MAX_OUTPUT_TOKENS,
         temperature=0.2,
     )
 
     try:
         raw = _parse_json(content)
     except (TypeError, ValueError, AttributeError) as exc:
+        logger.error(
+            "Ficha ornitológica inválida (%s). Prévia da resposta: %s",
+            exc,
+            redact_secrets(content[:400], [api_key]) or "<vazia>",
+        )
         raise ExternalIdentificationError(
-            "O Google Gemini retornou uma ficha ornitológica em formato inválido"
+            "O Google Gemini retornou uma ficha ornitológica incompleta ou em "
+            "formato inválido. Tente novamente em instantes."
         ) from exc
 
     data = _normalize_consult(

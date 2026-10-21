@@ -352,7 +352,10 @@ def ask_ai_about_audio_detection(
     if not settings.ai_external_api_key:
         raise HTTPException(
             status_code=503,
-            detail="Configure AI_EXTERNAL_API_KEY para habilitar a consulta externa",
+            detail=(
+                "Configure a chave GEMINI_API_KEY (Configurações › "
+                "Inteligência Artificial) para habilitar a consulta externa"
+            ),
         )
 
     common_name = str(row.get("species") or "").strip()

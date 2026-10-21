@@ -58,12 +58,12 @@ type EnvironmentDraft = {
  * a lista real disponível para a chave é buscada em `/api/settings/ai/models`.
  * Os presets abaixo são a semente (e o fallback quando a API não responde).
  */
-const GEMINI_DEFAULT_MODEL = "gemini-1.5-flash";
+const GEMINI_DEFAULT_MODEL = "gemini-3.5-flash";
 
 const GEMINI_MODEL_PRESETS: Array<{ value: string; label: string }> = [
   {
     value: "gemini-1.5-flash",
-    label: "gemini-1.5-flash (Padrão — Rápido, leve e estável)",
+    label: "gemini-1.5-flash (Rápido, leve e estável)",
   },
   {
     value: "gemini-2.5-flash",
@@ -79,7 +79,7 @@ const GEMINI_MODEL_PRESETS: Array<{ value: string; label: string }> = [
 function geminiModelLabel(model: string): string {
   const nome = model.toLowerCase();
   if (nome === GEMINI_DEFAULT_MODEL) {
-    return "gemini-1.5-flash (Padrão — Rápido, leve e estável)";
+    return `${GEMINI_DEFAULT_MODEL} (Padrão — validado e com visão)`;
   }
   if (nome.includes("flash-lite")) {
     return `${model} (Flash Lite — o mais leve)`;
@@ -95,9 +95,9 @@ function geminiModelLabel(model: string): string {
 
 /** Texto de ajuda exibido abaixo do seletor de modelo. */
 const GEMINI_MODEL_HELP =
-  "gemini-1.5-flash: recomendado — rápido, leve e estável. " +
-  "gemini-2.5-flash: nova geração Flash. " +
-  "gemini-1.5-pro: análise densa (mais lento). " +
+  `${GEMINI_DEFAULT_MODEL}: recomendado — validado na API, rápido e com visão. ` +
+  "gemini-1.5-flash / gemini-2.5-flash / gemini-1.5-pro: presets legados " +
+  "(podem responder 404; o serviço migra sozinho para um modelo válido). " +
   "A lista é atualizada com os modelos disponíveis para a sua chave.";
 
 const EMPTY_DRAFT: EnvironmentDraft = {
@@ -367,7 +367,13 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
    */
   const geminiModelOptions = useMemo(() => {
     const mapa = new Map<string, { value: string; label: string }>();
-    // Presets oficiais primeiro (o pedido do observador).
+    // O modelo padrão do backend entra sempre — assim o dropdown funciona
+    // mesmo se a descoberta na API falhar (sem opção "fantasma").
+    mapa.set(GEMINI_DEFAULT_MODEL, {
+      value: GEMINI_DEFAULT_MODEL,
+      label: geminiModelLabel(GEMINI_DEFAULT_MODEL),
+    });
+    // Presets oficiais (o pedido do observador).
     for (const preset of GEMINI_MODEL_PRESETS) mapa.set(preset.value, preset);
     // Modelos descobertos na API completam a lista.
     for (const modelo of apiModels) {
@@ -375,8 +381,13 @@ export function EnvSettings({ onSettingsChange, onHistoryCleared }: Props) {
         mapa.set(modelo, { value: modelo, label: geminiModelLabel(modelo) });
       }
     }
+    // Valor atual do formulário (ex.: .env antigo) nunca fica sem opção.
+    const atual = draft.aiExternalModel.trim();
+    if (atual && !mapa.has(atual)) {
+      mapa.set(atual, { value: atual, label: geminiModelLabel(atual) });
+    }
     return Array.from(mapa.values());
-  }, [apiModels]);
+  }, [apiModels, draft.aiExternalModel]);
 
   const cleanHistory = async () => {
     if (!historyCleanup) return;
